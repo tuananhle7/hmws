@@ -1,33 +1,6 @@
 import torch
+import util
 import matplotlib.pyplot as plt
-from pathlib import Path
-import logging
-import sys
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(pathname)s:%(lineno)d | %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-    stream=sys.stdout,
-)
-
-
-def lognormexp(values, dim=0):
-    """Exponentiates, normalizes and takes log of a tensor.
-    Args:
-        values: tensor [dim_1, ..., dim_N]
-        dim: n
-    Returns:
-        result: tensor [dim_1, ..., dim_N]
-            where result[i_1, ..., i_N] =
-                                 exp(values[i_1, ..., i_N])
-            log( ------------------------------------------------------------ )
-                    sum_{j = 1}^{dim_n} exp(values[i_1, ..., j, ..., i_N])
-    """
-
-    log_denominator = torch.logsumexp(values, dim=dim, keepdim=True)
-    # log_numerator = values
-    return values - log_denominator
 
 
 def topk(values, score, k):
@@ -66,14 +39,6 @@ def propose_continuous(num_particles):
     return torch.distributions.Normal(0, 2).sample((num_particles,))
 
 
-def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout(**tight_layout_kwargs)
-    fig.savefig(path, bbox_inches="tight", dpi=dpi)
-    logging.info("Saved to {}".format(path))
-    plt.close(fig)
-
-
 def plot_discrete_mws(path):
     support_size = 10
     log_target = LogTargetDiscrete(support_size)
@@ -94,16 +59,19 @@ def plot_discrete_mws(path):
         ax = axs[update_it]
         ax.set_title(f"Iteration {update_it}")
         ax.bar(
-            torch.arange(support_size), lognormexp(log_target.values).exp(), alpha=0.5, label="true"
+            torch.arange(support_size),
+            util.lognormexp(log_target.values).exp(),
+            alpha=0.5,
+            label="true",
         )
         ax.bar(
             memories[update_it],
-            lognormexp(log_target(memories[update_it])).exp(),
+            util.lognormexp(log_target(memories[update_it])).exp(),
             alpha=0.5,
             label="memory-based approx.",
         )
         ax.legend()
-    save_fig(fig, path)
+    util.save_fig(fig, path)
 
 
 def plot_continuous_mws(path):
@@ -128,13 +96,13 @@ def plot_continuous_mws(path):
         ax.plot(support, log_target(support).exp(), label="true", color="C0")
         ax.bar(
             memories[update_it],
-            lognormexp(log_target(memories[update_it])).exp(),
+            util.lognormexp(log_target(memories[update_it])).exp(),
             width=0.2,
             label="memory-based approx.",
             color="C1",
         )
         ax.legend()
-    save_fig(fig, path)
+    util.save_fig(fig, path)
 
 
 if __name__ == "__main__":
