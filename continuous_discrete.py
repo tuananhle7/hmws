@@ -1,3 +1,6 @@
+import argparse
+import numpy as np
+import math
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -8,7 +11,9 @@ class GenerativeModel:
     def __init__(self, support_size, device):
         self.support_size = support_size
         self.device = device
-        self.logits = torch.rand(support_size, device=device) - 0.5
+        # self.logits = torch.rand(support_size, device=device) - 0.5
+        self.logits = torch.zeros(support_size, device=device)
+        self.logits[-1] = 10
         self.discrete_dist = torch.distributions.Categorical(logits=self.logits)
 
         self.locs = torch.arange(support_size, device=device)
@@ -17,9 +22,9 @@ class GenerativeModel:
     def get_continuous_dist(self, discrete):
         """
         Args:
-            discrete: [batch_size]
+            discrete: [*batch_shape]
 
-        Returns: distribution of batch_shape [batch_size] and event_shape []
+        Returns: distribution of batch_shape [*batch_shape] and event_shape []
         """
         return torch.distributions.Normal(self.locs[discrete], self.scales[discrete])
 
@@ -27,10 +32,10 @@ class GenerativeModel:
         """
         Args:
             latent:
-                discrete: [batch_size]
-                continuous: [batch_size]
+                discrete: [*batch_shape]
+                continuous: [*batch_shape]
 
-        Return: [batch_size]
+        Return: [*batch_shape]
         """
         discrete, continuous = latent
         return self.discrete_dist.log_prob(discrete) + self.get_continuous_dist(discrete).log_prob(
@@ -81,9 +86,9 @@ class Guide(nn.Module):
     def get_continuous_dist(self, discrete):
         """
         Args:
-            discrete: [batch_size]
+            discrete: [*batch_shape]
 
-        Returns: distribution of batch_shape [batch_size] and event_shape []
+        Returns: distribution of batch_shape [*batch_shape] and event_shape []
         """
         return torch.distributions.Normal(self.locs[discrete], self.scales[discrete])
 
@@ -91,10 +96,10 @@ class Guide(nn.Module):
         """
         Args:
             latent:
-                discrete: [batch_size]
-                continuous: [batch_size]
+                discrete: [*batch_shape]
+                continuous: [*batch_shape]
 
-        Return: [batch_size]
+        Return: [*batch_shape]
         """
         discrete, continuous = latent
         return self.discrete_dist.log_prob(discrete) + self.get_continuous_dist(discrete).log_prob(
@@ -150,13 +155,10 @@ def get_rws_loss(generative_model, guide, num_particles):
 
     normalized_weight_detached = util.exponentiate_and_normalize(log_weight).detach()
 
-    # wake phi
-    wake_phi_loss = -torch.sum(normalized_weight_detached * log_q)
+    guide_loss = -torch.sum(normalized_weight_detached * log_q)
+    generative_model_loss = -torch.sum(normalized_weight_detached * log_p)
 
-    # wake theta
-    wake_theta_loss = -torch.sum(normalized_weight_detached * log_p)
-
-    return wake_theta_loss + wake_phi_loss
+    return generative_model_loss + guide_loss
 
 
 def get_elbo_loss(generative_model, guide, num_particles):
@@ -183,13 +185,43 @@ def plot_memory(path, memory, support_size):
     ax.hist(
         memory[0], bins=torch.linspace(-0.5, support_size + 0.5, support_size + 1), density=True
     )
-    ax.set_ylabel("$p(z_d)$")
+    ax.set_ylabel("$q_M(z_d)$")
 
     ax = axs[1]
     for i in range(support_size):
         ax.hist(memory[1][memory[0] == i], density=True, label=f"$z_d = {i}$")
 
-    ax.set_ylabel("$p(z_c | z_d)$")
+    ax.set_ylabel("$q_M(z_c | z_d)$")
+    ax.legend()
+    util.save_fig(fig, path)
+
+
+def plot_continuous_memory(path, generative_model, guide, memory, num_particles):
+    if len(torch.unique(memory)) != len(memory):
+        raise RuntimeError("memory elements not unique")
+    support_size = generative_model.support_size
+
+    # [memory_size]
+    memory_log_weight = get_memory_log_weight(generative_model, guide, memory, num_particles)
+
+    xs = torch.linspace(-1, support_size, steps=1000)
+    discrete = torch.arange(support_size, device=guide.device)
+    continuous_dist = guide.get_continuous_dist(discrete)
+    # [support_size, len(xs)]
+    probss = continuous_dist.log_prob(xs[:, None].expand(-1, support_size)).T.exp().detach()
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+
+    ax = axs[0]
+    ax.bar(memory, util.exponentiate_and_normalize(memory_log_weight).detach())
+    ax.set_ylabel("$q_M(z_d)$")
+
+    ax = axs[1]
+    for i, probs in enumerate(probss):
+        ax.plot(xs, probs, label=f"$z_d = {i}$")
+
+    ax.set_ylabel("$q(z_c | z_d)$")
+
     ax.legend()
     util.save_fig(fig, path)
 
@@ -247,15 +279,112 @@ def get_mws_loss(generative_model, guide, memory, num_particles):
     normalized_weight = util.exponentiate_and_normalize(log_p).detach()  # [memory_size]
     log_q = guide.log_prob(memory_latent)  # [memory_size]
 
-    theta_loss = -(log_p * normalized_weight).sum(dim=0).mean()
-    phi_loss = -(log_q * normalized_weight).sum(dim=0).mean()
+    generative_model_loss = -(log_p * normalized_weight).sum(dim=0).mean()
+    guide_loss = -(log_q * normalized_weight).sum(dim=0).mean()
 
-    return theta_loss + phi_loss
+    return generative_model_loss + guide_loss
 
 
-# TODO
-def get_cmws_loss(generative_model, guide, memory, num_particles):
+def get_memory_elbo(generative_model, guide, memory, memory_log_weights, num_particles):
     """
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: [memory_size]
+        memory_log_weights: [memory_size]
+        num_particles: int
+    Returns:
+        memory_elbo: scalar
+    """
+    # [memory_size]
+    memory_log_weights_normalized = util.lognormexp(memory_log_weights)
+
+    # batch_shape [memory_size]
+    guide_continuous_dist = guide.get_continuous_dist(memory)
+
+    # [num_particles, memory_size]
+    continuous = guide_continuous_dist.sample((num_particles,))
+
+    # [num_particles, memory_size]
+    memory_expanded = memory[None].expand(num_particles, -1)
+
+    # [num_particles, memory_size]
+    log_p = generative_model.log_prob((memory_expanded, continuous))
+
+    # [num_particles, memory_size]
+    log_q_continuous = guide_continuous_dist.log_prob(continuous)
+
+    return (
+        memory_log_weights_normalized.exp()
+        * (log_p - (memory_log_weights_normalized[None] + log_q_continuous)).mean(dim=0)
+    ).sum()
+
+
+def get_log_marginal_joint(generative_model, guide, memory, num_particles):
+    """Estimates log p(discrete, obs), marginalizing out continuous.
+
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: [memory_size]
+        num_particles: int
+    Returns:
+        log_marginal_joint: [memory_size]
+    """
+
+    # batch_shape [memory_size]
+    guide_continuous_dist = guide.get_continuous_dist(memory)
+
+    # [num_particles, memory_size]
+    continuous = guide_continuous_dist.sample((num_particles,))
+
+    # [num_particles, memory_size]
+    log_q_continuous = guide_continuous_dist.log_prob(continuous)
+
+    # [num_particles, memory_size]
+    memory_expanded = memory[None].expand(num_particles, -1)
+
+    # [num_particles, memory_size]
+    log_p = generative_model.log_prob((memory_expanded, continuous))
+
+    return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
+
+
+def get_memory_log_weight(generative_model, guide, memory, num_particles):
+    """Estimates normalized log weights associated with the approximation based on memory.
+
+    sum_k weight_k memory_k ≅ p(discrete | obs)
+
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: [memory_size]
+        num_particles: int
+    Returns:
+        memory_log_weight: [memory_size]
+    """
+    return util.lognormexp(get_log_marginal_joint(generative_model, guide, memory, num_particles))
+
+
+def get_replace_one_memory(memory, idx, replacement):
+    """
+    Args:
+        memory: [memory_size]
+        idx: int
+        replacement: torch.long []
+
+    Returns:
+        replace_one_memory: [memory_size]
+    """
+    replace_one_memory = memory.clone().detach()
+    replace_one_memory[idx] = replacement
+    return replace_one_memory
+
+
+def get_cmws_loss(generative_model, guide, memory, num_particles):
+    """MWS loss for hybrid discrete-continuous models as described in
+    https://www.overleaf.com/project/5dfd4bbac2914e0001efb29b
+
     Args:
         generative_model: GenerativeModel object
         guide: Guide object
@@ -266,51 +395,59 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
     """
     memory_size = memory.shape[0]
 
-    # CONTINUE HERE
+    # Propose discrete latent from guide
+    discrete = guide.discrete_dist.sample()  # []
 
-    # Propose latents from inference network
-    latent = guide.sample([num_particles])  # [num_particles], [num_particles]
+    # UPDATE MEMORY
+    memory_log_weights = [get_memory_log_weight(generative_model, guide, memory, num_particles)]
+    elbos = [
+        get_memory_elbo(
+            generative_model, guide, memory, memory_log_weights[-1], num_particles,
+        ).item()
+    ]
+    for i in range(memory_size):
+        replace_one_memory = get_replace_one_memory(memory, i, discrete)
+        if len(torch.unique(replace_one_memory)) == memory_size:
+            memory_log_weights.append(
+                get_memory_log_weight(generative_model, guide, memory, num_particles)
+            )
+            elbos.append(
+                get_memory_elbo(
+                    generative_model,
+                    guide,
+                    replace_one_memory,
+                    memory_log_weights[-1],
+                    num_particles,
+                ).item()
+            )
+        else:
+            # reject if memory elements are non-unique
+            memory_log_weights.append(None)
+            elbos.append(-math.inf)
+    best_i = np.argmax(elbos)
+    if best_i > 0:
+        memory = get_replace_one_memory(memory, best_i - 1, discrete)
 
-    # Evaluate log p of proposed latents
-    log_p = generative_model.log_prob(latent)  # [num_particles]
-
-    # Evaluate log p of memory latents
-    memory_log_p = generative_model.log_prob(memory)  # [memory_size]
-
-    # Merge proposed latents and memory latents
-    # [memory_size + num_particles], [memory_size + num_particles]
-    memory_and_latent = [torch.cat([memory[i], latent[i]]) for i in range(2)]
-
-    # Evaluate log p of merged latents
-    # [memory_size + num_particles]
-    memory_and_latent_log_p = torch.cat([memory_log_p, log_p])
-
-    # Sort log_ps, replace non-unique values with -inf, choose the top k remaining
-    # (valid as long as two distinct latents don't have the same logp)
-    sorted1, indices1 = memory_and_latent_log_p.sort(dim=0)
-    is_same = sorted1[1:] == sorted1[:-1]
-    sorted1[1:].masked_fill_(is_same, float("-inf"))
-    sorted2, indices2 = sorted1.sort(dim=0)
-    memory_log_p = sorted2[-memory_size:]
-    indices = indices1.gather(0, indices2)[-memory_size:]
-
-    # [memory_size], [memory_size]
-    memory_latent = [memory_and_latent[i][indices] for i in range(2)]
-
-    # Update memory
-    # [memory_size], [memory_size]
-    for i in range(2):
-        memory[i] = memory_latent[i]
+    # UPDATE MEMORY WEIGHTS
+    memory_log_weight = memory_log_weights[best_i]
 
     # Compute losses
-    log_p = memory_log_p  # [memory_size]
-    normalized_weight = util.exponentiate_and_normalize(log_p).detach()  # [memory_size]
-    log_q = guide.log_prob(memory_latent)  # [memory_size]
+    guide_continuous_dist = guide.get_continuous_dist(memory)  # batch_shape [memory_size]
+    continuous = guide_continuous_dist.sample()  # [memory_size]
+    continuous_log_prob = guide_continuous_dist.log_prob(continuous)  # [memory_size]
 
-    theta_loss = -(log_p * normalized_weight).sum(dim=0).mean()
-    phi_loss = -(log_q * normalized_weight).sum(dim=0).mean()
+    memory_log_q = memory_log_weight + continuous_log_prob  # [memory_size]
+    log_p = generative_model.log_prob((memory, continuous))  # [memory_size]
+    log_q = guide.log_prob((memory, continuous))  # [memory_size]
 
-    return theta_loss + phi_loss
+    normalized_weight = util.exponentiate_and_normalize(
+        log_p - memory_log_q
+    ).detach()  # [memory_size]
+
+    generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
+    guide_loss = -(log_q * normalized_weight).sum(dim=0)
+
+    return generative_model_loss + guide_loss
 
 
 def train(generative_model, guide, algorithm, num_particles, num_iterations, memory=None):
@@ -318,8 +455,12 @@ def train(generative_model, guide, algorithm, num_particles, num_iterations, mem
     losses = []
 
     for i in range(num_iterations):
-        if algorithm == "mws":
-            loss = get_mws_loss(generative_model, guide, memory, num_particles)
+        if "mws" in algorithm:
+            if algorithm == "mws":
+                loss_fn = get_mws_loss
+            elif algorithm == "cmws":
+                loss_fn = get_cmws_loss
+            loss = loss_fn(generative_model, guide, memory, num_particles)
         else:
             if algorithm == "rws":
                 loss_fn = get_rws_loss
@@ -343,31 +484,71 @@ def plot_losses(path, losses):
     util.save_fig(fig, path)
 
 
-def main():
-    device = "cpu"
-    support_size = 5
-    memory_size = 100
-    num_particles = 100
-    num_iterations = 10000
-    algorithms = ["rws", "elbo", "mws"]
+def init_discrete_memory(memory_size, support_size, device):
+    if memory_size > support_size:
+        raise ValueError("memory_size > support_size")
+    return torch.arange(memory_size, device=device)
 
-    for algorithm in algorithms:
-        print(f"TRAINING {algorithm}")
-        generative_model = GenerativeModel(support_size, device)
-        guide = Guide(support_size)
-        memory = init_memory(memory_size, support_size, device)
 
-        losses = train(
-            generative_model, guide, algorithm, num_particles, num_iterations, memory=memory
+def main(args):
+    # general
+    if args.cuda and torch.cuda.is_available():
+        device = torch.device("cuda")
+        args.cuda = True
+    else:
+        device = torch.device("cpu")
+        args.cuda = False
+
+    print(f"TRAINING {args.algorithm}")
+    generative_model = GenerativeModel(args.support_size, device)
+    guide = Guide(args.support_size)
+    if args.algorithm == "mws":
+        memory = init_memory(args.memory_size, args.support_size, device)
+    elif args.algorithm == "cmws":
+        memory = init_discrete_memory(args.memory_size, args.support_size, device)
+    else:
+        memory = None
+
+    losses = train(
+        generative_model,
+        guide,
+        args.algorithm,
+        args.num_particles,
+        args.num_iterations,
+        memory=memory,
+    )
+
+    base_dir = f"save/toy_model/{args.algorithm}"
+    plot_losses(f"{base_dir}/losses.pdf", losses)
+    generative_model.plot(f"{base_dir}/generative_model.pdf")
+    guide.plot(f"{base_dir}/guide.pdf")
+    if args.algorithm == "mws":
+        plot_memory(f"{base_dir}/memory.pdf", memory, generative_model.support_size)
+    elif args.algorithm == "cmws":
+        plot_continuous_memory(
+            f"{base_dir}/memory.pdf", generative_model, guide, memory, args.num_particles
         )
 
-        base_dir = f"save/toy_model/{algorithm}"
-        plot_losses(f"{base_dir}/losses.pdf", losses)
-        generative_model.plot(f"{base_dir}/generative_model.pdf")
-        guide.plot(f"{base_dir}/guide.pdf")
-        if algorithm == "mws":
-            plot_memory(f"{base_dir}/memory.pdf", memory, generative_model.support_size)
+
+def get_parser():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    # general
+    parser.add_argument("--cuda", action="store_true", help="use cuda")
+    parser.add_argument("--support-size", type=int, default=5, help=" ")
+    parser.add_argument("--memory-size", type=int, default=3, help=" ")
+    parser.add_argument("--num-particles", type=int, default=100, help=" ")
+    parser.add_argument("--num-iterations", type=int, default=10000, help=" ")
+    parser.add_argument(
+        "--algorithm",
+        default="rws",
+        choices=["rws", "elbo", "mws", "cmws"],
+        help="Learning/inference algorithm to use",
+    )
+    return parser
 
 
 if __name__ == "__main__":
-    main()
+    parser = get_parser()
+    args = parser.parse_args()
+    main(args)
