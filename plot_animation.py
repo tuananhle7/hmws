@@ -39,12 +39,12 @@ def plot_animation_frame(checkpoint_iteration):
 
     # LABELS
     axs[0].set_ylabel("Ground\ntruth", fontsize=36)
-    axs[0].set_title("$p(z_d)$", fontsize=36)
-    axs[1].set_title("$p(z_c | z_d)$", fontsize=36)
-    axss[1, 0].set_title("$q(z_d)$", fontsize=36)
-    axss[1, 1].set_title("$q(z_c | z_d)$", fontsize=36)
-    axss[3, 0].set_title("$q_{{memory}}(z_d)$", fontsize=36)
-    axss[4, -1].set_title("$q_{{memory}}(z_c | z_d)$", fontsize=36)
+    axs[0].set_title("$p(d)$", fontsize=36)
+    axs[1].set_title("$p(c | d)$", fontsize=36)
+    axss[1, 0].set_title("$q(d)$", fontsize=36)
+    axss[1, 1].set_title("$q(c | d)$", fontsize=36)
+    axss[3, 0].set_title("$q_{{memory}}(d)$", fontsize=36)
+    axss[4, -1].set_title("$q_{{memory}}(c | d)$", fontsize=36)
 
     for i, sweep_args in enumerate(sweep_argss):
         checkpoint_path = util.get_checkpoint_path(sweep_args, checkpoint_iteration)
@@ -74,7 +74,7 @@ def plot_animation_frame(checkpoint_iteration):
                 ax.plot(
                     xs.cpu(),
                     probs.cpu(),
-                    label=f"$z_d = {memory_element}$",
+                    label=f"$d = {memory_element}$",
                     color=f"C{memory_element}",
                     linewidth=3,
                 )
@@ -114,7 +114,7 @@ def plot_animation_frame(checkpoint_iteration):
                 ax.plot(
                     xs.cpu(),
                     probs.cpu(),
-                    label=f"$z_d = {memory_element}$",
+                    label=f"$d = {memory_element}$",
                     color=f"C{memory_element}",
                     linewidth=3,
                 )
