@@ -1,3 +1,4 @@
+import imageio
 import util
 import sweep
 import matplotlib.pyplot as plt
@@ -15,7 +16,11 @@ def plot_animation_frame(checkpoint_iteration):
         checkpoint_path, device=device
     )
 
-    path = f"./save/animation/{checkpoint_iteration}.png"
+    if checkpoint_iteration == -1:
+        iteration = len(stats.losses)
+    else:
+        iteration = checkpoint_iteration
+    path = f"./save/animation/{iteration}.png"
 
     num_rows = 1 + len(sweep_argss)
     num_cols = 4
@@ -75,10 +80,20 @@ def plot_animation_frame(checkpoint_iteration):
         guide.plot_discrete(axss[i + 1, 1])
         guide.plot_continuous(axss[i + 1, 2])
 
-    fig.suptitle(f"Iteration {checkpoint_iteration}", fontsize=36)
+    fig.suptitle(f"Iteration {iteration}", fontsize=36)
     util.save_fig(fig, path, tight_layout_kwargs={"rect": [0, 0.03, 1, 0.95]})
 
 
 if __name__ == "__main__":
     for checkpoint_iteration in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, -1]:
         plot_animation_frame(checkpoint_iteration)
+
+    images = []
+    for checkpoint_iteration in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, -1]:
+        if checkpoint_iteration == -1:
+            iteration = 10000
+        else:
+            iteration = checkpoint_iteration
+        path = f"./save/animation/{iteration}.png"
+        images.append(imageio.imread(path))
+    imageio.mimsave("./save/animation/training_progress.gif", images, duration=0.5)
