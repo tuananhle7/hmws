@@ -36,7 +36,7 @@ def train(
 
         stats.losses.append(loss.detach().item())
         if iteration % run_args.log_interval == 0:
-            print(f"Iteration {iteration} | Loss {stats.losses[-1]:.2f}")
+            util.logging.info(f"Iteration {iteration} | Loss {stats.losses[-1]:.2f}")
 
         if iteration % run_args.save_interval == 0:
             util.save_checkpoint(

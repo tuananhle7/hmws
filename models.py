@@ -43,7 +43,7 @@ class GenerativeModel:
     def plot(self, path):
         discrete = torch.arange(self.support_size, device=self.device)
 
-        xs = torch.linspace(-self.support_size, self.support_size, steps=1000)
+        xs = torch.linspace(-self.support_size, self.support_size, steps=1000, device=self.device)
 
         continuous_dist = self.get_continuous_dist(discrete)
         # [support_size, len(xs)]
@@ -52,12 +52,12 @@ class GenerativeModel:
         fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
         ax = axs[0]
-        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs)
+        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.cpu())
         ax.set_ylabel("$p(z_d)$")
 
         ax = axs[1]
         for i, probs in enumerate(probss):
-            ax.plot(xs, probs, label=f"$z_d = {i}$")
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
         ax.set_xlim(-self.support_size, self.support_size)
 
         ax.set_ylabel("$p(z_c | z_d)$")
@@ -125,7 +125,7 @@ class Guide(nn.Module):
     def plot(self, path):
         discrete = torch.arange(self.support_size, device=self.device)
 
-        xs = torch.linspace(-self.support_size, self.support_size, steps=1000)
+        xs = torch.linspace(-self.support_size, self.support_size, steps=1000, device=self.device)
 
         continuous_dist = self.get_continuous_dist(discrete)
         # [support_size, len(xs)]
@@ -136,12 +136,12 @@ class Guide(nn.Module):
         fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
         ax = axs[0]
-        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.detach())
+        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.cpu().detach())
         ax.set_ylabel("$q(z_d)$")
 
         ax = axs[1]
         for i, probs in enumerate(probss):
-            ax.plot(xs, probs, label=f"$z_d = {i}$")
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
         ax.set_xlim(-self.support_size, self.support_size)
 
         ax.set_ylabel("$q(z_c | z_d)$")

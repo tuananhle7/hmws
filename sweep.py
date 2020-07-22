@@ -135,6 +135,13 @@ def get_parser():
     parser.add_argument(
         "--cancel", action="store_true", help="cancels all non-bash jobs if run on the cluster"
     )
+    parser.add_argument(
+        "--no-repeat",
+        action="store_true",
+        help="run the jobs using standard sbatch."
+        "if False, queues 2h jobs with dependencies "
+        "until the script finishes",
+    )
     parser.add_argument("--priority", action="store_true", help="runs on lab partition")
     return parser
 

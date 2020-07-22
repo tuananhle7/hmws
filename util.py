@@ -115,7 +115,7 @@ def init_discrete_memory(memory_size, support_size, device):
 
 def init(run_args, device):
     generative_model = models.GenerativeModel(run_args.support_size, device)
-    guide = models.Guide(run_args.support_size)
+    guide = models.Guide(run_args.support_size).to(device)
     optimizer = torch.optim.Adam(guide.parameters())
     if run_args.algorithm == "mws":
         memory = init_memory(run_args.memory_size, run_args.support_size, device)
