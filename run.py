@@ -28,7 +28,7 @@ def main(args):
     )
 
 
-def get_parser():
+def get_args_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # general
@@ -49,6 +49,6 @@ def get_parser():
 
 
 if __name__ == "__main__":
-    parser = get_parser()
+    parser = get_args_parser()
     args = parser.parse_args()
     main(args)
