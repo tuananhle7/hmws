@@ -50,7 +50,7 @@ class GenerativeModel:
         # [support_size, len(xs)]
         probss = continuous_dist.log_prob(xs[:, None].expand(-1, self.support_size)).T.exp()
         for i, probs in enumerate(probss):
-            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$", linewidth=2)
         ax.set_xlim(-self.support_size, self.support_size)
 
     def plot(self, path):
@@ -139,10 +139,9 @@ class Guide(nn.Module):
             continuous_dist.log_prob(xs[:, None].expand(-1, self.support_size)).T.exp().detach()
         )
         for i, probs in enumerate(probss):
-            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$", linewidth=2)
 
     def plot(self, path):
-
         fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
         ax = axs[0]
@@ -156,4 +155,3 @@ class Guide(nn.Module):
 
         ax.legend()
         util.save_fig(fig, path)
-
