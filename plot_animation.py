@@ -23,26 +23,28 @@ def plot_animation_frame(checkpoint_iteration):
     path = f"./save/animation/{iteration}.png"
 
     num_rows = 1 + len(sweep_argss)
-    num_cols = 4
-    fig, axss = plt.subplots(num_rows, num_cols, figsize=(num_cols * 6, num_rows * 4))
+    num_cols = 3
+    fig, axss = plt.subplots(num_rows, num_cols, figsize=(num_cols * 6, num_rows * 4), sharex="col")
+
+    for axs in axss:
+        for ax in axs:
+            ax.tick_params(length=0)
 
     # GENERATIVE MODEL
     axs = axss[0]
-    axs[0].set_axis_off()
+    generative_model.plot_discrete(axs[0])
+    generative_model.plot_continuous(axs[1])
     axs[-1].set_axis_off()
-
-    axs[1].set_ylabel("Ground\ntruth", fontsize=36)
-    generative_model.plot_discrete(axs[1])
-    generative_model.plot_continuous(axs[2])
-    axs[2].legend()
+    axs[1].legend(fontsize=12)
 
     # LABELS
-    axs[1].set_title("$p(z_d)$", fontsize=36)
-    axs[2].set_title("$p(z_c | z_d)$", fontsize=36)
-    axss[1, 1].set_title("$q(z_d)$", fontsize=36)
-    axss[1, 2].set_title("$q(z_c | z_d)$", fontsize=36)
+    axs[0].set_ylabel("Ground\ntruth", fontsize=36)
+    axs[0].set_title("$p(z_d)$", fontsize=36)
+    axs[1].set_title("$p(z_c | z_d)$", fontsize=36)
+    axss[1, 0].set_title("$q(z_d)$", fontsize=36)
+    axss[1, 1].set_title("$q(z_c | z_d)$", fontsize=36)
     axss[3, 0].set_title("$q_{{memory}}(z_d)$", fontsize=36)
-    axss[3, -1].set_title("$q_{{memory}}(z_c | z_d)$", fontsize=36)
+    axss[4, -1].set_title("$q_{{memory}}(z_c | z_d)$", fontsize=36)
 
     for i, sweep_args in enumerate(sweep_argss):
         checkpoint_path = util.get_checkpoint_path(sweep_args, checkpoint_iteration)
@@ -50,9 +52,8 @@ def plot_animation_frame(checkpoint_iteration):
             checkpoint_path, device=device
         )
         axs = axss[i + 1]
+        axs[0].set_ylabel(run_args.algorithm.upper(), fontsize=36)
         if run_args.algorithm == "mws":
-            axs[0].set_ylabel(run_args.algorithm.upper(), fontsize=36)
-
             # DISCRETE MEMORY
             support_size = generative_model.support_size
             axs[0].bar(
@@ -60,17 +61,8 @@ def plot_animation_frame(checkpoint_iteration):
                 util.empirical_discrete_probs(memory[0], support_size).cpu(),
             )
 
-            # CONTINUOUS MEMORY
-            ax = axs[-1]
-            for j in range(support_size):
-                if sum(memory[0] == j) > 0:
-                    sns.kdeplot(
-                        memory[1][memory[0] == j].cpu().detach().numpy(), ax=ax, color=f"C{j}",
-                    )
-            ax.set_xlim(-support_size, support_size)
-
             # CONTINUOUS GUIDE
-            ax = axs[2]
+            ax = axs[1]
             xs = torch.linspace(-support_size, support_size, steps=1000, device=device)
             discrete = memory[0].clone().detach()  # torch.arange(support_size, device=guide.device)
             continuous_dist = guide.get_continuous_dist(discrete)
@@ -84,11 +76,22 @@ def plot_animation_frame(checkpoint_iteration):
                     probs.cpu(),
                     label=f"$z_d = {memory_element}$",
                     color=f"C{memory_element}",
+                    linewidth=3,
                 )
             ax.set_xlim(-support_size, support_size)
-        elif run_args.algorithm == "cmws":
-            axs[0].set_ylabel(run_args.algorithm.upper(), fontsize=36)
 
+            # CONTINUOUS MEMORY
+            ax = axs[-1]
+            for j in range(support_size):
+                if sum(memory[0] == j) > 0:
+                    sns.kdeplot(
+                        memory[1][memory[0] == j].cpu().detach().numpy(),
+                        ax=ax,
+                        color=f"C{j}",
+                        linewidth=3,
+                    )
+            ax.set_xlim(-support_size, support_size)
+        elif run_args.algorithm == "cmws":
             # DISCRETE MEMORY
             support_size = generative_model.support_size
             support = torch.arange(support_size, device=device)
@@ -99,10 +102,9 @@ def plot_animation_frame(checkpoint_iteration):
             memory_prob = torch.zeros(support_size, device=device)
             memory_prob[memory] = util.exponentiate_and_normalize(memory_log_weight).detach()
             axs[0].bar(support.cpu(), memory_prob.cpu())
-            axs[-1].set_axis_off()
 
             # CONTINUOUS GUIDE
-            ax = axs[2]
+            ax = axs[1]
             xs = torch.linspace(-support_size, support_size, steps=1000, device=device)
             discrete = memory.clone().detach()  # torch.arange(support_size, device=guide.device)
             continuous_dist = guide.get_continuous_dist(discrete)
@@ -114,18 +116,19 @@ def plot_animation_frame(checkpoint_iteration):
                     probs.cpu(),
                     label=f"$z_d = {memory_element}$",
                     color=f"C{memory_element}",
+                    linewidth=3,
                 )
             ax.set_xlim(-support_size, support_size)
-        else:
-            axs[1].set_ylabel(run_args.algorithm.upper(), fontsize=36)
-            axs[0].set_axis_off()
+
             axs[-1].set_axis_off()
+        else:
+            # DISCRETE GUIDE
+            guide.plot_discrete(axs[0])
 
             # CONTINUOUS GUIDE
-            guide.plot_continuous(axs[2])
+            guide.plot_continuous(axs[1])
 
-        # DISCRETE GUIDE
-        guide.plot_discrete(axs[1])
+            axs[-1].set_axis_off()
 
     fig.suptitle(f"Iteration {iteration}", fontsize=36)
     util.save_fig(fig, path, dpi=50, tight_layout_kwargs={"rect": [0, 0.03, 1, 0.95]})
