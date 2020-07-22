@@ -21,6 +21,8 @@ def get_sweep_argss(test_run=False):
         if test_run:
             args.num_iterations = 100
             args.save_interval = 10
+        if algorithm == "mws":
+            args.memory_size = 100
         args.algorithm = algorithm
         args.cuda = True
         yield args

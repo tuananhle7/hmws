@@ -188,11 +188,10 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
 
     # Propose discrete latent
     discrete = propose_discrete((), generative_model.support_size, generative_model.device)  # []
-    # while discrete in memory:
-    #     discrete = propose_discrete(
-    #         (), generative_model.support_size, generative_model.device
-    #     )  # []
-    # print(f"discrete = {discrete}")
+    while discrete in memory:
+        discrete = propose_discrete(
+            (), generative_model.support_size, generative_model.device
+        )  # []
 
     # UPDATE MEMORY
     memory_log_weights = [get_memory_log_weight(generative_model, guide, memory, num_particles)]
@@ -223,6 +222,11 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
     best_i = np.argmax(elbos)
     if best_i > 0:
         memory = get_replace_one_memory(memory, best_i - 1, discrete)
+        print("---")
+        print(f"discrete = {discrete}")
+        print(f"elbos = {elbos}")
+        print(f"best_i = {best_i}")
+    print(f"memory = {memory}")
 
     # UPDATE MEMORY WEIGHTS
     memory_log_weight = memory_log_weights[best_i]

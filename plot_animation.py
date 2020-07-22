@@ -135,11 +135,27 @@ def plot_animation_frame(checkpoint_iteration):
 
 
 if __name__ == "__main__":
-    for checkpoint_iteration in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, -1]:
+    checkpoint_iterations = [
+        0,
+        100,
+        200,
+        500,
+        1000,
+        2000,
+        3000,
+        4000,
+        5000,
+        6000,
+        7000,
+        8000,
+        9000,
+        -1,
+    ]
+    for checkpoint_iteration in checkpoint_iterations:
         plot_animation_frame(checkpoint_iteration)
 
     images = []
-    for checkpoint_iteration in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, -1]:
+    for checkpoint_iteration in checkpoint_iterations:
         if checkpoint_iteration == -1:
             iteration = 10000
         else:
