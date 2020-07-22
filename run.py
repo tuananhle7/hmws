@@ -37,6 +37,8 @@ def get_parser():
     parser.add_argument("--memory-size", type=int, default=3, help=" ")
     parser.add_argument("--num-particles", type=int, default=100, help=" ")
     parser.add_argument("--num-iterations", type=int, default=10000, help=" ")
+    parser.add_argument("--save-interval", type=int, default=100, help=" ")
+    parser.add_argument("--log-interval", type=int, default=10, help=" ")
     parser.add_argument(
         "--algorithm",
         default="rws",

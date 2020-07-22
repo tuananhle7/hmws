@@ -1,3 +1,4 @@
+import shutil
 import util
 import losses
 
@@ -13,7 +14,7 @@ def train(
     stats,
     run_args,
 ):
-    for i in range(num_iterations):
+    for iteration in range(num_iterations):
         if "mws" in algorithm:
             if algorithm == "mws":
                 loss_fn = losses.get_mws_loss
@@ -34,8 +35,22 @@ def train(
         optimizer.step()
 
         stats.losses.append(loss.detach().item())
-        if i % 10 == 0:
-            print(f"Iteration {i} | Loss {stats.losses[-1]:.2f}")
+        if iteration % run_args.log_interval == 0:
+            print(f"Iteration {iteration} | Loss {stats.losses[-1]:.2f}")
+
+        if iteration % run_args.save_interval == 0:
+            util.save_checkpoint(
+                util.get_checkpoint_path(run_args),
+                generative_model,
+                guide,
+                optimizer,
+                memory,
+                stats,
+                run_args=run_args,
+            )
+            shutil.copy(
+                util.get_checkpoint_path(run_args), util.get_checkpoint_path(run_args, iteration),
+            )
 
     util.save_checkpoint(
         util.get_checkpoint_path(run_args),
