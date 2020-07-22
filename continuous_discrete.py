@@ -1,3 +1,4 @@
+import seaborn as sns
 import argparse
 import numpy as np
 import math
@@ -13,11 +14,12 @@ class GenerativeModel:
         self.device = device
         # self.logits = torch.rand(support_size, device=device) - 0.5
         self.logits = torch.zeros(support_size, device=device)
-        self.logits[-1] = 10
+        self.logits[-1] = 1
         self.discrete_dist = torch.distributions.Categorical(logits=self.logits)
 
-        self.locs = torch.arange(support_size, device=device)
-        self.scales = torch.ones(support_size, device=device) * 0.1
+        self.locs = torch.linspace(-2, 2, self.support_size, device=device)
+        # self.locs = torch.zeros(support_size, device=device)
+        self.scales = torch.ones(support_size, device=device)
 
     def get_continuous_dist(self, discrete):
         """
@@ -45,7 +47,7 @@ class GenerativeModel:
     def plot(self, path):
         discrete = torch.arange(self.support_size, device=self.device)
 
-        xs = torch.linspace(-1, self.support_size, steps=1000)
+        xs = torch.linspace(-self.support_size, self.support_size, steps=1000)
 
         continuous_dist = self.get_continuous_dist(discrete)
         # [support_size, len(xs)]
@@ -60,6 +62,7 @@ class GenerativeModel:
         ax = axs[1]
         for i, probs in enumerate(probss):
             ax.plot(xs, probs, label=f"$z_d = {i}$")
+        ax.set_xlim(-self.support_size, self.support_size)
 
         ax.set_ylabel("$p(z_c | z_d)$")
         ax.legend()
@@ -72,8 +75,11 @@ class Guide(nn.Module):
         self.support_size = support_size
         self.logits = nn.Parameter(torch.rand(support_size))
 
-        self.locs = nn.Parameter(torch.rand(support_size))
-        self.register_buffer("scales", torch.ones(support_size) * 0.1)
+        # self.locs = nn.Parameter(torch.rand(support_size))
+        self.locs = nn.Parameter(torch.rand(support_size) - 0.5)
+        # self.locs = nn.Parameter(torch.zeros(support_size))
+
+        self.register_buffer("scales", torch.ones(support_size))
 
     @property
     def device(self):
@@ -123,7 +129,7 @@ class Guide(nn.Module):
     def plot(self, path):
         discrete = torch.arange(self.support_size, device=self.device)
 
-        xs = torch.linspace(-1, self.support_size, steps=1000)
+        xs = torch.linspace(-self.support_size, self.support_size, steps=1000)
 
         continuous_dist = self.get_continuous_dist(discrete)
         # [support_size, len(xs)]
@@ -140,6 +146,7 @@ class Guide(nn.Module):
         ax = axs[1]
         for i, probs in enumerate(probss):
             ax.plot(xs, probs, label=f"$z_d = {i}$")
+        ax.set_xlim(-self.support_size, self.support_size)
 
         ax.set_ylabel("$q(z_c | z_d)$")
         ax.legend()
@@ -178,19 +185,34 @@ def init_memory(memory_size, support_size, device):
     return [discrete, continuous]
 
 
+def empirical_discrete_probs(data, support_size):
+    discrete_probs = torch.zeros(support_size, device=data.device)
+    for i in range(support_size):
+        discrete_probs[i] = (data == i).sum()
+    return discrete_probs / len(data)
+
+
 def plot_memory(path, memory, support_size):
     fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
     ax = axs[0]
-    ax.hist(
-        memory[0], bins=torch.linspace(-0.5, support_size + 0.5, support_size + 1), density=True
-    )
+    # ax.hist(
+    #     memory[0], bins=torch.linspace(-0.5, support_size + 0.5, support_size + 1), density=True
+    # )
+    ax.bar(torch.arange(support_size), empirical_discrete_probs(memory[0], support_size))
     ax.set_ylabel("$q_M(z_d)$")
 
     ax = axs[1]
     for i in range(support_size):
-        ax.hist(memory[1][memory[0] == i], density=True, label=f"$z_d = {i}$")
-
+        if sum(memory[0] == i) > 0:
+            sns.kdeplot(
+                memory[1][memory[0] == i].detach().numpy(),
+                ax=ax,
+                label=f"$z_d = {i}$",
+                color=f"C{i}",
+            )
+        # ax.hist(memory[1][memory[0] == i], density=True, label=f"$z_d = {i}$")
+    ax.set_xlim(-support_size, support_size)
     ax.set_ylabel("$q_M(z_c | z_d)$")
     ax.legend()
     util.save_fig(fig, path)
@@ -200,30 +222,41 @@ def plot_continuous_memory(path, generative_model, guide, memory, num_particles)
     if len(torch.unique(memory)) != len(memory):
         raise RuntimeError("memory elements not unique")
     support_size = generative_model.support_size
+    memory = torch.sort(memory)[0]
 
     # [memory_size]
     memory_log_weight = get_memory_log_weight(generative_model, guide, memory, num_particles)
 
-    xs = torch.linspace(-1, support_size, steps=1000)
-    discrete = torch.arange(support_size, device=guide.device)
+    xs = torch.linspace(-support_size, support_size, steps=1000)
+    discrete = memory.clone().detach()  # torch.arange(support_size, device=guide.device)
     continuous_dist = guide.get_continuous_dist(discrete)
-    # [support_size, len(xs)]
-    probss = continuous_dist.log_prob(xs[:, None].expand(-1, support_size)).T.exp().detach()
+    # [memory_size, len(xs)]
+    probss = continuous_dist.log_prob(xs[:, None].expand(-1, len(memory))).T.exp().detach()
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
     ax = axs[0]
-    ax.bar(memory, util.exponentiate_and_normalize(memory_log_weight).detach())
+    support = torch.arange(support_size)
+    memory_prob = torch.zeros(support_size)
+    memory_prob[memory] = util.exponentiate_and_normalize(memory_log_weight).detach()
+    ax.bar(support, memory_prob)
     ax.set_ylabel("$q_M(z_d)$")
 
     ax = axs[1]
-    for i, probs in enumerate(probss):
-        ax.plot(xs, probs, label=f"$z_d = {i}$")
-
+    for i, (memory_element, probs) in enumerate(zip(memory, probss)):
+        ax.plot(xs, probs, label=f"$z_d = {memory_element}$", color=f"C{memory_element}")
+    ax.set_xlim(-support_size, support_size)
     ax.set_ylabel("$q(z_c | z_d)$")
 
     ax.legend()
     util.save_fig(fig, path)
+
+
+def propose_discrete(sample_shape, support_size, device):
+    """Returns: [*sample_shape]"""
+    return torch.distributions.Categorical(logits=torch.zeros(support_size, device=device)).sample(
+        sample_shape
+    )
 
 
 def get_mws_loss(generative_model, guide, memory, num_particles):
@@ -236,12 +269,17 @@ def get_mws_loss(generative_model, guide, memory, num_particles):
             continuous: [memory_size]
         num_particles: int
     Returns:
-        loss: scalar that we call .backward() on and step the optimizer.
+        loss: scalar that we call .backward() on and step the optimizer
+        memory
     """
     memory_size = memory[0].shape[0]
 
-    # Propose latents from inference network
-    latent = guide.sample([num_particles])  # [num_particles], [num_particles]
+    # Propose latents
+    discrete = propose_discrete(
+        (num_particles,), generative_model.support_size, generative_model.device
+    )  # [num_particles]
+    continuous = guide.get_continuous_dist(discrete).sample()  # [num_particles]
+    latent = (discrete, continuous)  # [num_particles], [num_particles]
 
     # Evaluate log p of proposed latents
     log_p = generative_model.log_prob(latent)  # [num_particles]
@@ -282,7 +320,7 @@ def get_mws_loss(generative_model, guide, memory, num_particles):
     generative_model_loss = -(log_p * normalized_weight).sum(dim=0).mean()
     guide_loss = -(log_q * normalized_weight).sum(dim=0).mean()
 
-    return generative_model_loss + guide_loss
+    return generative_model_loss + guide_loss, memory
 
 
 def get_memory_elbo(generative_model, guide, memory, memory_log_weights, num_particles):
@@ -391,12 +429,18 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
         memory: [memory_size]
         num_particles: int
     Returns:
-        loss: scalar that we call .backward() on and step the optimizer.
+        loss: scalar that we call .backward() on and step the optimizer
+        memory
     """
     memory_size = memory.shape[0]
 
-    # Propose discrete latent from guide
-    discrete = guide.discrete_dist.sample()  # []
+    # Propose discrete latent
+    discrete = propose_discrete((), generative_model.support_size, generative_model.device)  # []
+    # while discrete in memory:
+    #     discrete = propose_discrete(
+    #         (), generative_model.support_size, generative_model.device
+    #     )  # []
+    # print(f"discrete = {discrete}")
 
     # UPDATE MEMORY
     memory_log_weights = [get_memory_log_weight(generative_model, guide, memory, num_particles)]
@@ -409,7 +453,7 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
         replace_one_memory = get_replace_one_memory(memory, i, discrete)
         if len(torch.unique(replace_one_memory)) == memory_size:
             memory_log_weights.append(
-                get_memory_log_weight(generative_model, guide, memory, num_particles)
+                get_memory_log_weight(generative_model, guide, replace_one_memory, num_particles)
             )
             elbos.append(
                 get_memory_elbo(
@@ -447,7 +491,7 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
     generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
     guide_loss = -(log_q * normalized_weight).sum(dim=0)
 
-    return generative_model_loss + guide_loss
+    return generative_model_loss + guide_loss, memory
 
 
 def train(generative_model, guide, algorithm, num_particles, num_iterations, memory=None):
@@ -458,9 +502,11 @@ def train(generative_model, guide, algorithm, num_particles, num_iterations, mem
         if "mws" in algorithm:
             if algorithm == "mws":
                 loss_fn = get_mws_loss
+                # print(f"memory = {memory[0]}")
             elif algorithm == "cmws":
                 loss_fn = get_cmws_loss
-            loss = loss_fn(generative_model, guide, memory, num_particles)
+            loss, memory = loss_fn(generative_model, guide, memory, num_particles)
+            # print(f"memory = {memory}")
         else:
             if algorithm == "rws":
                 loss_fn = get_rws_loss
@@ -475,7 +521,7 @@ def train(generative_model, guide, algorithm, num_particles, num_iterations, mem
         losses.append(loss.detach().item())
         if i % 10 == 0:
             print(f"Iteration {i} | Loss {losses[-1]:.2f}")
-    return losses
+    return losses, memory
 
 
 def plot_losses(path, losses):
@@ -509,7 +555,7 @@ def main(args):
     else:
         memory = None
 
-    losses = train(
+    losses, memory = train(
         generative_model,
         guide,
         args.algorithm,
