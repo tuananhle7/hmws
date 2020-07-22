@@ -16,7 +16,7 @@ import run
 
 
 def get_sweep_argss(test_run=False):
-    for algorithm in ["mws", "cmws", "rws", "elbo"]:
+    for algorithm in ["elbo", "rws", "mws", "cmws"]:
         args = run.get_args_parser().parse_args([])
         if test_run:
             args.num_iterations = 100

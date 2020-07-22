@@ -40,28 +40,31 @@ class GenerativeModel:
             continuous
         )
 
-    def plot(self, path):
+    def plot_discrete(self, ax):
+        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.cpu())
+
+    def plot_continuous(self, ax):
         discrete = torch.arange(self.support_size, device=self.device)
-
         xs = torch.linspace(-self.support_size, self.support_size, steps=1000, device=self.device)
-
         continuous_dist = self.get_continuous_dist(discrete)
         # [support_size, len(xs)]
         probss = continuous_dist.log_prob(xs[:, None].expand(-1, self.support_size)).T.exp()
-
-        fig, axs = plt.subplots(1, 2, figsize=(12, 4))
-
-        ax = axs[0]
-        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.cpu())
-        ax.set_ylabel("$p(z_d)$")
-
-        ax = axs[1]
         for i, probs in enumerate(probss):
             ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
         ax.set_xlim(-self.support_size, self.support_size)
 
+    def plot(self, path):
+        fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+
+        ax = axs[0]
+        self.plot_discrete(ax)
+        ax.set_ylabel("$p(z_d)$")
+
+        ax = axs[1]
+        self.plot_continuous(ax)
         ax.set_ylabel("$p(z_c | z_d)$")
         ax.legend()
+
         util.save_fig(fig, path)
 
 
@@ -122,7 +125,10 @@ class Guide(nn.Module):
         continuous = self.get_continuous_dist(discrete).sample().detach()
         return discrete, continuous
 
-    def plot(self, path):
+    def plot_discrete(self, ax):
+        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.cpu().detach())
+
+    def plot_continuous(self, ax):
         discrete = torch.arange(self.support_size, device=self.device)
 
         xs = torch.linspace(-self.support_size, self.support_size, steps=1000, device=self.device)
@@ -132,19 +138,22 @@ class Guide(nn.Module):
         probss = (
             continuous_dist.log_prob(xs[:, None].expand(-1, self.support_size)).T.exp().detach()
         )
+        for i, probs in enumerate(probss):
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
+
+    def plot(self, path):
 
         fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
         ax = axs[0]
-        ax.bar(torch.arange(self.support_size), self.discrete_dist.probs.cpu().detach())
+        self.plot_discrete(ax)
         ax.set_ylabel("$q(z_d)$")
 
         ax = axs[1]
-        for i, probs in enumerate(probss):
-            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
+        self.plot_continuous(ax)
         ax.set_xlim(-self.support_size, self.support_size)
-
         ax.set_ylabel("$q(z_c | z_d)$")
+
         ax.legend()
         util.save_fig(fig, path)
 
