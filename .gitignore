@@ -1,3 +1,5 @@
+*.DS_Store
+cp_from_om.sh
 .vscode
 save/
 
