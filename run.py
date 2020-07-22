@@ -1,110 +1,52 @@
-import torch
 import util
-import matplotlib.pyplot as plt
+import argparse
+import torch
+import train
 
 
-def topk(values, score, k):
-    return values[torch.sort(score(values)).indices[-k:]]
+def main(args):
+    # general
+    if args.cuda and torch.cuda.is_available():
+        device = torch.device("cuda")
+        args.cuda = True
+    else:
+        device = torch.device("cpu")
+        args.cuda = False
+
+    generative_model, guide, optimizer, memory, stats = util.init(args, device)
+
+    train.train(
+        args.algorithm,
+        generative_model,
+        guide,
+        memory,
+        optimizer,
+        args.num_particles,
+        args.num_iterations,
+        stats,
+        args,
+    )
 
 
-def updated_memory(memory, propose, log_target, num_particles):
-    memory_size = len(memory)
-    particles = propose(num_particles)
-    return topk(torch.unique(torch.cat([memory, particles])), log_target, memory_size)
+def get_parser():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-
-class LogTargetDiscrete:
-    def __init__(self, support_size):
-        self.values = torch.rand(support_size)
-
-    def __call__(self, latents):
-        return self.values[latents]
-
-
-class ProposeDiscrete:
-    def __init__(self, support_size):
-        self.support_size = support_size
-
-    def __call__(self, num_particles):
-        return torch.distributions.Categorical(logits=torch.zeros(self.support_size)).sample(
-            (num_particles,)
-        )
-
-
-def log_target_continuous(latents):
-    return torch.distributions.Normal(0, 1).log_prob(latents)
-
-
-def propose_continuous(num_particles):
-    return torch.distributions.Normal(0, 2).sample((num_particles,))
-
-
-def plot_discrete_mws(path):
-    support_size = 10
-    log_target = LogTargetDiscrete(support_size)
-    propose = ProposeDiscrete(support_size)
-
-    memory_size = 3
-    num_particles = memory_size
-
-    memory = torch.arange(memory_size)
-
-    num_updates = 10
-    memories = [memory]
-    for _ in range(num_updates):
-        memories.append(updated_memory(memories[-1], propose, log_target, num_particles))
-
-    fig, axs = plt.subplots(num_updates + 1, 1, figsize=(1 * 6, (num_updates + 1) * 4))
-    for update_it in range(num_updates + 1):
-        ax = axs[update_it]
-        ax.set_title(f"Iteration {update_it}")
-        ax.bar(
-            torch.arange(support_size),
-            util.lognormexp(log_target.values).exp(),
-            alpha=0.5,
-            label="true",
-        )
-        ax.bar(
-            memories[update_it],
-            util.lognormexp(log_target(memories[update_it])).exp(),
-            alpha=0.5,
-            label="memory-based approx.",
-        )
-        ax.legend()
-    util.save_fig(fig, path)
-
-
-def plot_continuous_mws(path):
-    log_target = log_target_continuous
-    propose = propose_continuous
-
-    memory_size = 3
-    num_particles = memory_size
-
-    memory = torch.arange(memory_size).float()
-
-    num_updates = 10
-    memories = [memory]
-    for _ in range(num_updates):
-        memories.append(updated_memory(memories[-1], propose, log_target, num_particles))
-
-    support = torch.linspace(-3, 3)
-    fig, axs = plt.subplots(num_updates + 1, 1, figsize=(1 * 6, (num_updates + 1) * 4))
-    for update_it in range(num_updates + 1):
-        ax = axs[update_it]
-        ax.set_title(f"Iteration {update_it}")
-        ax.plot(support, log_target(support).exp(), label="true", color="C0")
-        ax.bar(
-            memories[update_it],
-            util.lognormexp(log_target(memories[update_it])).exp(),
-            width=0.2,
-            label="memory-based approx.",
-            color="C1",
-        )
-        ax.legend()
-    util.save_fig(fig, path)
+    # general
+    parser.add_argument("--cuda", action="store_true", help="use cuda")
+    parser.add_argument("--support-size", type=int, default=5, help=" ")
+    parser.add_argument("--memory-size", type=int, default=3, help=" ")
+    parser.add_argument("--num-particles", type=int, default=100, help=" ")
+    parser.add_argument("--num-iterations", type=int, default=10000, help=" ")
+    parser.add_argument(
+        "--algorithm",
+        default="rws",
+        choices=["rws", "elbo", "mws", "cmws"],
+        help="Learning/inference algorithm to use",
+    )
+    return parser
 
 
 if __name__ == "__main__":
-    plot_discrete_mws("save/discrete.png")
-    plot_continuous_mws("save/continuous.png")
+    parser = get_parser()
+    args = parser.parse_args()
+    main(args)
