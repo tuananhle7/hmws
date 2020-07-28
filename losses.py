@@ -122,25 +122,61 @@ def get_log_marginal_joint(generative_model, guide, memory, num_particles):
         log_marginal_joint: [memory_size]
     """
 
+    # q(c | d)
     # batch_shape [memory_size]
     guide_continuous_dist = guide.get_continuous_dist(memory)
 
+    # c ~ q(c | d)
     # [num_particles, memory_size]
     continuous = guide_continuous_dist.sample((num_particles,))
 
+    # log q(c | d)
     # [num_particles, memory_size]
     log_q_continuous = guide_continuous_dist.log_prob(continuous)
 
     # [num_particles, memory_size]
     memory_expanded = memory[None].expand(num_particles, -1)
 
+    # log p(d, c)
     # [num_particles, memory_size]
     log_p = generative_model.log_prob((memory_expanded, continuous))
 
     return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
 
 
-def get_memory_log_weight(generative_model, guide, memory, num_particles):
+def get_log_marginal_joint_sgd(generative_model, guide, memory, num_iterations):
+    """Estimates log p(discrete, obs) by evaluating max_continuous log p(discrete, continuous, obs)
+
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: [memory_size]
+        num_particles: int
+    Returns:
+        log_marginal_joint: [memory_size]
+    """
+    memory_size = len(memory)
+    device = memory.device
+
+    # c_init ~ q(c | d)
+    continuous_init = guide.get_continuous_dist(memory).sample()  # [memory_size]
+    continuous = torch.zeros((memory_size,), device=device)  # [memory_size]
+    for i in range(memory_size):
+        continuous_delta = torch.tensor(0.0, device=device, requires_grad=True)
+        optimizer = torch.optim.Adam([continuous_delta])
+
+        for _ in range(num_iterations):
+            loss = -generative_model.log_prob((memory[i], continuous_init[i] + continuous_delta))
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        continuous[i] = continuous_init[i] + continuous_delta
+
+    return continuous
+
+
+def get_memory_log_weight(generative_model, guide, memory, num_particles=None, num_iterations=None):
     """Estimates normalized log weights associated with the approximation based on memory.
 
     sum_k weight_k memory_k ≅ p(discrete | obs)
@@ -149,11 +185,18 @@ def get_memory_log_weight(generative_model, guide, memory, num_particles):
         generative_model: GenerativeModel object
         guide: Guide object
         memory: [memory_size]
-        num_particles: int
+        num_particles (int): for estimating memory weights using importance sampling
+        num_iterations (int): for estimating memory weights using SGD
     Returns:
         memory_log_weight: [memory_size]
     """
-    return util.lognormexp(get_log_marginal_joint(generative_model, guide, memory, num_particles))
+    if num_particles is not None:
+        log_marginal_joint = get_log_marginal_joint(generative_model, guide, memory, num_particles)
+    elif num_iterations is not None:
+        log_marginal_joint = get_log_marginal_joint_sgd(
+            generative_model, guide, memory, num_iterations
+        )
+    return util.lognormexp(log_marginal_joint)
 
 
 def get_replace_one_memory(memory, idx, replacement):
@@ -171,7 +214,9 @@ def get_replace_one_memory(memory, idx, replacement):
     return replace_one_memory
 
 
-def get_cmws_loss(generative_model, guide, memory, num_particles):
+def get_cmws_loss(
+    generative_model, guide, memory, num_mc_samples, num_particles=None, num_iterations=None
+):
     """MWS loss for hybrid discrete-continuous models as described in
     https://www.overleaf.com/project/5dfd4bbac2914e0001efb29b
 
@@ -179,7 +224,9 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
         generative_model: GenerativeModel object
         guide: Guide object
         memory: [memory_size]
-        num_particles: int
+        num_mc_samples (int): for estimating ELBOs for choosing memory elements
+        num_particles (int): for estimating memory weights using importance sampling
+        num_iterations (int): for estimating memory weights using SGD
     Returns:
         loss: scalar that we call .backward() on and step the optimizer
         memory
@@ -194,17 +241,31 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
         )  # []
 
     # UPDATE MEMORY
-    memory_log_weights = [get_memory_log_weight(generative_model, guide, memory, num_particles)]
+    memory_log_weights = [
+        get_memory_log_weight(
+            generative_model,
+            guide,
+            memory,
+            num_particles=num_particles,
+            num_iterations=num_iterations,
+        )
+    ]
     elbos = [
         get_memory_elbo(
-            generative_model, guide, memory, memory_log_weights[-1], num_particles,
+            generative_model, guide, memory, memory_log_weights[-1], num_mc_samples,
         ).item()
     ]
     for i in range(memory_size):
         replace_one_memory = get_replace_one_memory(memory, i, discrete)
         if len(torch.unique(replace_one_memory)) == memory_size:
             memory_log_weights.append(
-                get_memory_log_weight(generative_model, guide, replace_one_memory, num_particles)
+                get_memory_log_weight(
+                    generative_model,
+                    guide,
+                    replace_one_memory,
+                    num_particles=num_particles,
+                    num_iterations=num_iterations,
+                )
             )
             elbos.append(
                 get_memory_elbo(
@@ -212,7 +273,7 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
                     guide,
                     replace_one_memory,
                     memory_log_weights[-1],
-                    num_particles,
+                    num_mc_samples,
                 ).item()
             )
         else:
@@ -222,11 +283,11 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
     best_i = np.argmax(elbos)
     if best_i > 0:
         memory = get_replace_one_memory(memory, best_i - 1, discrete)
-        print("---")
-        print(f"discrete = {discrete}")
-        print(f"elbos = {elbos}")
-        print(f"best_i = {best_i}")
-    print(f"memory = {memory}")
+    #     print("---")
+    #     print(f"discrete = {discrete}")
+    #     print(f"elbos = {elbos}")
+    #     print(f"best_i = {best_i}")
+    # print(f"memory = {memory}")
 
     # UPDATE MEMORY WEIGHTS
     memory_log_weight = memory_log_weights[best_i]

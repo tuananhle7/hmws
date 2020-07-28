@@ -15,17 +15,7 @@ def main(args):
 
     generative_model, guide, optimizer, memory, stats = util.init(args, device)
 
-    train.train(
-        args.algorithm,
-        generative_model,
-        guide,
-        memory,
-        optimizer,
-        args.num_particles,
-        args.num_iterations,
-        stats,
-        args,
-    )
+    train.train(args, generative_model, guide, memory, optimizer, stats)
 
 
 def get_args_parser():
@@ -36,6 +26,8 @@ def get_args_parser():
     parser.add_argument("--support-size", type=int, default=5, help=" ")
     parser.add_argument("--memory-size", type=int, default=3, help=" ")
     parser.add_argument("--num-particles", type=int, default=100, help=" ")
+    parser.add_argument("--num-cmws-mc-samples", type=int, default=100, help=" ")
+    parser.add_argument("--num-cmws-iterations", type=int, default=10, help=" ")
     parser.add_argument("--num-iterations", type=int, default=10000, help=" ")
     parser.add_argument("--save-interval", type=int, default=100, help=" ")
     parser.add_argument("--log-interval", type=int, default=10, help=" ")
@@ -44,6 +36,12 @@ def get_args_parser():
         default="rws",
         choices=["rws", "elbo", "mws", "cmws"],
         help="Learning/inference algorithm to use",
+    )
+    parser.add_argument(
+        "--cmws-estimator",
+        default="is",
+        choices=["is", "sgd"],
+        help="Inner inference algorithm for cmws",
     )
     return parser
 
