@@ -12,6 +12,7 @@ def main(args):
     else:
         device = torch.device("cpu")
         args.cuda = False
+    util.set_seed(args.seed)
 
     generative_model, guide, optimizer, memory, stats = util.init(args, device)
 
@@ -23,6 +24,7 @@ def get_args_parser():
 
     # general
     parser.add_argument("--cuda", action="store_true", help="use cuda")
+    parser.add_argument("--seed", type=int, default=0, help=" ")
     parser.add_argument("--support-size", type=int, default=5, help=" ")
     parser.add_argument("--memory-size", type=int, default=3, help=" ")
     parser.add_argument("--num-particles", type=int, default=100, help=" ")
