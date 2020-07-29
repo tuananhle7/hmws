@@ -52,7 +52,7 @@ def plot_animation_frame(checkpoint_iteration):
             checkpoint_path, device=device
         )
         axs = axss[i + 1]
-        axs[0].set_ylabel(run_args.algorithm.upper(), fontsize=36)
+        axs[0].set_ylabel(util.get_path_base_from_args(run_args).upper(), fontsize=36)
         if run_args.algorithm == "mws":
             # DISCRETE MEMORY
             support_size = generative_model.support_size
@@ -97,7 +97,11 @@ def plot_animation_frame(checkpoint_iteration):
             support = torch.arange(support_size, device=device)
             # [memory_size]
             memory_log_weight = losses.get_memory_log_weight(
-                generative_model, guide, memory, run_args.num_particles
+                generative_model,
+                guide,
+                memory,
+                num_particles=run_args.num_particles,
+                num_iterations=run_args.num_iterations,
             )
             memory_prob = torch.zeros(support_size, device=device)
             memory_prob[memory] = util.exponentiate_and_normalize(memory_log_weight).detach()
