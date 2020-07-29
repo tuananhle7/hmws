@@ -25,6 +25,7 @@ def plot_memory(path, memory, support_size):
                 ax=ax,
                 label=f"$z_d = {i}$",
                 color=f"C{i}",
+                linewidth=3,
             )
         # ax.hist(memory[1][memory[0] == i], density=True, label=f"$z_d = {i}$")
     ax.set_xlim(-support_size, support_size)
@@ -33,7 +34,9 @@ def plot_memory(path, memory, support_size):
     util.save_fig(fig, path)
 
 
-def plot_continuous_memory(path, generative_model, guide, memory, num_particles):
+def plot_continuous_memory(
+    path, generative_model, guide, memory, num_particles=None, num_iterations=None
+):
     if len(torch.unique(memory)) != len(memory):
         raise RuntimeError("memory elements not unique")
     support_size = generative_model.support_size
@@ -41,7 +44,9 @@ def plot_continuous_memory(path, generative_model, guide, memory, num_particles)
     device = memory.device
 
     # [memory_size]
-    memory_log_weight = losses.get_memory_log_weight(generative_model, guide, memory, num_particles)
+    memory_log_weight = losses.get_memory_log_weight(
+        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations
+    )
 
     xs = torch.linspace(-support_size, support_size, steps=1000, device=device)
     discrete = memory.clone().detach()  # torch.arange(support_size, device=guide.device)
@@ -60,7 +65,13 @@ def plot_continuous_memory(path, generative_model, guide, memory, num_particles)
 
     ax = axs[1]
     for i, (memory_element, probs) in enumerate(zip(memory, probss)):
-        ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {memory_element}$", color=f"C{memory_element}")
+        ax.plot(
+            xs.cpu(),
+            probs.cpu(),
+            label=f"$z_d = {memory_element}$",
+            color=f"C{memory_element}",
+            linewidth=3,
+        )
     ax.set_xlim(-support_size, support_size)
     ax.set_ylabel("$q(z_c | z_d)$")
 
@@ -108,7 +119,8 @@ def main(args):
                 generative_model,
                 guide,
                 memory,
-                run_args.num_particles,
+                num_particles=run_args.num_particles,
+                num_iterations=run_args.num_iterations,
             )
 
 
