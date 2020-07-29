@@ -37,6 +37,18 @@ def train(
         loss.backward()
         optimizer.step()
 
+        stats.locs_errors.append(util.get_locs_error(generative_model, guide))
+        if run_args.algorithm == "cmws":
+            stats.cmws_memory_errors.append(
+                util.get_cmws_memory_error(
+                    generative_model,
+                    guide,
+                    memory,
+                    num_particles=run_args.num_particles,
+                    num_iterations=run_args.num_iterations,
+                )
+            )
+            stats.inference_errors.append(stats.locs_errors[-1] + stats.cmws_memory_errors[-1])
         stats.losses.append(loss.detach().item())
         if iteration % run_args.log_interval == 0:
             util.logging.info(f"Iteration {iteration} | Loss {stats.losses[-1]:.2f}")
