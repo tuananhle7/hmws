@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import torch
 import util
 import seaborn as sns
-import losses
 import argparse
 
 
@@ -43,11 +42,6 @@ def plot_continuous_memory(
     memory = torch.sort(memory)[0]
     device = memory.device
 
-    # [memory_size]
-    memory_log_weight = losses.get_memory_log_weight(
-        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations
-    )
-
     xs = torch.linspace(-support_size, support_size, steps=1000, device=device)
     discrete = memory.clone().detach()  # torch.arange(support_size, device=guide.device)
     continuous_dist = guide.get_continuous_dist(discrete)
@@ -58,9 +52,16 @@ def plot_continuous_memory(
 
     ax = axs[0]
     support = torch.arange(support_size, device=device)
-    memory_prob = torch.zeros(support_size, device=device)
-    memory_prob[memory] = util.exponentiate_and_normalize(memory_log_weight).detach()
-    ax.bar(support.cpu(), memory_prob.cpu())
+    ax.bar(
+        support.cpu(),
+        util.get_memory_prob(
+            generative_model,
+            guide,
+            memory,
+            num_particles=num_particles,
+            num_iterations=num_iterations,
+        ).cpu(),
+    )
     ax.set_ylabel("$q_M(z_d)$")
 
     ax = axs[1]
@@ -80,8 +81,19 @@ def plot_continuous_memory(
 
 
 def plot_stats(path, stats):
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(stats.losses)
+    num_rows = 4
+    num_cols = 1
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 6, num_rows * 4), sharex=True)
+
+    axs[0].plot(stats.losses)
+    axs[0].set_ylabel("Loss")
+    axs[1].plot(stats.cmws_memory_errors)
+    axs[1].set_ylabel(f"$q(d)$ error")
+    axs[2].plot(stats.locs_errors)
+    axs[2].set_ylabel(f"$q(c | d)$ error")
+    axs[3].plot(stats.inference_errors)
+    axs[3].set_ylabel(f"$q(d, c)$ error")
+
     util.save_fig(fig, path)
 
 
@@ -108,7 +120,7 @@ def main(args):
             continue
 
         diagnostics_dir = util.get_save_dir(run_args)
-        plot_stats(f"{diagnostics_dir}/losses.pdf", stats)
+        plot_stats(f"{diagnostics_dir}/stats.pdf", stats)
         generative_model.plot(f"{diagnostics_dir}/generative_model.pdf")
         guide.plot(f"{diagnostics_dir}/guide.pdf")
         if run_args.algorithm == "mws":
