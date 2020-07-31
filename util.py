@@ -19,7 +19,7 @@ logging.basicConfig(
 
 
 def get_path_base_from_args(args):
-    return args.algorithm
+    return f"cmws_{args.num_cmws_mc_samples}_{args.num_particles}_{args.seed}"
 
 
 def get_save_job_name_from_args(args):

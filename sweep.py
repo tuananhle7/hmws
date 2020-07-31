@@ -16,16 +16,20 @@ import run
 
 
 def get_sweep_argss(test_run=False):
-    for algorithm in ["elbo", "rws", "cmws", "mws"]:
-        args = run.get_args_parser().parse_args([])
-        if test_run:
-            args.num_iterations = 100
-            args.save_interval = 10
-        if algorithm == "mws":
-            args.memory_size = 100
-        args.algorithm = algorithm
-        args.cuda = True
-        yield args
+    for seed in range(3):
+        for num_cmws_mc_samples in [10, 50, 100, 500, 1000]:
+            for num_particles in [10, 50, 100, 500, 1000]:
+                args = run.get_args_parser().parse_args([])
+                args.cuda = True
+                if test_run:
+                    args.num_iterations = 100
+                    args.save_interval = 10
+                args.algorithm = "cmws"
+                args.cmws_estimator = "is"
+                args.num_cmws_mc_samples = num_cmws_mc_samples
+                args.num_particles = num_particles
+                args.seed = seed
+                yield args
 
 
 def args_to_str(args):
