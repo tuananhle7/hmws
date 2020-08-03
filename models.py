@@ -10,7 +10,9 @@ class GenerativeModel:
         self.device = device
         # self.logits = torch.rand(support_size, device=device) - 0.5
         self.logits = torch.zeros(support_size, device=device)
-        self.logits[-1] = 1
+        self.logits[-1] = 3
+        self.logits[-2] = 1.2
+        self.logits[-3] = 1.1
         self.discrete_dist = torch.distributions.Categorical(logits=self.logits)
 
         self.locs = torch.linspace(-2, 2, self.support_size, device=device)

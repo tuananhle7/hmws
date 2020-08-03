@@ -28,12 +28,14 @@ def init(seed):
 
 
 def main():
-    seeds = range(20)
-    num_particles_or_iterationss = [10, 50, 100, 500, 1000, 5000]
-    is_errors, sgd_errors = [np.zeros((len(num_particles_or_iterationss), 3)) for _ in range(2)]
+    seeds = range(100)
+    num_particles_or_iterationss = [2, 4, 6, 8, 10, 20]
+    is_errors, sgd_errors, exact_errors = [
+        np.zeros((len(num_particles_or_iterationss), 3)) for _ in range(3)
+    ]
     for i, num_particles_or_iterations in enumerate(num_particles_or_iterationss):
-        is_error = []
-        sgd_error = []
+        print(f"num_particles_or_iterations = {num_particles_or_iterations}")
+        is_error, sgd_error, exact_error = [], [], []
         for seed in seeds:
             generative_model, guide, memory = init(seed)
 
@@ -58,14 +60,26 @@ def main():
                     num_iterations=num_particles_or_iterations,
                 )
             )
+
+            # Exact
+            exact_error.append(
+                util.get_cmws_memory_error(
+                    generative_model, guide, memory, num_particles=None, num_iterations=None,
+                )
+            )
+
         is_errors[i] = get_lo_mid_hi(is_error)
         sgd_errors[i] = get_lo_mid_hi(sgd_error)
+        exact_errors[i] = get_lo_mid_hi(exact_error)
 
     print(f"is_errors = {is_errors}")
     print(f"sgd_errors = {sgd_errors}")
+    print(f"exact_errors = {exact_errors}")
 
     fig, ax = plt.subplots(1, 1)
-    for data, label, color in zip([is_errors, sgd_errors], ["IS", "SGD"], ["C0", "C1"]):
+    for data, label, color in zip(
+        [is_errors, sgd_errors, exact_errors], ["IS", "SGD", "Exact"], ["C0", "C1", "C2"]
+    ):
         ax.plot(
             num_particles_or_iterationss, data[:, 1], color=color, label=label,
         )
@@ -75,7 +89,7 @@ def main():
     ax.set_ylabel("q(d) error")
 
     ax.legend()
-    ax.set_xlabel("Number of particles (blue) / iterations (red)")
+    ax.set_xlabel("Number of particles / iterations")
     util.save_fig(fig, "save/marginalization_comparison.pdf")
 
 

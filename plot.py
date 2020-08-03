@@ -126,13 +126,22 @@ def main(args):
         if run_args.algorithm == "mws":
             plot_memory(f"{diagnostics_dir}/memory.pdf", memory, generative_model.support_size)
         elif run_args.algorithm == "cmws":
+            if run_args.cmws_estimator == "exact":
+                num_particles = None
+                num_iterations = None
+            elif run_args.algorithm == "is":
+                num_particles = run_args.num_iterations
+                num_iterations = None
+            elif run_args.algorithm == "sgd":
+                num_particles = None
+                num_iterations = run_args.num_iterations
             plot_continuous_memory(
                 f"{diagnostics_dir}/memory.pdf",
                 generative_model,
                 guide,
                 memory,
-                num_particles=run_args.num_particles,
-                num_iterations=run_args.num_iterations,
+                num_particles=num_particles,
+                num_iterations=num_iterations,
             )
 
 

@@ -16,20 +16,47 @@ import run
 
 
 def get_sweep_argss(test_run=False):
-    for seed in range(3):
-        for num_cmws_mc_samples in [10, 50, 100, 500, 1000]:
-            for num_particles in [10, 50, 100, 500, 1000]:
-                args = run.get_args_parser().parse_args([])
-                args.cuda = True
-                if test_run:
-                    args.num_iterations = 100
-                    args.save_interval = 10
-                args.algorithm = "cmws"
-                args.cmws_estimator = "is"
-                args.num_cmws_mc_samples = num_cmws_mc_samples
-                args.num_particles = num_particles
-                args.seed = seed
-                yield args
+    seeds = range(5)
+    num_particless = [2, 4, 6, 8, 10]
+    num_cmws_iterationss = num_particless
+    for seed in seeds:
+        for num_particles in num_particless:
+            args = run.get_args_parser().parse_args([])
+            args.cuda = True
+            if test_run:
+                args.num_iterations = 100
+                args.save_interval = 10
+            args.algorithm = "cmws"
+            args.cmws_estimator = "is"
+            args.num_cmws_iterations = None
+            args.num_particles = num_particles
+            args.seed = seed
+            yield args
+
+        for num_cmws_iterations in num_cmws_iterationss:
+            args = run.get_args_parser().parse_args([])
+            args.cuda = True
+            if test_run:
+                args.num_iterations = 100
+                args.save_interval = 10
+            args.algorithm = "cmws"
+            args.cmws_estimator = "sgd"
+            args.num_cmws_iterations = num_cmws_iterations
+            args.num_particles = None
+            args.seed = seed
+            yield args
+
+        args = run.get_args_parser().parse_args([])
+        args.cuda = True
+        if test_run:
+            args.num_iterations = 100
+            args.save_interval = 10
+        args.algorithm = "cmws"
+        args.cmws_estimator = "exact"
+        args.num_cmws_iterations = None
+        args.num_particles = None
+        args.seed = seed
+        yield args
 
 
 def args_to_str(args):

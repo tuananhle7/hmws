@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import os
 import losses
 import numpy as np
+import subprocess
+import getpass
 
 
 logging.basicConfig(
@@ -19,7 +21,14 @@ logging.basicConfig(
 
 
 def get_path_base_from_args(args):
-    return f"cmws_{args.num_cmws_mc_samples}_{args.num_particles}_{args.seed}"
+    if args.cmws_estimator == "exact":
+        stuff = ""
+    elif args.cmws_estimator == "is":
+        stuff = args.num_particles
+    elif args.cmws_estimator == "sgd":
+        stuff = args.num_cmws_iterations
+
+    return f"{args.cmws_estimator}{stuff}_{args.seed}"
 
 
 def get_save_job_name_from_args(args):
@@ -203,10 +212,34 @@ def get_cmws_memory_error(generative_model, guide, memory, num_particles=None, n
     return torch.norm(cmws_memory_prob - generative_model.discrete_dist.probs, p=2).detach().item()
 
 
-def get_locs_error(generative_model, guide):
-    return torch.norm(generative_model.locs - guide.locs, p=2).detach().item()
+def get_locs_error(generative_model, guide, memory, num_particles=None, num_iterations=None):
+    # probs = generative_model.discrete_dist.probs
+    probs = get_memory_prob(
+        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations,
+    )
+    return (probs * (generative_model.locs - guide.locs)).abs().sum().detach().item()
+    # return torch.norm(generative_model.locs - guide.locs, p=2).detach().item()
 
 
 def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
+
+
+def cancel_all_my_non_bash_jobs():
+    print("Cancelling all non-bash jobs.")
+    jobs_status = (
+        subprocess.check_output(f"squeue -u {getpass.getuser()}", shell=True)
+        .decode()
+        .split("\n")[1:-1]
+    )
+    non_bash_job_ids = []
+    for job_status in jobs_status:
+        if not ("bash" in job_status.split() or "zsh" in job_status.split()):
+            non_bash_job_ids.append(job_status.split()[0])
+    if len(non_bash_job_ids) > 0:
+        cmd = "scancel {}".format(" ".join(non_bash_job_ids))
+        print(cmd)
+        print(subprocess.check_output(cmd, shell=True).decode())
+    else:
+        print("No non-bash jobs to cancel.")

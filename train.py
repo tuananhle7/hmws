@@ -17,6 +17,9 @@ def train(
                     run_args.num_cmws_iterations = None
                 elif run_args.cmws_estimator == "sgd":
                     run_args.num_particles = None
+                elif run_args.cmws_estimator == "exact":
+                    run_args.num_particles = None
+                    run_args.num_cmws_iterations = None
                 loss, memory = losses.get_cmws_loss(
                     generative_model,
                     guide,
@@ -37,7 +40,15 @@ def train(
         loss.backward()
         optimizer.step()
 
-        stats.locs_errors.append(util.get_locs_error(generative_model, guide))
+        stats.locs_errors.append(
+            util.get_locs_error(
+                generative_model,
+                guide,
+                memory,
+                num_particles=run_args.num_particles,
+                num_iterations=run_args.num_cmws_iterations,
+            )
+        )
         if run_args.algorithm == "cmws":
             stats.cmws_memory_errors.append(
                 util.get_cmws_memory_error(
@@ -45,7 +56,7 @@ def train(
                     guide,
                     memory,
                     num_particles=run_args.num_particles,
-                    num_iterations=run_args.num_iterations,
+                    num_iterations=run_args.num_cmws_iterations,
                 )
             )
             stats.inference_errors.append(stats.locs_errors[-1] + stats.cmws_memory_errors[-1])
