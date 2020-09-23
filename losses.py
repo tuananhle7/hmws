@@ -1,4 +1,3 @@
-import numpy as np
 import math
 import util
 import torch
@@ -75,42 +74,7 @@ def get_mws_loss(generative_model, guide, memory, num_particles):
     return generative_model_loss + guide_loss, memory
 
 
-def get_memory_elbo(generative_model, guide, memory, memory_log_weights, num_particles):
-    """
-    Args:
-        generative_model: GenerativeModel object
-        guide: Guide object
-        memory: [memory_size]
-        memory_log_weights: [memory_size]
-        num_particles: int
-    Returns:
-        memory_elbo: scalar
-    """
-    # [memory_size]
-    memory_log_weights_normalized = util.lognormexp(memory_log_weights)
-
-    # batch_shape [memory_size]
-    guide_continuous_dist = guide.get_continuous_dist(memory)
-
-    # [num_particles, memory_size]
-    continuous = guide_continuous_dist.sample((num_particles,))
-
-    # [num_particles, memory_size]
-    memory_expanded = memory[None].expand(num_particles, -1)
-
-    # [num_particles, memory_size]
-    log_p = generative_model.log_prob((memory_expanded, continuous))
-
-    # [num_particles, memory_size]
-    log_q_continuous = guide_continuous_dist.log_prob(continuous)
-
-    return (
-        memory_log_weights_normalized.exp()
-        * (log_p - (memory_log_weights_normalized[None] + log_q_continuous)).mean(dim=0)
-    ).sum()
-
-
-def get_log_marginal_joint(generative_model, guide, memory, num_particles):
+def get_log_marginal_joint_is(generative_model, guide, memory, num_particles):
     """Estimates log p(discrete, obs), marginalizing out continuous.
 
     Args:
@@ -122,25 +86,104 @@ def get_log_marginal_joint(generative_model, guide, memory, num_particles):
         log_marginal_joint: [memory_size]
     """
 
+    # q(c | d)
     # batch_shape [memory_size]
     guide_continuous_dist = guide.get_continuous_dist(memory)
 
+    # c ~ q(c | d)
     # [num_particles, memory_size]
     continuous = guide_continuous_dist.sample((num_particles,))
 
+    # log q(c | d)
     # [num_particles, memory_size]
     log_q_continuous = guide_continuous_dist.log_prob(continuous)
 
     # [num_particles, memory_size]
     memory_expanded = memory[None].expand(num_particles, -1)
 
+    # log p(d, c)
     # [num_particles, memory_size]
     log_p = generative_model.log_prob((memory_expanded, continuous))
 
     return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
 
 
-def get_memory_log_weight(generative_model, guide, memory, num_particles):
+def get_log_marginal_joint_sgd(generative_model, guide, memory, num_iterations):
+    """Estimates log p(discrete, obs) by evaluating max_continuous log p(discrete, continuous, obs)
+
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: [memory_size]
+        num_particles: int
+    Returns:
+        log_marginal_joint: [memory_size]
+    """
+    memory_size = len(memory)
+    device = memory.device
+
+    # c_init ~ q(c | d)
+    continuous_init = guide.get_continuous_dist(memory).sample()  # [memory_size]
+    continuous = torch.zeros((memory_size,), device=device)  # [memory_size]
+    for i in range(memory_size):
+        continuous_delta = torch.tensor(0.0, device=device, requires_grad=True)
+        optimizer = torch.optim.SGD([continuous_delta], lr=0.1)
+
+        for _ in range(num_iterations):
+            loss = -generative_model.log_prob((memory[i], continuous_init[i] + continuous_delta))
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        continuous[i] = continuous_init[i] + continuous_delta
+
+    return generative_model.log_prob((memory, continuous))
+
+
+def get_log_marginal_joint_exact(generative_model, memory):
+    """Exactly evaluates log p(discrete, obs), marginalizing out continuous.
+
+    Args:
+        generative_model: GenerativeModel object
+        memory: [memory_size]
+    Returns:
+        log_marginal_joint: [memory_size]
+    """
+
+    return generative_model.discrete_dist.log_prob(memory)
+
+
+def get_log_marginal_joint(
+    generative_model, guide, memory, num_particles=None, num_iterations=None
+):
+    """Evaluate / estimate log p(discrete, obs), marginalizing out continuous.
+
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: [memory_size]
+        num_particles (int): for estimating memory weights using importance sampling
+        num_iterations (int): for estimating memory weights using SGD
+    Returns:
+        log_marginal_joint: [memory_size]
+    """
+    if num_particles is None and num_iterations is None:
+        log_marginal_joint = get_log_marginal_joint_exact(generative_model, memory)
+    elif num_particles is not None and num_iterations is not None:
+        raise ValueError("both num_particles and num_iterations are not None")
+    else:
+        if num_particles is not None:
+            log_marginal_joint = get_log_marginal_joint_is(
+                generative_model, guide, memory, num_particles
+            )
+        elif num_iterations is not None:
+            log_marginal_joint = get_log_marginal_joint_sgd(
+                generative_model, guide, memory, num_iterations
+            )
+    return log_marginal_joint
+
+
+def get_memory_log_weight(generative_model, guide, memory, num_particles=None, num_iterations=None):
     """Estimates normalized log weights associated with the approximation based on memory.
 
     sum_k weight_k memory_k ≅ p(discrete | obs)
@@ -149,11 +192,20 @@ def get_memory_log_weight(generative_model, guide, memory, num_particles):
         generative_model: GenerativeModel object
         guide: Guide object
         memory: [memory_size]
-        num_particles: int
+        num_particles (int): for estimating memory weights using importance sampling
+        num_iterations (int): for estimating memory weights using SGD
     Returns:
         memory_log_weight: [memory_size]
     """
-    return util.lognormexp(get_log_marginal_joint(generative_model, guide, memory, num_particles))
+    return util.lognormexp(
+        get_log_marginal_joint(
+            generative_model,
+            guide,
+            memory,
+            num_particles=num_particles,
+            num_iterations=num_iterations,
+        )
+    )
 
 
 def get_replace_one_memory(memory, idx, replacement):
@@ -171,7 +223,9 @@ def get_replace_one_memory(memory, idx, replacement):
     return replace_one_memory
 
 
-def get_cmws_loss(generative_model, guide, memory, num_particles):
+def get_cmws_loss(
+    generative_model, guide, memory, num_mc_samples, num_particles=None, num_iterations=None
+):
     """MWS loss for hybrid discrete-continuous models as described in
     https://www.overleaf.com/project/5dfd4bbac2914e0001efb29b
 
@@ -179,69 +233,129 @@ def get_cmws_loss(generative_model, guide, memory, num_particles):
         generative_model: GenerativeModel object
         guide: Guide object
         memory: [memory_size]
-        num_particles: int
+        num_mc_samples (int): for estimating ELBOs for choosing memory elements
+        num_particles (int): for estimating memory weights using importance sampling
+        num_iterations (int): for estimating memory weights using SGD
     Returns:
         loss: scalar that we call .backward() on and step the optimizer
         memory
     """
     memory_size = memory.shape[0]
 
-    # Propose discrete latent
+    # PROPOSE DISCRETE LATENT
     discrete = propose_discrete((), generative_model.support_size, generative_model.device)  # []
-    # while discrete in memory:
-    #     discrete = propose_discrete(
-    #         (), generative_model.support_size, generative_model.device
-    #     )  # []
-    # print(f"discrete = {discrete}")
+    while discrete in memory:
+        discrete = propose_discrete(
+            (), generative_model.support_size, generative_model.device
+        )  # []
 
     # UPDATE MEMORY
-    memory_log_weights = [get_memory_log_weight(generative_model, guide, memory, num_particles)]
-    elbos = [
-        get_memory_elbo(
-            generative_model, guide, memory, memory_log_weights[-1], num_particles,
-        ).item()
-    ]
-    for i in range(memory_size):
-        replace_one_memory = get_replace_one_memory(memory, i, discrete)
-        if len(torch.unique(replace_one_memory)) == memory_size:
-            memory_log_weights.append(
-                get_memory_log_weight(generative_model, guide, replace_one_memory, num_particles)
-            )
-            elbos.append(
-                get_memory_elbo(
-                    generative_model,
-                    guide,
-                    replace_one_memory,
-                    memory_log_weights[-1],
-                    num_particles,
-                ).item()
-            )
-        else:
-            # reject if memory elements are non-unique
-            memory_log_weights.append(None)
-            elbos.append(-math.inf)
-    best_i = np.argmax(elbos)
-    if best_i > 0:
-        memory = get_replace_one_memory(memory, best_i - 1, discrete)
+    memory_and_latent = torch.cat([memory.clone().detach(), discrete[None]])  # [memory_size + 1]
+    memory_and_latent_log_p = get_log_marginal_joint(
+        generative_model,
+        guide,
+        memory_and_latent,
+        num_particles=num_particles,
+        num_iterations=num_iterations,
+    )  # [memory_size + 1]
+
+    # Keep top `memory_size` according to log_p
+    worst_i = torch.argmin(memory_and_latent_log_p)
+    j = 0
+    for i in range(memory_size + 1):
+        if i != worst_i:
+            memory[j] = memory_and_latent[i].clone().detach()
+            j += 1
 
     # UPDATE MEMORY WEIGHTS
-    memory_log_weight = memory_log_weights[best_i]
+    # [memory_size]
+    memory_log_weight = get_memory_log_weight(
+        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations
+    )
 
-    # Compute losses
+    # COMPUTE LOSSES
+
+    # ---- 1st version: reweigh using p(d, c) / q_M(d, c) ----
+    # guide_continuous_dist = guide.get_continuous_dist(memory)  # batch_shape [memory_size]
+    # continuous = guide_continuous_dist.sample()  # [memory_size]
+    # continuous_log_prob = guide_continuous_dist.log_prob(continuous)  # [memory_size]
+
+    # memory_log_q = memory_log_weight + continuous_log_prob  # [memory_size]
+    # log_p = generative_model.log_prob((memory, continuous))  # [memory_size]
+    # log_q = guide.log_prob((memory, continuous))  # [memory_size]
+
+    # normalized_weight = util.exponentiate_and_normalize(
+    #     log_p - memory_log_q
+    # ).detach()  # [memory_size]
+
+    # generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
+    # guide_loss = -(log_q * normalized_weight).sum(dim=0)
+
+    # ---- 2nd version: sample a single sample from q_M(d, c) ----
+    # memory_sample_id = torch.distributions.Categorical(logits=memory_log_weight).sample()  # []
+    # memory_sample = memory[memory_sample_id]  # []
+    # continuous_sample = guide.get_continuous_dist(memory_sample).sample()
+
+    # generative_model_loss = -generative_model.log_prob((memory_sample, continuous_sample))  # []
+    # guide_loss = -guide.log_prob((memory_sample, continuous_sample))  # []
+
+    # ---- 3rd version: reweigh using q_M(d) p(c | d) / q_M(d, c) = p(c | d) / q(c | d) ----
+    # guide_continuous_dist = guide.get_continuous_dist(memory)  # batch_shape [memory_size]
+    # continuous = guide_continuous_dist.sample()  # [memory_size]
+    # # log q(c | d)
+    # log_q_continuous = guide_continuous_dist.log_prob(continuous)  # [memory_size]
+
+    # # log p(c | d)
+    # log_p_continuous = generative_model.get_continuous_dist(memory).log_prob(
+    #     continuous
+    # )  # [memory_size]
+
+    # # log p(d, c)
+    # log_p = generative_model.log_prob((memory, continuous))  # [memory_size]
+
+    # # log q(d, c)
+    # log_q = guide.log_prob((memory, continuous))  # [memory_size]
+
+    # normalized_weight = util.exponentiate_and_normalize(
+    #     log_p_continuous - log_q_continuous
+    # ).detach()  # [memory_size]
+
+    # generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
+    # guide_loss = -(log_q * normalized_weight).sum(dim=0)
+
+    # ---- 4th version: reweigh using w = p(d, c) / Uniform(d) q(c | d) ----
     guide_continuous_dist = guide.get_continuous_dist(memory)  # batch_shape [memory_size]
     continuous = guide_continuous_dist.sample()  # [memory_size]
-    continuous_log_prob = guide_continuous_dist.log_prob(continuous)  # [memory_size]
+    log_q_continuous = guide_continuous_dist.log_prob(continuous)  # [memory_size]
+    log_uniform = -torch.ones_like(memory) * math.log(memory_size)  # [memory_size]
 
-    memory_log_q = memory_log_weight + continuous_log_prob  # [memory_size]
     log_p = generative_model.log_prob((memory, continuous))  # [memory_size]
     log_q = guide.log_prob((memory, continuous))  # [memory_size]
 
     normalized_weight = util.exponentiate_and_normalize(
-        log_p - memory_log_q
+        log_p - (log_uniform + log_q_continuous)
     ).detach()  # [memory_size]
 
     generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
     guide_loss = -(log_q * normalized_weight).sum(dim=0)
+
+    # ---- 5th version: reweigh using w = q_M(d) p(c | d) / Uniform(d) q(c | d) ----
+    # guide_continuous_dist = guide.get_continuous_dist(memory)  # batch_shape [memory_size]
+    # continuous = guide_continuous_dist.sample()  # [memory_size]
+    # log_q_continuous = guide_continuous_dist.log_prob(continuous)  # [memory_size]
+    # log_uniform = -torch.ones_like(memory) * math.log(memory_size)  # [memory_size]
+    # # [memory_size]
+    # log_p_continuous = generative_model.get_continuous_dist(memory).log_prob(continuous)
+
+    # log_p = generative_model.log_prob((memory, continuous))  # [memory_size]
+    # log_q = guide.log_prob((memory, continuous))  # [memory_size]
+
+    # normalized_weight = util.exponentiate_and_normalize(
+    #     (memory_log_weight + log_p_continuous) - (log_uniform + log_q_continuous)
+    # ).detach()  # [memory_size]
+
+    # generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
+    # guide_loss = -(log_q * normalized_weight).sum(dim=0)
 
     return generative_model_loss + guide_loss, memory
 

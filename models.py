@@ -10,7 +10,9 @@ class GenerativeModel:
         self.device = device
         # self.logits = torch.rand(support_size, device=device) - 0.5
         self.logits = torch.zeros(support_size, device=device)
-        self.logits[-1] = 1
+        self.logits[-1] = 3
+        self.logits[-2] = 1.2
+        self.logits[-3] = 1.1
         self.discrete_dist = torch.distributions.Categorical(logits=self.logits)
 
         self.locs = torch.linspace(-2, 2, self.support_size, device=device)
@@ -50,7 +52,7 @@ class GenerativeModel:
         # [support_size, len(xs)]
         probss = continuous_dist.log_prob(xs[:, None].expand(-1, self.support_size)).T.exp()
         for i, probs in enumerate(probss):
-            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$d = {i}$", linewidth=3)
         ax.set_xlim(-self.support_size, self.support_size)
 
     def plot(self, path):
@@ -58,11 +60,11 @@ class GenerativeModel:
 
         ax = axs[0]
         self.plot_discrete(ax)
-        ax.set_ylabel("$p(z_d)$")
+        ax.set_ylabel("$p(d)$")
 
         ax = axs[1]
         self.plot_continuous(ax)
-        ax.set_ylabel("$p(z_c | z_d)$")
+        ax.set_ylabel("$p(c | d)$")
         ax.legend()
 
         util.save_fig(fig, path)
@@ -139,21 +141,19 @@ class Guide(nn.Module):
             continuous_dist.log_prob(xs[:, None].expand(-1, self.support_size)).T.exp().detach()
         )
         for i, probs in enumerate(probss):
-            ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {i}$")
+            ax.plot(xs.cpu(), probs.cpu(), label=f"$d = {i}$", linewidth=3)
 
     def plot(self, path):
-
         fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 
         ax = axs[0]
         self.plot_discrete(ax)
-        ax.set_ylabel("$q(z_d)$")
+        ax.set_ylabel("$q(d)$")
 
         ax = axs[1]
         self.plot_continuous(ax)
         ax.set_xlim(-self.support_size, self.support_size)
-        ax.set_ylabel("$q(z_c | z_d)$")
+        ax.set_ylabel("$q(c | d)$")
 
         ax.legend()
         util.save_fig(fig, path)
-

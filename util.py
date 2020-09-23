@@ -6,6 +6,10 @@ import logging
 import sys
 import matplotlib.pyplot as plt
 import os
+import losses
+import numpy as np
+import subprocess
+import getpass
 
 
 logging.basicConfig(
@@ -17,7 +21,14 @@ logging.basicConfig(
 
 
 def get_path_base_from_args(args):
-    return args.algorithm
+    if args.cmws_estimator == "exact":
+        stuff = ""
+    elif args.cmws_estimator == "is":
+        stuff = args.num_particles
+    elif args.cmws_estimator == "sgd":
+        stuff = args.num_cmws_iterations
+
+    return f"{args.cmws_estimator}{stuff}_{args.seed}"
 
 
 def get_save_job_name_from_args(args):
@@ -96,7 +107,9 @@ def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
     plt.close(fig)
 
 
-Stats = collections.namedtuple("Stats", ["losses",],)
+Stats = collections.namedtuple(
+    "Stats", ["losses", "cmws_memory_errors", "locs_errors", "inference_errors"],
+)
 
 
 def init_memory(memory_size, support_size, device):
@@ -124,7 +137,7 @@ def init(run_args, device):
     else:
         memory = None
 
-    stats = Stats([])
+    stats = Stats([], [], [], [])
 
     return generative_model, guide, optimizer, memory, stats
 
@@ -175,3 +188,58 @@ def empirical_discrete_probs(data, support_size):
     for i in range(support_size):
         discrete_probs[i] = (data == i).sum()
     return discrete_probs / len(data)
+
+
+def get_memory_prob(generative_model, guide, memory, num_particles=None, num_iterations=None):
+    support_size = generative_model.support_size
+    device = memory.device
+
+    # [memory_size]
+    memory_log_weight = losses.get_memory_log_weight(
+        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations
+    )
+
+    memory_prob = torch.zeros(support_size, device=device)
+    memory_prob[memory] = exponentiate_and_normalize(memory_log_weight).detach()
+
+    return memory_prob
+
+
+def get_cmws_memory_error(generative_model, guide, memory, num_particles=None, num_iterations=None):
+    cmws_memory_prob = get_memory_prob(
+        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations,
+    )
+    return torch.norm(cmws_memory_prob - generative_model.discrete_dist.probs, p=2).detach().item()
+
+
+def get_locs_error(generative_model, guide, memory, num_particles=None, num_iterations=None):
+    # probs = generative_model.discrete_dist.probs
+    probs = get_memory_prob(
+        generative_model, guide, memory, num_particles=num_particles, num_iterations=num_iterations,
+    )
+    return (probs * (generative_model.locs - guide.locs)).abs().sum().detach().item()
+    # return torch.norm(generative_model.locs - guide.locs, p=2).detach().item()
+
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+
+def cancel_all_my_non_bash_jobs():
+    print("Cancelling all non-bash jobs.")
+    jobs_status = (
+        subprocess.check_output(f"squeue -u {getpass.getuser()}", shell=True)
+        .decode()
+        .split("\n")[1:-1]
+    )
+    non_bash_job_ids = []
+    for job_status in jobs_status:
+        if not ("bash" in job_status.split() or "zsh" in job_status.split()):
+            non_bash_job_ids.append(job_status.split()[0])
+    if len(non_bash_job_ids) > 0:
+        cmd = "scancel {}".format(" ".join(non_bash_job_ids))
+        print(cmd)
+        print(subprocess.check_output(cmd, shell=True).decode())
+    else:
+        print("No non-bash jobs to cancel.")

@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import torch
 import util
 import seaborn as sns
-import losses
 import argparse
 
 
@@ -25,6 +24,7 @@ def plot_memory(path, memory, support_size):
                 ax=ax,
                 label=f"$z_d = {i}$",
                 color=f"C{i}",
+                linewidth=3,
             )
         # ax.hist(memory[1][memory[0] == i], density=True, label=f"$z_d = {i}$")
     ax.set_xlim(-support_size, support_size)
@@ -33,15 +33,14 @@ def plot_memory(path, memory, support_size):
     util.save_fig(fig, path)
 
 
-def plot_continuous_memory(path, generative_model, guide, memory, num_particles):
+def plot_continuous_memory(
+    path, generative_model, guide, memory, num_particles=None, num_iterations=None
+):
     if len(torch.unique(memory)) != len(memory):
         raise RuntimeError("memory elements not unique")
     support_size = generative_model.support_size
     memory = torch.sort(memory)[0]
     device = memory.device
-
-    # [memory_size]
-    memory_log_weight = losses.get_memory_log_weight(generative_model, guide, memory, num_particles)
 
     xs = torch.linspace(-support_size, support_size, steps=1000, device=device)
     discrete = memory.clone().detach()  # torch.arange(support_size, device=guide.device)
@@ -53,14 +52,27 @@ def plot_continuous_memory(path, generative_model, guide, memory, num_particles)
 
     ax = axs[0]
     support = torch.arange(support_size, device=device)
-    memory_prob = torch.zeros(support_size, device=device)
-    memory_prob[memory] = util.exponentiate_and_normalize(memory_log_weight).detach()
-    ax.bar(support.cpu(), memory_prob.cpu())
+    ax.bar(
+        support.cpu(),
+        util.get_memory_prob(
+            generative_model,
+            guide,
+            memory,
+            num_particles=num_particles,
+            num_iterations=num_iterations,
+        ).cpu(),
+    )
     ax.set_ylabel("$q_M(z_d)$")
 
     ax = axs[1]
     for i, (memory_element, probs) in enumerate(zip(memory, probss)):
-        ax.plot(xs.cpu(), probs.cpu(), label=f"$z_d = {memory_element}$", color=f"C{memory_element}")
+        ax.plot(
+            xs.cpu(),
+            probs.cpu(),
+            label=f"$z_d = {memory_element}$",
+            color=f"C{memory_element}",
+            linewidth=3,
+        )
     ax.set_xlim(-support_size, support_size)
     ax.set_ylabel("$q(z_c | z_d)$")
 
@@ -69,8 +81,19 @@ def plot_continuous_memory(path, generative_model, guide, memory, num_particles)
 
 
 def plot_stats(path, stats):
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(stats.losses)
+    num_rows = 4
+    num_cols = 1
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(num_cols * 6, num_rows * 4), sharex=True)
+
+    axs[0].plot(stats.losses)
+    axs[0].set_ylabel("Loss")
+    axs[1].plot(stats.cmws_memory_errors)
+    axs[1].set_ylabel(f"$q(d)$ error")
+    axs[2].plot(stats.locs_errors)
+    axs[2].set_ylabel(f"$q(c | d)$ error")
+    axs[3].plot(stats.inference_errors)
+    axs[3].set_ylabel(f"$q(d, c)$ error")
+
     util.save_fig(fig, path)
 
 
@@ -97,18 +120,28 @@ def main(args):
             continue
 
         diagnostics_dir = util.get_save_dir(run_args)
-        plot_stats(f"{diagnostics_dir}/losses.pdf", stats)
+        plot_stats(f"{diagnostics_dir}/stats.pdf", stats)
         generative_model.plot(f"{diagnostics_dir}/generative_model.pdf")
         guide.plot(f"{diagnostics_dir}/guide.pdf")
         if run_args.algorithm == "mws":
             plot_memory(f"{diagnostics_dir}/memory.pdf", memory, generative_model.support_size)
         elif run_args.algorithm == "cmws":
+            if run_args.cmws_estimator == "exact":
+                num_particles = None
+                num_iterations = None
+            elif run_args.algorithm == "is":
+                num_particles = run_args.num_iterations
+                num_iterations = None
+            elif run_args.algorithm == "sgd":
+                num_particles = None
+                num_iterations = run_args.num_iterations
             plot_continuous_memory(
                 f"{diagnostics_dir}/memory.pdf",
                 generative_model,
                 guide,
                 memory,
-                run_args.num_particles,
+                num_particles=num_particles,
+                num_iterations=num_iterations,
             )
 
 
