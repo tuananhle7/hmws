@@ -81,10 +81,10 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
         self.alphabet = alphabet
         if self.alphabet is None:
             self.num_primitives = self.lstm_input_size - 2
-            self.batch_shape = []
+            self._batch_shape = []
         else:
             self.num_particles, self.batch_size, self.alphabet_dim = alphabet.shape
-            self.batch_shape = [self.num_particles, self.batch_size]
+            self._batch_shape = [self.num_particles, self.batch_size]
             self.num_primitives = self.lstm_input_size - 2 - self.alphabet_dim
 
     @property
@@ -670,16 +670,16 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
         self.lstm_input_size = self.lstm_cell.input_size
         if self.alphabet is None:
             self.num_primitives = self.lstm_input_size - 2 - self.obs_embedding_dim
-            self.batch_shape = [self.batch_size]
+            self._batch_shape = [self.batch_size]
             self.num_batch = self.batch_size
         else:
             self.num_particles = self.alphabet.shape[0]
             self.num_primitives = (
                 self.lstm_input_size - 2 - self.alphabet_dim - self.obs_embedding_dim
             )
-            self.batch_shape = [self.num_particles, self.batch_size]
+            self._batch_shape = [self.num_particles, self.batch_size]
             self.num_batch = self.num_particles * self.batch_size
-        self.event_shape = [num_arcs, 2]
+        self._event_shape = [num_arcs, 2]
 
     @property
     def device(self):

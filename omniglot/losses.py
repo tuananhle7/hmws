@@ -159,7 +159,7 @@ def get_mws_loss(generative_model, inference_network, memory, obs, obs_id, num_p
 
     # Evaluate log p of proposed latents
     log_prior, log_likelihood = generative_model.get_log_probss(
-        latent, obs, obs_id
+        latent, obs, obs_id, None
     )  # [num_particles, batch_size]
     log_p = log_prior + log_likelihood
 
@@ -171,7 +171,7 @@ def get_mws_loss(generative_model, inference_network, memory, obs, obs_id, num_p
 
     # Evaluate log p of memory latents
     memory_log_prior, memory_log_likelihood = generative_model.get_log_probss(
-        memory_latent_transposed, obs, obs_id
+        memory_latent_transposed, obs, obs_id, None
     )  # [memory_size, batch_size]
     memory_log_p = memory_log_prior + memory_log_likelihood
     memory_log_likelihood = None  # don't need this anymore

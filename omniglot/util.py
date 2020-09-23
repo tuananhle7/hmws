@@ -25,17 +25,12 @@ def get_path_base_from_args(args):
     else:
         prefix = ""
 
-    if args.small_dataset:
-        suffix = ""
-    else:
-        suffix = "_large"
-
     if args.algorithm == "mws":
         num_samples = args.num_particles + args.memory_size
     else:
         num_samples = args.num_particles
 
-    return f"{prefix}{args.algorithm}_{num_samples}{suffix}"
+    return f"{prefix}{args.algorithm}_{num_samples}"
 
 
 def get_save_job_name_from_args(args):
@@ -157,9 +152,9 @@ def init(run_args, device):
         run_args.num_arcs,
         run_args.likelihood,
         run_args.p_uniform_mixture,
-        use_alphabet=run_args.condition_on_alphabet,
+        alphabet_dim=0,
     ).to(device)
-    inference_network = models.InferenceNetwork(
+    inference_network = models.Guide(
         run_args.num_primitives,
         run_args.q_lstm_hidden_size,
         run_args.num_rows,
@@ -167,7 +162,7 @@ def init(run_args, device):
         run_args.num_arcs,
         run_args.obs_embedding_dim,
         run_args.q_uniform_mixture,
-        use_alphabet=run_args.condition_on_alphabet,
+        alphabet_dim=0,
     ).to(device)
     optimizer = init_optimizer(generative_model, inference_network, 1,)
 

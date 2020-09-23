@@ -34,10 +34,6 @@ def train(
         for obs_id, obs in data_loader:
             iteration += 1
 
-            import pdb
-
-            pdb.set_trace()
-
             # Loss
             if algorithm == "rws" or algorithm == "vimco":
                 if algorithm == "rws":
