@@ -3,7 +3,7 @@ import math
 import util
 
 
-def get_latent_and_log_weight_and_log_q(generative_model, guide, obs, obs_id, num_particles=1):
+def get_latent_and_log_weight_and_log_q(generative_model, guide, obs, obs_id=None, num_particles=1):
     """Samples latent and computes log weight and log prob of inference network.
 
     Args:
@@ -21,13 +21,13 @@ def get_latent_and_log_weight_and_log_q(generative_model, guide, obs, obs_id, nu
 
     latent_dist = guide.get_latent_dist(obs)
     latent = guide.sample_from_latent_dist(latent_dist, num_particles)
-    log_p = generative_model.get_log_prob(latent, obs, obs_id).transpose(0, 1)
+    log_p = generative_model.get_log_prob(latent, obs).transpose(0, 1)
     log_q = guide.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
     log_weight = log_p - log_q
     return latent, log_weight, log_q
 
 
-def get_log_weight_and_log_q(generative_model, guide, obs, obs_id, num_particles=1):
+def get_log_weight_and_log_q(generative_model, guide, obs, obs_id=None, num_particles=1):
     """Compute log weight and log prob of inference network.
 
     Args:
@@ -73,7 +73,7 @@ def get_wake_phi_loss_from_log_weight_and_log_q(log_weight, log_q):
 def get_rws_loss(generative_model, guide, obs, obs_id, num_particles):
     latent_dist = guide.get_latent_dist(obs)
     latent = guide.sample_from_latent_dist(latent_dist, num_particles)
-    log_p = generative_model.get_log_prob(latent, obs, obs_id).transpose(0, 1)
+    log_p = generative_model.get_log_prob(latent, obs).transpose(0, 1)
     log_q = guide.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
     log_weight = log_p - log_q.detach()
 
