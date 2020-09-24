@@ -63,13 +63,12 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
         batch_size: int
         num_arcs: int
         uniform_mixture: bool or float
-        alphabet: None or [num_particles, batch_size, alphabet_dim]
 
-    Returns: distribution object with batch_shape [] or [num_particles, batch_size] and
+    Returns: distribution object with batch_shape [] and
         event_shape [num_arcs, 5]
     """
 
-    def __init__(self, lstm_cell, linear, num_arcs, uniform_mixture, alphabet=None):
+    def __init__(self, lstm_cell, linear, num_arcs, uniform_mixture):
         super().__init__()
         self.lstm_cell = lstm_cell
         self.linear = linear
@@ -78,14 +77,8 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
 
         self.lstm_hidden_size = self.lstm_cell.hidden_size
         self.lstm_input_size = self.lstm_cell.input_size
-        self.alphabet = alphabet
-        if self.alphabet is None:
-            self.num_primitives = self.lstm_input_size - 2
-            self._batch_shape = []
-        else:
-            self.num_particles, self.batch_size, self.alphabet_dim = alphabet.shape
-            self._batch_shape = [self.num_particles, self.batch_size]
-            self.num_primitives = self.lstm_input_size - 2 - self.alphabet_dim
+        self.num_primitives = self.lstm_input_size - 2
+        self._batch_shape = []
 
     @property
     def device(self):
@@ -106,26 +99,9 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
         num_samples = torch.tensor(sample_shape).long().prod()
         num_batch = torch.tensor(self.batch_shape).prod().long().item()
 
-        if self.alphabet is None:
-            lstm_input = torch.zeros(
-                (*sample_shape, self.lstm_input_size), device=self.device
-            ).view(-1, self.lstm_input_size)
-        else:
-            alphabet_expanded = (
-                self.alphabet[None]
-                .expand(num_samples, self.num_particles, self.batch_size, self.alphabet_dim)
-                .reshape(-1, self.alphabet_dim)
-            )
-            lstm_input = torch.cat(
-                [
-                    torch.zeros(
-                        (num_samples * num_batch, self.lstm_input_size - self.alphabet_dim),
-                        device=self.device,
-                    ),
-                    alphabet_expanded,
-                ],
-                dim=-1,
-            )
+        lstm_input = torch.zeros((*sample_shape, self.lstm_input_size), device=self.device).view(
+            -1, self.lstm_input_size
+        )
         h = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
         c = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
 
@@ -155,7 +131,6 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
                 [
                     F.one_hot(ids[-1], num_classes=self.num_primitives).float(),
                     F.one_hot(on_offs[-1], num_classes=2).float(),
-                    *([] if self.alphabet is None else [alphabet_expanded]),
                 ],
                 dim=1,
             )
@@ -175,28 +150,9 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
         Returns: tensor [*sample_shape]
         """
         num_batch = torch.tensor(self.batch_shape).prod().long().item()
-        if self.alphabet is None:
-            sample_shape = ids_and_on_offs.shape[:-2]
-            num_samples = torch.tensor(sample_shape).prod().long().item()
-            lstm_input = torch.zeros((num_samples, self.lstm_input_size), device=self.device)
-        else:
-            sample_shape = ids_and_on_offs.shape[:-4]
-            num_samples = torch.tensor(sample_shape).prod().long().item()
-            alphabet_expanded = (
-                self.alphabet[None]
-                .expand(num_samples, *self.batch_shape, self.alphabet_dim)
-                .reshape(-1, self.alphabet_dim)
-            )
-            lstm_input = torch.cat(
-                [
-                    torch.zeros(
-                        (num_samples * num_batch, self.lstm_input_size - self.alphabet_dim),
-                        device=self.device,
-                    ),
-                    alphabet_expanded,
-                ],
-                dim=-1,
-            )
+        sample_shape = ids_and_on_offs.shape[:-2]
+        num_samples = torch.tensor(sample_shape).prod().long().item()
+        lstm_input = torch.zeros((num_samples, self.lstm_input_size), device=self.device)
 
         h = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
         c = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
@@ -231,7 +187,6 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
                 [
                     F.one_hot(ids[..., arc_id].view(-1), num_classes=self.num_primitives).float(),
                     F.one_hot(on_offs[..., arc_id].view(-1), num_classes=2).float(),
-                    *([] if self.alphabet is None else [alphabet_expanded]),
                 ],
                 dim=1,
             )
@@ -375,8 +330,6 @@ class GenerativeModel(nn.Module):
         num_arcs,
         likelihood="bernoulli",
         uniform_mixture=False,
-        use_alphabet=False,
-        alphabet_dim=0,
     ):
         super(GenerativeModel, self).__init__()
         self._prior = nn.Module()
@@ -385,12 +338,7 @@ class GenerativeModel(nn.Module):
         self.lstm_hidden_size = lstm_hidden_size
         self.big_arcs = big_arcs
 
-        self.use_alphabet = use_alphabet
-        self.alphabet_dim = alphabet_dim
-        if use_alphabet:
-            lstm_input_size = num_primitives + 2 + self.alphabet_dim
-        else:
-            lstm_input_size = num_primitives + 2
+        lstm_input_size = num_primitives + 2
 
         self.num_primitives = num_primitives
         # raw_primitives[i] = [raw_dx, raw_dy, raw_theta, raw_sharpness,
@@ -507,15 +455,13 @@ class GenerativeModel(nn.Module):
             [dxdy, theta.unsqueeze(-1), sharpness.unsqueeze(-1), width.unsqueeze(-1)], dim=1
         )
 
-    def get_latent_dist(self, alphabet=None):
-        """Args:
-            alphabet: None or [num_particles, batch_size]
-
-        Returns: distribution with batch shape [] or [num_particles, batch_size] and
+    def get_latent_dist(self):
+        """
+        Returns: distribution with batch shape [] and
             event shape [num_arcs, 2].
         """
         return GenerativeModelIdsAndOnOffsDistribution(
-            self._prior.lstm_cell, self._prior.linear, self.num_arcs, self.uniform_mixture, alphabet
+            self._prior.lstm_cell, self._prior.linear, self.num_arcs, self.uniform_mixture
         )
 
     def get_obs_params(self, latent):
@@ -537,7 +483,8 @@ class GenerativeModel(nn.Module):
         )
 
     def get_obs_dist(self, latent):
-        """
+        """Likelihood p(x | z)
+
         Args:
             latent: tensor [batch_size, num_arcs, 2]
 
@@ -552,22 +499,21 @@ class GenerativeModel(nn.Module):
                 torch.distributions.Bernoulli(logits=logits), reinterpreted_batch_ndims=2
             )
         else:
-            raise NotImplementedError()
+            raise NotImplementedError
 
-    def get_log_prob(self, latent, obs, obs_id, alphabet=None, get_accuracy=False):
+    def get_log_prob(self, latent, obs, obs_id, get_accuracy=False):
         """Log of joint probability.
 
         Args:
             latent: tensor [num_particles, batch_size, num_arcs, 2]
             obs: tensor of shape [batch_size, num_rows, num_cols]
             obs_id: tensor of shape [batch_size]
-            alphabet: None or tensor [num_particles, batch_size, alphabet_dim]
 
         Returns: tensor of shape [num_particles, batch_size]
         """
         num_particles, batch_size, num_arcs, _ = latent.shape
         _, num_rows, num_cols = obs.shape
-        latent_log_prob = self.get_latent_dist(alphabet).log_prob(latent)
+        latent_log_prob = self.get_latent_dist().log_prob(latent)
 
         obs_dist = self.get_obs_dist(latent.view(num_particles * batch_size, num_arcs, 2))
         obs_log_prob = obs_dist.log_prob(
@@ -581,20 +527,19 @@ class GenerativeModel(nn.Module):
         else:
             return latent_log_prob + obs_log_prob
 
-    def get_log_probss(self, latent, obs, obs_id, alphabet):
+    def get_log_probss(self, latent, obs, obs_id):
         """Log of joint probability.
 
         Args:
             latent: tensor [num_particles, batch_size, num_arcs, 2]
             obs: tensor of shape [batch_size, num_rows, num_cols]
             obs_id: tensor of shape [batch_size]
-            alphabet: None or tensor [num_particles, batch_size, alphabet_dim]
 
         Returns: tuple of tensor of shape [num_particles, batch_size]
         """
         num_particles, batch_size, num_arcs, _ = latent.shape
         _, num_rows, num_cols = obs.shape
-        latent_log_prob = self.get_latent_dist(alphabet).log_prob(latent)
+        latent_log_prob = self.get_latent_dist().log_prob(latent)
         obs_dist = self.get_obs_dist(latent.view(num_particles * batch_size, num_arcs, 2))
         obs_log_prob = obs_dist.log_prob(
             obs[None]
@@ -604,31 +549,22 @@ class GenerativeModel(nn.Module):
 
         return latent_log_prob, obs_log_prob
 
-    def sample_latent_and_obs(self, alphabet=None, num_samples=1):
+    def sample_latent_and_obs(self, num_samples=1):
         """Args:
-            alphabet: None or tensor [num_particles, batch_size, alphabet_dim]
             num_samples: int
 
         Returns:
             latent: tensor of shape [num_samples, num_arcs, 2]
             obs: tensor of shape [num_samples, num_rows, num_cols]
         """
-        if self.use_alphabet:
-            num_particles, batch_size = alphabet.shape[:2]
-            latent_dist = self.get_latent_dist(alphabet)
-            latent = latent_dist.sample((num_samples,))
-            obs_dist = self.get_obs_dist(latent.view(num_samples * batch_size, self.num_arcs, 2))
-            obs = obs_dist.sample().view(num_samples, batch_size, self.num_rows, self.num_cols)
-        else:
-            assert alphabet is None
-            latent_dist = self.get_latent_dist()
-            latent = latent_dist.sample((num_samples,))
-            obs_dist = self.get_obs_dist(latent)
-            obs = obs_dist.sample()
+        latent_dist = self.get_latent_dist()
+        latent = latent_dist.sample((num_samples,))
+        obs_dist = self.get_obs_dist(latent)
+        obs = obs_dist.sample()
 
         return latent, obs
 
-    def sample_obs(self, alphabet=None, num_samples=1):
+    def sample_obs(self, num_samples=1):
         """Args:
             num_samples: int
 
@@ -636,11 +572,11 @@ class GenerativeModel(nn.Module):
             obs: tensor of shape [num_samples, num_rows, num_cols]
         """
 
-        return self.sample_latent_and_obs(alphabet, num_samples)[1]
+        return self.sample_latent_and_obs(num_samples)[1]
 
 
 class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
-    """Distribution on ids and on_offs q(latent | obs, alphabet)
+    """Distribution on ids and on_offs q(latent | obs)
 
     Args:
         obs_embedding: tensor [batch_size, obs_embedding_dim]
@@ -648,39 +584,27 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
         linear: Linear
         num_arcs: int
         uniform_mixture: bool
-        alphabet [num_particles, batch_size]
 
-    Returns: distribution object with batch_shape [batch_size] or [num_particles, batch_size]
+    Returns: distribution object with batch_shape [batch_size]
         and event_shape [num_arcs, 5]
     """
 
-    def __init__(
-        self, obs_embedding, lstm_cell, linear, num_arcs, uniform_mixture=False, alphabet=None
-    ):
+    def __init__(self, obs_embedding, lstm_cell, linear, num_arcs, uniform_mixture=False):
         super().__init__()
         self.obs_embedding = obs_embedding
         self.lstm_cell = lstm_cell
         self.linear = linear
         self.num_arcs = num_arcs
         self.uniform_mixture = uniform_mixture
-        self.alphabet = alphabet
 
         self.batch_size = obs_embedding.shape[0]
         self.obs_embedding_dim = obs_embedding.shape[1]
 
         self.lstm_hidden_size = self.lstm_cell.hidden_size
         self.lstm_input_size = self.lstm_cell.input_size
-        if self.alphabet is None:
-            self.num_primitives = self.lstm_input_size - 2 - self.obs_embedding_dim
-            self._batch_shape = [self.batch_size]
-            self.num_batch = self.batch_size
-        else:
-            self.num_particles = self.alphabet.shape[0]
-            self.num_primitives = (
-                self.lstm_input_size - 2 - self.alphabet_dim - self.obs_embedding_dim
-            )
-            self._batch_shape = [self.num_particles, self.batch_size]
-            self.num_batch = self.num_particles * self.batch_size
+        self.num_primitives = self.lstm_input_size - 2 - self.obs_embedding_dim
+        self._batch_shape = [self.batch_size]
+        self.num_batch = self.batch_size
         self._event_shape = [num_arcs, 2]
 
     @property
@@ -701,43 +625,16 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
         """
         num_samples = int(torch.tensor(sample_shape).prod().item())
 
-        if self.alphabet is None:
-            batch_shape = [self.batch_size]
-            lstm_input = torch.zeros(
-                (num_samples * self.batch_size, self.lstm_input_size), device=self.device
-            )
-            obs_embedding_expanded = (
-                self.obs_embedding[None]
-                .expand(num_samples, self.batch_size, self.obs_embedding_dim)
-                .reshape(-1, self.obs_embedding_dim)
-            )
-            lstm_input[:, -self.obs_embedding_dim :] = obs_embedding_expanded
-        else:
-            batch_shape = [self.num_particles, self.batch_size]
-            alphabet_expanded = (
-                self.alphabet[None]
-                .expand(num_samples, self.num_particles, self.batch_size, self.alphabet_dim)
-                .reshape(-1, self.alphabet_dim)
-            )
-            obs_embedding_expanded = (
-                self.obs_embedding[None]
-                .expand(num_samples * self.num_particles, self.batch_size, self.obs_embedding_dim)
-                .reshape(-1, self.obs_embedding_dim)
-            )
-            lstm_input = torch.cat(
-                [
-                    torch.zeros(
-                        (
-                            num_samples * self.num_batch,
-                            self.lstm_input_size - self.alphabet_dim - self.obs_embedding_dim,
-                        ),
-                        device=self.device,
-                    ),
-                    alphabet_expanded,
-                    obs_embedding_expanded,
-                ],
-                dim=-1,
-            )
+        batch_shape = [self.batch_size]
+        lstm_input = torch.zeros(
+            (num_samples * self.batch_size, self.lstm_input_size), device=self.device
+        )
+        obs_embedding_expanded = (
+            self.obs_embedding[None]
+            .expand(num_samples, self.batch_size, self.obs_embedding_dim)
+            .reshape(-1, self.obs_embedding_dim)
+        )
+        lstm_input[:, -self.obs_embedding_dim :] = obs_embedding_expanded
         hc = None
 
         ids = []
@@ -769,7 +666,6 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
                 [
                     F.one_hot(ids[-1], num_classes=self.num_primitives).float(),
                     F.one_hot(on_offs[-1], num_classes=2).float(),
-                    *([] if self.alphabet is None else [alphabet_expanded]),
                     obs_embedding_expanded,
                 ],
                 dim=1,
@@ -790,49 +686,20 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
 
         Returns: tensor [*sample_shape, batch_size] or [*sample_shape, num_particles, batch_size]
         """
-        if self.alphabet is None:
-            sample_shape = ids_and_on_offs.shape[:-3]
-        else:
-            sample_shape = ids_and_on_offs.shape[:-4]
+        sample_shape = ids_and_on_offs.shape[:-3]
         ids = ids_and_on_offs[..., 0]
         on_offs = ids_and_on_offs[..., 1]
         num_samples = int(torch.tensor(sample_shape).prod().item())
 
-        if self.alphabet is None:
-            lstm_input = torch.zeros(
-                (*sample_shape, *self.batch_shape, self.lstm_input_size), device=self.device
-            ).view(-1, self.lstm_input_size)
-            obs_embedding_expanded = (
-                self.obs_embedding[None]
-                .expand(num_samples, *self.batch_shape, self.obs_embedding_dim)
-                .reshape(-1, self.obs_embedding_dim)
-            )
-            lstm_input[:, -self.obs_embedding_dim :] = obs_embedding_expanded
-        else:
-            alphabet_expanded = (
-                self.alphabet[None]
-                .expand(num_samples, *self.batch_shape, self.alphabet_dim)
-                .reshape(-1, self.alphabet_dim)
-            )
-            obs_embedding_expanded = (
-                self.obs_embedding[None]
-                .expand(num_samples * self.num_particles, self.batch_size, self.obs_embedding_dim)
-                .reshape(-1, self.obs_embedding_dim)
-            )
-            lstm_input = torch.cat(
-                [
-                    torch.zeros(
-                        (
-                            num_samples * self.num_batch,
-                            self.lstm_input_size - self.alphabet_dim - self.obs_embedding_dim,
-                        ),
-                        device=self.device,
-                    ),
-                    alphabet_expanded,
-                    obs_embedding_expanded,
-                ],
-                dim=-1,
-            )
+        lstm_input = torch.zeros(
+            (*sample_shape, *self.batch_shape, self.lstm_input_size), device=self.device
+        ).view(-1, self.lstm_input_size)
+        obs_embedding_expanded = (
+            self.obs_embedding[None]
+            .expand(num_samples, *self.batch_shape, self.obs_embedding_dim)
+            .reshape(-1, self.obs_embedding_dim)
+        )
+        lstm_input[:, -self.obs_embedding_dim :] = obs_embedding_expanded
         hc = None
 
         result = 0
@@ -864,7 +731,6 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
                 [
                     F.one_hot(ids[..., arc_id].view(-1), num_classes=self.num_primitives).float(),
                     F.one_hot(on_offs[..., arc_id].view(-1), num_classes=2).float(),
-                    *([] if self.alphabet is None else [alphabet_expanded]),
                     obs_embedding_expanded,
                 ],
                 dim=1,
@@ -873,7 +739,7 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
 
 
 class Guide(nn.Module):
-    """q(latent | obs, alphabet)"""
+    """q(latent | obs)"""
 
     def __init__(
         self,
@@ -884,17 +750,11 @@ class Guide(nn.Module):
         num_arcs,
         obs_embedding_dim,
         uniform_mixture=False,
-        alphabet_dim=0,
     ):
         super(Guide, self).__init__()
-        self.alphabet_dim = 0
-        self.use_alphabet = self.alphabet_dim > 0
         self.obs_embedding_dim = obs_embedding_dim
         self.lstm_hidden_size = lstm_hidden_size
-        if self.use_alphabet:
-            self.lstm_input_size = num_primitives + 2 + self.alphabet_dim + obs_embedding_dim
-        else:
-            self.lstm_input_size = num_primitives + 2 + obs_embedding_dim
+        self.lstm_input_size = num_primitives + 2 + obs_embedding_dim
         self.lstm_cell = nn.LSTMCell(
             input_size=self.lstm_input_size, hidden_size=self.lstm_hidden_size
         )
@@ -933,12 +793,13 @@ class Guide(nn.Module):
         assert result.shape[1] == self.obs_embedding_dim
         return result
 
-    def get_latent_dist(self, obs, alphabet=None):
-        """Args:
-            obs: tensor of shape [batch_size, num_rows, num_cols]
-            alphabet: None or tensor [num_particles, batch_size, alphabet_dim]
+    def get_latent_dist(self, obs):
+        """q(z | x)
 
-        Returns: distribution with batch_shape [batch_size] or [num_particles, batch_size]
+        Args:
+            obs: tensor of shape [batch_size, num_rows, num_cols]
+
+        Returns: distribution with batch_shape [batch_size]
             and event_shape [num_arcs, 2]
         """
         return GuideIdsAndOnOffsDistribution(
@@ -947,11 +808,10 @@ class Guide(nn.Module):
             self.linear,
             self.num_arcs,
             self.uniform_mixture,
-            alphabet=alphabet,
         )
 
     def sample_from_latent_dist(self, latent_dist, num_particles):
-        """Samples from q(latent | obs, alphabet)
+        """Samples from q(latent | obs)
 
         Args:
             latent_dist: distribution with batch_shape [batch_size] or
@@ -961,30 +821,24 @@ class Guide(nn.Module):
         Returns:
             latent: tensor of shape [num_particles, batch_size, num_arcs, 2]
         """
-        if self.use_alphabet:
-            sample_shape = []
-        else:
-            sample_shape = [num_particles]
+        sample_shape = [num_particles]
         return latent_dist.sample(sample_shape)
 
-    def sample(self, obs, num_particles, alphabet=None):
-        """Samples from q(latent | obs, alphabet)
+    def sample(self, obs, num_particles):
+        """Samples from q(latent | obs)
 
         Args:
             obs: tensor of shape [batch_size, num_rows, num_cols]
             num_particles: int
-            alphabet: None or tensor [num_particles, batch_size, alphabet_dim]
 
         Returns:
             latent: tensor of shape [num_particles, batch_size, num_arcs, 2]
         """
-        if alphabet is not None and num_particles != alphabet.shape[0]:
-            raise ValueError
-        latent_dist = self.get_latent_dist(obs, alphabet=alphabet)
+        latent_dist = self.get_latent_dist(obs)
         return self.sample_from_latent_dist(latent_dist, num_particles)
 
     def get_log_prob_from_latent_dist(self, latent_dist, latent):
-        """Log q(latent | obs, alphabet).
+        """Log q(latent | obs).
 
         Args:
             latent_dist: distribution with batch_shape [batch_size] or
@@ -995,16 +849,13 @@ class Guide(nn.Module):
         """
         return latent_dist.log_prob(latent)
 
-    def get_log_prob(self, latent, obs, alphabet=None):
-        """Log q(latent | obs, alphabet).
+    def get_log_prob(self, latent, obs):
+        """Log q(latent | obs).
 
         Args:
             latent: tensor of shape [num_particles, batch_size, num_arcs, 2]
             obs: tensor of shape [batch_size, num_rows, num_cols]
-            alphabet: None or tensor [num_particles, batch_size, alphabet_dim]
 
         Returns: tensor of shape [num_particles, batch_size]
         """
-        return self.get_log_prob_from_latent_dist(
-            self.get_latent_dist(obs, alphabet=alphabet), latent
-        )
+        return self.get_log_prob_from_latent_dist(self.get_latent_dist(obs), latent)

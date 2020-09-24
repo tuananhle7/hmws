@@ -11,9 +11,27 @@ import torch
 import torch.nn as nn
 import models
 import rendering
+import einops
 
 
-class GenerativeMotorNoise(nn.Module):
+class JointDistribution:
+    """p(x_{1:N}) = ∏_n p(x_n)
+
+    Args:
+        dists: list of distributions p(x_n)
+    """
+
+    def __init__(self, dists):
+        self.dists = dists
+
+    def sample(self, sample_shape=[]):
+        return tuple([dist.sample(sample_shape) for dist in self.dists])
+
+    def log_prob(self, values):
+        return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
+
+
+class GenerativeMotorNoiseDist(nn.Module):
     """p(c)
 
     Distribution of
@@ -38,19 +56,24 @@ class GenerativeMotorNoise(nn.Module):
         return self.dist.log_prob(motor_noise)
 
 
-class GuideMotorNoise:
+class GuideMotorNoiseDist:
     """q(c | z, x)
 
     Distribution of
-    batch_shape [] event_shape [num_arcs, 3]
+    batch_shape [batch_size] event_shape [num_arcs, 3]
+
+    Args:
+        obs: tensor of shape [batch_size, num_rows, num_cols]
+        num_arcs (int)
 
     # TODO: consider different architectures
     """
 
-    def __init__(self, num_arcs):
+    def __init__(self, obs, num_arcs):
         self.num_arcs = num_arcs
-        self.register_buffer("loc", torch.zeros((num_arcs, 3)))
-        self.register_buffer("scale", 0.1 * torch.ones((num_arcs, 3)))
+        self.batch_size = obs.shape[0]
+        self.register_buffer("loc", torch.zeros((self.batch_size, num_arcs, 3)))
+        self.register_buffer("scale", 0.1 * torch.ones((self.batch_size, num_arcs, 3)))
 
     @property
     def dist(self):
@@ -69,141 +92,141 @@ class GenerativeModel(nn.Module):
     """p(z)p(c)p(x | z, c)
     """
 
-    def __init__(self, discrete_generative_model_args, device):
+    def __init__(self, ids_and_on_offs_generative_model_args, device):
         super().__init__()
-        self.discrete_generative_model = models.GenerativeModel(
-            *discrete_generative_model_args, alphabet_dim=0, device=device
+        self.ids_and_on_offs_generative_model = models.GenerativeModel(
+            *ids_and_on_offs_generative_model_args, alphabet_dim=0, device=device
         )
-        self.generative_motor_noise = GenerativeMotorNoise(self.discrete_generative_model.num_arcs)
+        self.generative_motor_noise_dist = GenerativeMotorNoiseDist(
+            self.ids_and_on_offs_generative_model.num_arcs
+        )
 
     def get_latent_dist(self):
         """
         Returns: distribution with batch shape [] and event shape [num_arcs, 2], [num_arcs, 3].
         """
         return JointDistribution(
-            self.discrete_generative_model.get_latent_dist(), self.generative_motor_noise
+            self.ids_and_on_offs_generative_model.get_latent_dist(),
+            self.generative_motor_noise_dist,
         )
 
     def get_obs_params(self, latent):
         """
         Args:
             latent:
-                discrete_latent: [batch_size, num_arcs, 2]
-                continuous_latent: [batch_size, num_arcs, 3]
+                ids_and_on_offs: [batch_size, num_arcs, 2]
+                motor_noise: [batch_size, num_arcs, 3]
 
         Returns:
             probs: tensor [batch_size, num_rows, num_cols]
         """
-        discrete_latent, continuous_latent = latent
-        batch_size = discrete_latent.shape[0]
-        ids = discrete_latent[..., 0]
-        on_offs = discrete_latent[..., 1]
+        ids_and_on_offs, motor_noise = latent
+        batch_size = ids_and_on_offs.shape[0]
+        ids = ids_and_on_offs[..., 0]
+        on_offs = ids_and_on_offs[..., 1]
         start_point = self.start_point.unsqueeze(0).expand(batch_size, -1)
 
         # [batch_size, num_arcs, 7]
         arcs = models.get_arcs(start_point, self.get_primitives(), ids)
 
         # Add motor noise!
-        arcs[:, :, 2:5] += continuous_latent
+        arcs[:, :, 2:5] += motor_noise
 
         return rendering.get_logits(
             arcs, on_offs, self.get_rendering_params(), self.num_rows, self.num_cols
         )
 
-    def get_obs_log_prob(self, latent, obs):
-        """Log likelihood.
-
-        p(x | z, c)
+    def get_obs_dist(self, latent):
+        """Likelihood p(x | z, c)
 
         Args:
             latent:
-                discrete_latent: [num_particles, batch_size, num_arcs, 2]
-                continuous_latent: [num_particles, batch_size, num_arcs, 3]
-            obs: [batch_size, num_rows, num_cols]
+                ids_and_on_offs: [batch_size, num_arcs, 2]
+                motor_noise: [batch_size, num_arcs, 3]
 
-        Returns: tensor of shape [num_particles, batch_size]
+        Returns: distribution with batch_shape [batch_size] and event_shape
+            [num_rows, num_cols]
         """
-        pass
+        logits = self.get_obs_params(latent)
+        if self.likelihood == "learned-affine":
+            return models.AffineLikelihood(
+                logits.sigmoid(), self.ids_and_on_offs_generative_model._likelihood.theta_affine
+            )
+        elif self.likelihood == "bernoulli":
+            return torch.distributions.Independent(
+                torch.distributions.Bernoulli(logits=logits), reinterpreted_batch_ndims=2
+            )
+        else:
+            raise NotImplementedError
 
     def get_log_prob(self, latent, obs):
         """Log of joint probability.
 
+        p(x, z, c)
+
         Args:
             latent:
-                discrete_latent: [num_particles, batch_size, num_arcs, 2]
-                continuous_latent: [num_particles, batch_size, num_arcs, 3]
+                ids_and_on_offs: [num_particles, batch_size, num_arcs, 2]
+                motor_noise: [num_particles, batch_size, num_arcs, 3]
             obs: [batch_size, num_rows, num_cols]
 
         Returns: tensor of shape [num_particles, batch_size]
         """
-        num_images_per_alphabet = obs.shape[1]
-        latent_log_prob = self.get_latent_dist(num_images_per_alphabet).log_prob(latent)
-        obs_log_prob = self.get_obs_log_prob(latent, obs)
+        ids_and_on_offs, motor_noise = latent
+        num_particles, batch_size = ids_and_on_offs.shape[:2]
+        num_rows, num_cols = obs.shape[1:]
+
+        # [num_particles, batch_size]
+        latent_log_prob = self.get_latent_dist().log_prob(latent)
+
+        # [num_particles, batch_size]
+        obs_log_prob = einops.rearrange(
+            self.get_obs_dist(
+                tuple(
+                    [
+                        einops.rearrange(
+                            x, "num_particles batch_size ... -> (num_particles batch_size) ...",
+                        )
+                        for x in latent
+                    ]
+                )
+            ).log_prob(
+                einops.repeat(
+                    obs,
+                    "batch_size ... -> num_particles batch_size ...",
+                    num_particles=num_particles,
+                )
+            ),
+            "(num_particles batch_size) -> num_particles batch_size",
+            num_particles=num_particles,
+        )
+
         return latent_log_prob + obs_log_prob
-
-    # TODO
-    @torch.no_grad()
-    def sample(self, alphabet, num_samples, batch_size=None):
-        """
-        Args:
-            alphabet: [batch_size, alphabet_dim]
-            num_samples
-            batch_size
-
-        Returns: [num_samples, batch_size, num_rows, num_cols]
-        """
-        if alphabet is None:
-            # [num_samples, batch_size, num_arcs, 2]
-            image_latent = self.discrete_generative_model.get_latent_dist().sample(
-                (num_samples, batch_size)
-            )
-        else:
-            batch_size, alphabet_dim = alphabet.shape
-            alphabet = alphabet[None].expand(num_samples, batch_size, alphabet_dim)
-            # [num_samples, batch_size, num_arcs, 2]
-            image_latent = self.discrete_generative_model.get_latent_dist(alphabet).sample()
-
-        return self.discrete_generative_model.get_obs_dist(image_latent).sample()
 
 
 class Guide(nn.Module):
-    """Guide for a hierarchical generative model.
+    """Guide for the motor noise model
 
-        q(alphabet | image_{1:M}) * prod_m q(image_latent_m | image_m, alphabet)
+    q(z | x) q(c | z, x)
     """
 
-    def __init__(self, alphabet_dim, image_guide_args):
+    def __init__(self, ids_and_on_offs_guide_args):
         super().__init__()
-        self.alphabet_dim = alphabet_dim
-        self.alphabet_embedder = util.cnn(2 * self.alphabet_dim)
-        self.image_guide = models.Guide(*image_guide_args, alphabet_dim=self.alphabet_dim)
-
-    def get_alphabet_params(self, obs):
-        """Params of q(alphabet | image_{1:M})
-
-        Args:
-            obs: [batch_size, num_images_per_alphabet, num_rows, num_cols]
-
-        Returns:
-            loc: tensor [batch_size, alphabet_dim]
-            scale: tensor [batch_size, alphabet_dim]
-        """
-        batch_size, num_images_per_alphabet, num_rows, num_cols = obs.shape
-        obs_flattened = obs.view(batch_size * num_images_per_alphabet, 1, num_rows, num_cols)
-        raw_alphabet_loc, raw_alphabet_scale = (
-            self.alphabet_embedder(obs_flattened)
-            .view(batch_size, num_images_per_alphabet, -1)
-            .chunk(2, dim=-1)
-        )
-
-        return raw_alphabet_loc, raw_alphabet_scale.exp()
+        self.ids_and_on_offs_guide = models.Guide(*ids_and_on_offs_guide_args)
+        self.num_arcs = self.ids_and_on_offs_guide.num_arcs
 
     def get_latent_dist(self, obs):
-        """Args:
-            obs: [batch_size, num_images_per_alphabet, num_rows, num_cols]
+        """q(z | x) q(c | z, x)
 
-        Returns: distribution with batch shape [batch_size] and
-            event shape ([alphabet_dim], [num_images_per_alphabet, num_arcs, 2]).
+        Args:
+            obs: tensor of shape [batch_size, num_rows, num_cols]
+
+        Returns: distribution with batch_shape [batch_size]
+            and event_shape ([num_arcs, 2], [num_arcs, 3])
         """
-        alphabet_params = self.get_alphabet_params(obs)
-        return GuideLatentDist(alphabet_params, obs, self.image_guide,)
+        return JointDistribution(
+            [
+                self.ids_and_on_offs_guide.get_latent_dist(obs),
+                GuideMotorNoiseDist(obs, self.num_arcs),
+            ]
+        )
