@@ -3,14 +3,12 @@ import math
 import util
 
 
-def get_latent_and_log_weight_and_log_q(
-    generative_model, inference_network, obs, obs_id, num_particles=1
-):
+def get_latent_and_log_weight_and_log_q(generative_model, guide, obs, obs_id, num_particles=1):
     """Samples latent and computes log weight and log prob of inference network.
 
     Args:
         generative_model: models.GenerativeModel object
-        inference_network: models.InferenceNetwork object
+        guide: models.Guide object
         obs: tensor of shape [batch_size, num_rows, num_cols]
         obs_id: long tensor of shape [batch_size]
         num_particles: int
@@ -21,20 +19,20 @@ def get_latent_and_log_weight_and_log_q(
         log_q: tensor of shape [batch_size, num_particles]
     """
 
-    latent_dist = inference_network.get_latent_dist(obs)
-    latent = inference_network.sample_from_latent_dist(latent_dist, num_particles)
+    latent_dist = guide.get_latent_dist(obs)
+    latent = guide.sample_from_latent_dist(latent_dist, num_particles)
     log_p = generative_model.get_log_prob(latent, obs, obs_id).transpose(0, 1)
-    log_q = inference_network.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
+    log_q = guide.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
     log_weight = log_p - log_q
     return latent, log_weight, log_q
 
 
-def get_log_weight_and_log_q(generative_model, inference_network, obs, obs_id, num_particles=1):
+def get_log_weight_and_log_q(generative_model, guide, obs, obs_id, num_particles=1):
     """Compute log weight and log prob of inference network.
 
     Args:
         generative_model: models.GenerativeModel object
-        inference_network: models.InferenceNetwork object
+        guide: models.Guide object
         obs: tensor of shape [batch_size, num_rows, num_cols]
         obs_id: long tensor of shape [batch_size]
         num_particles: int
@@ -45,7 +43,7 @@ def get_log_weight_and_log_q(generative_model, inference_network, obs, obs_id, n
     """
 
     latent, log_weight, log_q = get_latent_and_log_weight_and_log_q(
-        generative_model, inference_network, obs, obs_id, num_particles
+        generative_model, guide, obs, obs_id, num_particles
     )
     return log_weight, log_q
 
@@ -72,11 +70,11 @@ def get_wake_phi_loss_from_log_weight_and_log_q(log_weight, log_q):
     return torch.mean(-torch.sum(normalized_weight.detach() * log_q, dim=1))
 
 
-def get_rws_loss(generative_model, inference_network, obs, obs_id, num_particles):
-    latent_dist = inference_network.get_latent_dist(obs)
-    latent = inference_network.sample_from_latent_dist(latent_dist, num_particles)
+def get_rws_loss(generative_model, guide, obs, obs_id, num_particles):
+    latent_dist = guide.get_latent_dist(obs)
+    latent = guide.sample_from_latent_dist(latent_dist, num_particles)
     log_p = generative_model.get_log_prob(latent, obs, obs_id).transpose(0, 1)
-    log_q = inference_network.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
+    log_q = guide.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
     log_weight = log_p - log_q.detach()
 
     # wake theta
@@ -88,13 +86,13 @@ def get_rws_loss(generative_model, inference_network, obs, obs_id, num_particles
     return wake_theta_loss + wake_phi_loss, wake_theta_loss.item(), wake_phi_loss.item()
 
 
-def get_vimco_loss(generative_model, inference_network, obs, obs_id, num_particles):
+def get_vimco_loss(generative_model, guide, obs, obs_id, num_particles):
     """Almost twice faster version of VIMCO loss (measured for batch_size = 24,
         num_particles = 1000). Inspired by Adam Kosiorek's implementation.
 
     Args:
         generative_model: models.GenerativeModel object
-        inference_network: models.InferenceNetwork object
+        guide: models.Guide object
         obs: tensor of shape [batch_size, num_rows, num_cols]
         obs_id: long tensor of shape [batch_size]
         num_particles: int
@@ -105,7 +103,7 @@ def get_vimco_loss(generative_model, inference_network, obs, obs_id, num_particl
         elbo: average elbo over data
     """
     log_weight, log_q = get_log_weight_and_log_q(
-        generative_model, inference_network, obs, obs_id, num_particles
+        generative_model, guide, obs, obs_id, num_particles
     )
 
     # shape [batch_size, num_particles]
@@ -133,11 +131,11 @@ def get_vimco_loss(generative_model, inference_network, obs, obs_id, num_particl
     return loss, theta_loss, phi_loss
 
 
-def get_mws_loss(generative_model, inference_network, memory, obs, obs_id, num_particles):
+def get_mws_loss(generative_model, guide, memory, obs, obs_id, num_particles):
     """
     Args:
         generative_model: models.GenerativeModel object
-        inference_network: models.InferenceNetwork object
+        guide: models.Guide object
         memory: tensor of shape [num_data, memory_size, num_arcs, 2]
         obs: tensor of shape [batch_size, num_rows, num_cols]
         obs_id: long tensor of shape [batch_size]
@@ -152,9 +150,9 @@ def get_mws_loss(generative_model, inference_network, memory, obs, obs_id, num_p
     memory_size = memory.shape[1]
 
     # Propose latents from inference network
-    latent_dist = inference_network.get_latent_dist(obs)
+    latent_dist = guide.get_latent_dist(obs)
     # [num_particles, batch_size, num_arcs, 2]
-    latent = inference_network.sample_from_latent_dist(latent_dist, num_particles).detach()
+    latent = guide.sample_from_latent_dist(latent_dist, num_particles).detach()
     batch_size = latent.shape[1]
 
     # Evaluate log p of proposed latents
@@ -225,7 +223,7 @@ def get_mws_loss(generative_model, inference_network, memory, obs, obs_id, num_p
     )  # [1, batch_size, num_arcs, 2]
 
     log_p = torch.gather(memory_log_p, 0, sampled_memory_id[None])[0]  # [batch_size]
-    log_q = inference_network.get_log_prob_from_latent_dist(latent_dist, sampled_memory_latent)[
+    log_q = guide.get_log_prob_from_latent_dist(latent_dist, sampled_memory_latent)[
         0
     ]  # [batch_size]
 
@@ -377,7 +375,7 @@ def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, n
     return generative_model_loss + guide_loss, memory
 
 
-def get_sleep_loss(generative_model, inference_network, num_samples=1):
+def get_sleep_loss(generative_model, guide, num_samples=1):
     """Returns:
         loss: scalar that we call .backward() on and step the optimizer.
     """
@@ -399,4 +397,4 @@ def get_sleep_loss(generative_model, inference_network, num_samples=1):
         )
     if generative_model.use_alphabet:
         obs = (obs, alphabet)
-    return -torch.mean(inference_network.get_log_prob(latent, obs))
+    return -torch.mean(guide.get_log_prob(latent, obs))
