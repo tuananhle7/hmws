@@ -156,9 +156,8 @@ def get_mws_loss(generative_model, guide, memory, obs, obs_id, num_particles):
     batch_size = latent.shape[1]
 
     # Evaluate log p of proposed latents
-    log_prior, log_likelihood = generative_model.get_log_probss(
-        latent, obs, obs_id, None
-    )  # [num_particles, batch_size]
+    # [num_particles, batch_size]
+    log_prior, log_likelihood = generative_model.get_log_probss(latent, obs, obs_id)
     log_p = log_prior + log_likelihood
 
     # Select latents from memory
@@ -169,7 +168,7 @@ def get_mws_loss(generative_model, guide, memory, obs, obs_id, num_particles):
 
     # Evaluate log p of memory latents
     memory_log_prior, memory_log_likelihood = generative_model.get_log_probss(
-        memory_latent_transposed, obs, obs_id, None
+        memory_latent_transposed, obs, obs_id
     )  # [memory_size, batch_size]
     memory_log_p = memory_log_prior + memory_log_likelihood
     memory_log_likelihood = None  # don't need this anymore
@@ -274,7 +273,7 @@ def get_log_marginal_joint(generative_model, guide, ids_and_on_offs, obs, num_pa
 
     # log p(d, c)
     # [num_particles, *shape]
-    log_p = generative_model.log_prob(
+    log_p = generative_model.get_log_prob(
         (
             # [num_particles, num_samples, num_arcs, 2]
             ids_and_on_offs[None]
@@ -284,7 +283,7 @@ def get_log_marginal_joint(generative_model, guide, ids_and_on_offs, obs, num_pa
             motor_noise.view(num_particles, num_samples, num_arcs, 3),
         ),
         # [num_samples, num_rows, num_cols]
-        obs.view(num_samples, num_rows, num_cols),
+        obs.reshape(num_samples, num_rows, num_cols),
     ).view(*[num_particles, *shape])
 
     return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
@@ -363,7 +362,7 @@ def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, n
     sorted_with_inf, indices_with_inf = sorted_without_inf.sort(dim=0)
 
     # [memory_size, batch_size]
-    indices = indices_without_inf.gather(1, indices_with_inf)[-memory_size:]
+    indices = indices_without_inf.gather(0, indices_with_inf)[-memory_size:]
 
     # [memory_size, batch_size, num_arcs, 2]
     memory_ids_and_on_offs = torch.gather(
@@ -395,10 +394,10 @@ def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, n
         log_p - (log_uniform + log_q_continuous)
     ).detach()  # [memory_size, batch_size]
 
-    generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
-    guide_loss = -(log_q * normalized_weight).sum(dim=0)
+    generative_model_loss = -(log_p * normalized_weight).sum(dim=0).mean()
+    guide_loss = -(log_q * normalized_weight).sum(dim=0).mean()
 
-    return (generative_model_loss + guide_loss).mean()
+    return generative_model_loss + guide_loss, generative_model_loss.item(), guide_loss.item()
 
 
 def get_sleep_loss(generative_model, guide, num_samples=1):
@@ -406,21 +405,5 @@ def get_sleep_loss(generative_model, guide, num_samples=1):
         loss: scalar that we call .backward() on and step the optimizer.
     """
 
-    device = next(generative_model.parameters()).device
-    if generative_model.use_alphabet:
-        alphabet = (
-            torch.distributions.OneHotCategorical(logits=torch.ones(50, device=device).float())
-            .sample((num_samples,))
-            .contiguous()
-        )
-        latent, obs = generative_model.sample_latent_and_obs(alphabet=alphabet, num_samples=1)
-        latent = latent[0]
-        obs = obs[0]
-    else:
-        alphabet = None
-        latent, obs = generative_model.sample_latent_and_obs(
-            alphabet=alphabet, num_samples=num_samples
-        )
-    if generative_model.use_alphabet:
-        obs = (obs, alphabet)
+    latent, obs = generative_model.sample_latent_and_obs(num_samples=num_samples)
     return -torch.mean(guide.get_log_prob(latent, obs))

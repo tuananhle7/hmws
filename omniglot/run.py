@@ -15,6 +15,7 @@ def main(args):
     args.cuda = str(device) == "cuda"
 
     if args.test_run:
+        args.pretrain_iterations = 1
         args.num_iterations = 1
         args.test_interval = 2
     util.print_args(args)
@@ -32,28 +33,10 @@ def main(args):
     id_offset_test = len(data_train) + len(data_valid)
     args.num_rows, args.num_cols = data_train.shape[1:]
 
-    if args.condition_on_alphabet:
-        data_loader = data.get_hierarchical_omniglot_data_loader(
-            data_train,
-            target_train,
-            args.num_characters_per_alphabet,
-            args.batch_size,
-            device,
-            ids=True,
-        )
-        test_data_loader = data.get_hierarchical_omniglot_data_loader(
-            data_test,
-            target_test,
-            args.num_characters_per_alphabet,
-            args.test_batch_size,
-            device,
-            ids=True,
-        )
-    else:
-        data_loader = data.get_data_loader(data_train, args.batch_size, device, ids=True)
-        test_data_loader = data.get_data_loader(
-            data_test, args.test_batch_size, device, id_offset=id_offset_test, ids=True
-        )
+    data_loader = data.get_data_loader(data_train, args.batch_size, device, ids=True)
+    test_data_loader = data.get_data_loader(
+        data_test, args.test_batch_size, device, id_offset=id_offset_test, ids=True
+    )
     args.num_train_data = len(data_loader.dataset)
 
     # init
@@ -89,6 +72,13 @@ def main(args):
         algorithm_params = {
             **algorithm_params,
             "num_particles": args.num_particles,
+            "memory_size": args.memory_size,
+        }
+    elif args.algorithm == "cmws":
+        algorithm_params = {
+            **algorithm_params,
+            "num_particles": args.num_particles,
+            "num_proposals": args.num_proposals,
             "memory_size": args.memory_size,
         }
     else:
@@ -130,6 +120,7 @@ def get_args_parser():
     parser.add_argument("--q-uniform-mixture", default=0.0, type=float)
 
     parser.add_argument("--num-particles", type=int, default=10, help=" ")
+    parser.add_argument("--num-proposals", type=int, default=10, help=" ")
     parser.add_argument("--memory-size", type=int, default=10, help=" ")
     parser.add_argument("--obs-embedding-dim", type=int, default=64, help=" ")
     parser.add_argument("--num-primitives", type=int, default=64, help=" ")
@@ -137,7 +128,9 @@ def get_args_parser():
     parser.add_argument("--big-arcs", action="store_true", help=" ")
 
     # train
-    parser.add_argument("--algorithm", default="mws", choices=["mws", "rws", "vimco"], help=" ")
+    parser.add_argument(
+        "--algorithm", default="mws", choices=["mws", "rws", "vimco", "cmws"], help=" "
+    )
     parser.add_argument("--prior-lr-factor", default=1.0, type=float)
     parser.add_argument("--pretrain-iterations", type=int, default=10000, help=" ")
     parser.add_argument("--prior-anneal-iterations", type=int, default=0, help=" ")

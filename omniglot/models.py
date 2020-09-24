@@ -78,7 +78,6 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
         self.lstm_hidden_size = self.lstm_cell.hidden_size
         self.lstm_input_size = self.lstm_cell.input_size
         self.num_primitives = self.lstm_input_size - 2
-        self._batch_shape = []
 
     @property
     def device(self):
@@ -90,20 +89,17 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
             sample_shape: torch.Size
 
         Returns:
-            ids_and_on_offs: [*sample_shape, num_arcs, 5] or
-                [*sample_shape, num_particles, batch_size, num_arcs, 2]
-                    ids_and_on_offs[..., 0] are ids
-                    ids_and_on_offs[..., 1] are on_offs
-                    ids_and_on_offs[..., 2:4] are variations on dx, dy and theta
+            ids_and_on_offs: [*sample_shape, num_arcs, 2]
+                ids_and_on_offs[..., 0] are ids
+                ids_and_on_offs[..., 1] are on_offs
         """
         num_samples = torch.tensor(sample_shape).long().prod()
-        num_batch = torch.tensor(self.batch_shape).prod().long().item()
 
         lstm_input = torch.zeros((*sample_shape, self.lstm_input_size), device=self.device).view(
             -1, self.lstm_input_size
         )
-        h = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
-        c = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
+        h = torch.zeros((num_samples, self.lstm_hidden_size), device=self.device)
+        c = torch.zeros((num_samples, self.lstm_hidden_size), device=self.device)
 
         ids = []
         on_offs = []
@@ -122,7 +118,7 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
 
             ids.append(id_dist.sample())
             if arc_id == 0:
-                on_off = torch.zeros(num_samples * num_batch, device=self.device,).long()
+                on_off = torch.zeros(num_samples, device=self.device,).long()
             else:
                 on_off = on_off_dist.sample()
             on_offs.append(on_off)
@@ -141,21 +137,18 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
     def log_prob(self, ids_and_on_offs):
         """
         Args:
-            ids_and_on_offs: [*sample_shape, num_arcs, 5] or
-                [*sample_shape, num_particles, batch_size, num_arcs, 2]
-                    ids_and_on_offs[..., 0] are ids
-                    ids_and_on_offs[..., 1] are on_offs
-                    ids_and_on_offs[..., 2:4] are variations on dx, dy and theta
+            ids_and_on_offs: [*sample_shape, num_arcs, 2] or
+                ids_and_on_offs[..., 0] are ids
+                ids_and_on_offs[..., 1] are on_offs
 
         Returns: tensor [*sample_shape]
         """
-        num_batch = torch.tensor(self.batch_shape).prod().long().item()
         sample_shape = ids_and_on_offs.shape[:-2]
         num_samples = torch.tensor(sample_shape).prod().long().item()
         lstm_input = torch.zeros((num_samples, self.lstm_input_size), device=self.device)
 
-        h = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
-        c = torch.zeros((num_samples * num_batch, self.lstm_hidden_size), device=self.device)
+        h = torch.zeros((num_samples, self.lstm_hidden_size), device=self.device)
+        c = torch.zeros((num_samples, self.lstm_hidden_size), device=self.device)
         ids = ids_and_on_offs[..., 0]
         on_offs = ids_and_on_offs[..., 1]
 
@@ -185,8 +178,10 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
 
             lstm_input = torch.cat(
                 [
-                    F.one_hot(ids[..., arc_id].view(-1), num_classes=self.num_primitives).float(),
-                    F.one_hot(on_offs[..., arc_id].view(-1), num_classes=2).float(),
+                    F.one_hot(
+                        ids[..., arc_id].reshape(-1), num_classes=self.num_primitives
+                    ).float(),
+                    F.one_hot(on_offs[..., arc_id].reshape(-1), num_classes=2).float(),
                 ],
                 dim=1,
             )

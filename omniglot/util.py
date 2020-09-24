@@ -21,17 +21,12 @@ logging.basicConfig(
 
 
 def get_path_base_from_args(args):
-    if args.condition_on_alphabet:
-        prefix = "a_"
-    else:
-        prefix = ""
-
     if args.algorithm == "mws":
         num_samples = args.num_particles + args.memory_size
     else:
         num_samples = args.num_particles
 
-    return f"{prefix}{args.algorithm}_{num_samples}"
+    return f"{args.algorithm}_{num_samples}"
 
 
 def get_save_job_name_from_args(args):
@@ -134,8 +129,7 @@ def init_optimizer(generative_model, guide, prior_lr_factor):
     lr = 1e-3
     optimizer = torch.optim.Adam(
         [
-            {"params": generative_model._prior.parameters(), "lr": lr * prior_lr_factor},
-            {"params": generative_model._likelihood.parameters(), "lr": lr},
+            {"params": generative_model.parameters(), "lr": lr},
             {"params": guide.parameters(), "lr": lr},
         ]
     )

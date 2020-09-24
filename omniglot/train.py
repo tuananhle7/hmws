@@ -55,6 +55,16 @@ def train(
                 ) = losses.get_mws_loss(
                     generative_model, guide, memory, obs, obs_id, algorithm_params["num_particles"],
                 )
+            elif algorithm == "cmws":
+                (loss, theta_loss, phi_loss,) = losses.get_cmws_loss(
+                    generative_model,
+                    guide,
+                    memory,
+                    obs,
+                    obs_id,
+                    algorithm_params["num_particles"],
+                    algorithm_params["num_proposals"],
+                )
 
             # Backprop
             loss.backward()
@@ -98,7 +108,7 @@ def train(
                             ),
                         )
                     )
-                elif algorithm == "rws" or algorithm == "vimco":
+                elif algorithm == "rws" or algorithm == "vimco" or algorithm == "cmws":
                     util.logging.info(
                         "it. {}/{} | theta loss = {:.2f} | "
                         "phi loss = {:.2f} | last log_p = {} | "
@@ -116,7 +126,7 @@ def train(
                             ),
                         )
                     )
-            if iteration % algorithm_params["test_interval"] == 0:
+            if iteration % algorithm_params["test_interval"] == 0 and algorithm != "cmws":
                 log_p, kl = eval_gen_inf(
                     generative_model,
                     guide,

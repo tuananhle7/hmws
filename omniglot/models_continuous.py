@@ -39,6 +39,7 @@ class GenerativeMotorNoiseDist(nn.Module):
     """
 
     def __init__(self, num_arcs):
+        super().__init__()
         self.num_arcs = num_arcs
         self.register_buffer("loc", torch.zeros((num_arcs, 3)))
         self.register_buffer("scale", 0.1 * torch.ones((num_arcs, 3)))
@@ -70,9 +71,11 @@ class GuideMotorNoiseDist:
     """
 
     def __init__(self, obs, num_arcs):
+        shape = obs.shape[:-2]
+        device = obs.device
         self.num_arcs = num_arcs
-        self.register_buffer("loc", torch.zeros((*[*self.batch_shape, num_arcs, 3])))
-        self.register_buffer("scale", 0.1 * torch.ones((*[*self.batch_shape, num_arcs, 3])))
+        self.loc = torch.zeros((*[*shape, num_arcs, 3]), device=device)
+        self.scale = 0.1 * torch.ones((*[*shape, num_arcs, 3]), device=device)
 
     @property
     def dist(self):
@@ -96,9 +99,9 @@ class GenerativeModel(nn.Module):
         self.ids_and_on_offs_generative_model = models.GenerativeModel(
             *ids_and_on_offs_generative_model_args
         )
-        self.generative_motor_noise_dist = GenerativeMotorNoiseDist(
-            self.ids_and_on_offs_generative_model.num_arcs
-        )
+        self.num_arcs = self.ids_and_on_offs_generative_model.num_arcs
+        self.num_primitives = self.ids_and_on_offs_generative_model.num_primitives
+        self.generative_motor_noise_dist = GenerativeMotorNoiseDist(self.num_arcs)
 
     @property
     def start_point(self):
@@ -111,8 +114,10 @@ class GenerativeModel(nn.Module):
         event shape [num_arcs, 2], [num_arcs, 3].
         """
         return JointDistribution(
-            self.ids_and_on_offs_generative_model.get_latent_dist(),
-            self.generative_motor_noise_dist,
+            [
+                self.ids_and_on_offs_generative_model.get_latent_dist(),
+                self.generative_motor_noise_dist,
+            ]
         )
 
     def get_obs_params(self, latent):
@@ -132,13 +137,19 @@ class GenerativeModel(nn.Module):
         start_point = self.start_point.unsqueeze(0).expand(batch_size, -1)
 
         # [batch_size, num_arcs, 7]
-        arcs = models.get_arcs(start_point, self.get_primitives(), ids)
+        arcs = models.get_arcs(
+            start_point, self.ids_and_on_offs_generative_model.get_primitives(), ids
+        )
 
         # Add motor noise!
         arcs[:, :, 2:5] += motor_noise
 
         return rendering.get_logits(
-            arcs, on_offs, self.get_rendering_params(), self.num_rows, self.num_cols
+            arcs,
+            on_offs,
+            self.ids_and_on_offs_generative_model.get_rendering_params(),
+            self.ids_and_on_offs_generative_model.num_rows,
+            self.ids_and_on_offs_generative_model.num_cols,
         )
 
     def get_obs_dist(self, latent):
@@ -153,11 +164,11 @@ class GenerativeModel(nn.Module):
             [num_rows, num_cols]
         """
         logits = self.get_obs_params(latent)
-        if self.likelihood == "learned-affine":
+        if self.ids_and_on_offs_generative_model.likelihood == "learned-affine":
             return models.AffineLikelihood(
                 logits.sigmoid(), self.ids_and_on_offs_generative_model._likelihood.theta_affine
             )
-        elif self.likelihood == "bernoulli":
+        elif self.ids_and_on_offs_generative_model.likelihood == "bernoulli":
             return torch.distributions.Independent(
                 torch.distributions.Bernoulli(logits=logits), reinterpreted_batch_ndims=2
             )
@@ -198,7 +209,7 @@ class GenerativeModel(nn.Module):
             ).log_prob(
                 einops.repeat(
                     obs,
-                    "batch_size ... -> num_particles batch_size ...",
+                    "batch_size ... -> (num_particles batch_size) ...",
                     num_particles=num_particles,
                 )
             ),
@@ -207,6 +218,21 @@ class GenerativeModel(nn.Module):
         )
 
         return latent_log_prob + obs_log_prob
+
+    def sample_latent_and_obs(self, num_samples=1):
+        """Args:
+            num_samples: int
+
+        Returns:
+            latent
+                ids_and_on_offs [num_samples, num_arcs, 2]
+                motor_noise [num_samples, num_arcs, 3]
+            obs: tensor of shape [num_samples, num_rows, num_cols]
+        """
+        latent = self.get_latent_dist().sample((num_samples,))
+        obs = self.get_obs_dist(latent).sample()
+
+        return latent, obs
 
 
 class Guide(nn.Module):
