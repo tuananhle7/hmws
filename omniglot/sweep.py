@@ -18,32 +18,24 @@ import math
 
 
 def get_sweep_argss(test_run=False):
-    # models in the paper
-    # single-character model
-    for algorithm in ["mws", "rws", "vimco"]:
-        for num_particles in [3, 5, 10, 20, 40]:
-            args = run.get_args_parser().parse_args([])
-            if algorithm == "mws":
-                args.memory_size = math.ceil(num_particles / 2)
-                args.num_particles = num_particles - args.memory_size
-            else:
-                args.num_particles = num_particles
-            args.test_run = test_run
-            args.algorithm = algorithm
-            args.data_location = "om"
-            yield args
-
-    # alphabet-conditional model
-    args = run.get_args_parser().parse_args([])
-    args.test_run = test_run
-    args.num_particles = 20
-    args.memory_size = 20
-    args.algorithm = "mws"
-    args.small_dataset = True
-    args.cuda = True
-    args.data_location = "om"
-    args.condition_on_alphabet = True
-    yield args
+    for algorithm in ["cmws", "mws", "rws", "vimco"]:
+        args = run.get_args_parser().parse_args([])
+        num_particles = 20
+        if algorithm == "mws":
+            args.memory_size = math.ceil(num_particles / 2)
+            args.num_particles = num_particles - args.memory_size
+        elif algorithm == "cmws":
+            args.memory_size = math.ceil(num_particles / 2)
+            args.num_particles = num_particles - args.memory_size
+            args.num_proposals = num_particles - args.memory_size
+            args.motor_noise = True
+            args.batch_size = 60
+        else:
+            args.num_particles = num_particles
+        args.test_run = test_run
+        args.algorithm = algorithm
+        args.data_location = "om"
+        yield args
 
 
 def args_to_str(args):

@@ -21,12 +21,7 @@ logging.basicConfig(
 
 
 def get_path_base_from_args(args):
-    if args.algorithm == "mws":
-        num_samples = args.num_particles + args.memory_size
-    else:
-        num_samples = args.num_particles
-
-    return f"{args.algorithm}_{num_samples}"
+    return args.algorithm
 
 
 def get_save_job_name_from_args(args):
