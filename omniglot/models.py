@@ -456,9 +456,9 @@ class GenerativeModel(nn.Module):
         )
 
     def get_latent_dist(self):
-        """
-        Returns: distribution with batch shape [] and
-            event shape [num_arcs, 2].
+        """p(z)
+
+        Returns: distribution with batch shape [] and event shape [num_arcs, 2].
         """
         return GenerativeModelIdsAndOnOffsDistribution(
             self._prior.lstm_cell, self._prior.linear, self.num_arcs, self.uniform_mixture

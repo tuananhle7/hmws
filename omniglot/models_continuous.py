@@ -95,15 +95,21 @@ class GenerativeModel(nn.Module):
     def __init__(self, ids_and_on_offs_generative_model_args, device):
         super().__init__()
         self.ids_and_on_offs_generative_model = models.GenerativeModel(
-            *ids_and_on_offs_generative_model_args, alphabet_dim=0, device=device
+            *ids_and_on_offs_generative_model_args, device=device
         )
         self.generative_motor_noise_dist = GenerativeMotorNoiseDist(
             self.ids_and_on_offs_generative_model.num_arcs
         )
 
+    @property
+    def start_point(self):
+        return self.ids_and_on_offs_generative_model.start_point
+
     def get_latent_dist(self):
-        """
-        Returns: distribution with batch shape [] and event shape [num_arcs, 2], [num_arcs, 3].
+        """ p(z)p(c)
+
+        Returns: distribution with batch shape [] and
+        event shape [num_arcs, 2], [num_arcs, 3].
         """
         return JointDistribution(
             self.ids_and_on_offs_generative_model.get_latent_dist(),
