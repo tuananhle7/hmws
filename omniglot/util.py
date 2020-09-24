@@ -1,6 +1,7 @@
 import torch.nn as nn
 import os
 import models
+import models_continuous
 import torch
 import math
 import logging
@@ -142,7 +143,7 @@ def init_optimizer(generative_model, guide, prior_lr_factor):
 
 
 def init(run_args, device):
-    generative_model = models.GenerativeModel(
+    ids_and_on_offs_generative_model_args = [
         run_args.num_primitives,
         run_args.initial_max_curve,
         run_args.big_arcs,
@@ -152,9 +153,8 @@ def init(run_args, device):
         run_args.num_arcs,
         run_args.likelihood,
         run_args.p_uniform_mixture,
-        alphabet_dim=0,
-    ).to(device)
-    guide = models.Guide(
+    ]
+    ids_and_on_offs_guide_args = [
         run_args.num_primitives,
         run_args.q_lstm_hidden_size,
         run_args.num_rows,
@@ -162,8 +162,15 @@ def init(run_args, device):
         run_args.num_arcs,
         run_args.obs_embedding_dim,
         run_args.q_uniform_mixture,
-        alphabet_dim=0,
-    ).to(device)
+    ]
+    if run_args.motor_noise:
+        generative_model = models_continuous.GenerativeModel(
+            ids_and_on_offs_generative_model_args
+        ).to(device)
+        guide = models_continuous.Guide(ids_and_on_offs_guide_args).to(device)
+    else:
+        generative_model = models.GenerativeModel(*ids_and_on_offs_generative_model_args).to(device)
+        guide = models.Guide(*ids_and_on_offs_guide_args).to(device)
     optimizer = init_optimizer(generative_model, guide, 1,)
 
     stats = Stats([], [], [], [], [], [], [], [])
@@ -214,7 +221,7 @@ def save_checkpoint(
 
 def load_checkpoint(path, device):
     checkpoint = torch.load(path, map_location=device)
-    generative_model, guide, optimizer, _, _ = init(checkpoint["run_args"], device)
+    (generative_model, guide), optimizer, _, _ = init(checkpoint["run_args"], device)
 
     generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
     guide.load_state_dict(checkpoint["guide_state_dict"])
@@ -222,7 +229,7 @@ def load_checkpoint(path, device):
     memory = checkpoint["memory"]
     stats = checkpoint["stats"]
     run_args = checkpoint["run_args"]
-    return generative_model, guide, optimizer, memory, stats, run_args
+    return (generative_model, guide), optimizer, memory, stats, run_args
 
 
 Stats = collections.namedtuple(

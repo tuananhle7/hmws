@@ -91,10 +91,10 @@ class GenerativeModel(nn.Module):
     """p(z)p(c)p(x | z, c)
     """
 
-    def __init__(self, ids_and_on_offs_generative_model_args, device):
+    def __init__(self, ids_and_on_offs_generative_model_args):
         super().__init__()
         self.ids_and_on_offs_generative_model = models.GenerativeModel(
-            *ids_and_on_offs_generative_model_args, device=device
+            *ids_and_on_offs_generative_model_args
         )
         self.generative_motor_noise_dist = GenerativeMotorNoiseDist(
             self.ids_and_on_offs_generative_model.num_arcs

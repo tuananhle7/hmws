@@ -111,12 +111,10 @@ def get_args_parser():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--test-run", action="store_true", help="")
-    parser.add_argument("--condition-on-alphabet", action="store_true", help=" ")
 
     # data
     parser.add_argument("--data-location", default="local", help=" ")
     parser.add_argument("--batch-size", type=int, default=250, help=" ")
-    parser.add_argument("--num-characters-per-alphabet", type=int, default=5, help=" ")
 
     # init
     parser.add_argument("--motor-noise", action="store_true", help="")
