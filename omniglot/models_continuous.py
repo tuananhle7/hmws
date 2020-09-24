@@ -60,10 +60,10 @@ class GuideMotorNoiseDist:
     """q(c | z, x)
 
     Distribution of
-    batch_shape [batch_size] event_shape [num_arcs, 3]
+    batch_shape [*shape] event_shape [num_arcs, 3]
 
     Args:
-        obs: tensor of shape [batch_size, num_rows, num_cols]
+        obs: tensor of shape [*shape, num_rows, num_cols]
         num_arcs (int)
 
     # TODO: consider different architectures
@@ -71,9 +71,8 @@ class GuideMotorNoiseDist:
 
     def __init__(self, obs, num_arcs):
         self.num_arcs = num_arcs
-        self.batch_size = obs.shape[0]
-        self.register_buffer("loc", torch.zeros((self.batch_size, num_arcs, 3)))
-        self.register_buffer("scale", 0.1 * torch.ones((self.batch_size, num_arcs, 3)))
+        self.register_buffer("loc", torch.zeros((*[*self.batch_shape, num_arcs, 3])))
+        self.register_buffer("scale", 0.1 * torch.ones((*[*self.batch_shape, num_arcs, 3])))
 
     @property
     def dist(self):
@@ -221,6 +220,29 @@ class Guide(nn.Module):
         self.ids_and_on_offs_guide = models.Guide(*ids_and_on_offs_guide_args)
         self.num_arcs = self.ids_and_on_offs_guide.num_arcs
 
+    def sample_ids_and_on_offs(self, obs, num_particles):
+        """Sample from q(z | x)
+
+        Args:
+            obs: tensor of shape [batch_size, num_rows, num_cols]
+            num_particles: int
+
+        Returns: tensor of shape [num_particles, batch_size, num_arcs, 2]
+        """
+        return self.ids_and_on_offs_guide.sample(obs, num_particles)
+
+    def get_motor_noise_dist(self, ids_and_on_offs, obs):
+        """q(c | z, x)
+
+        Args:
+            ids_and_on_offs: [*shape, num_arcs, 2]
+            obs: tensor of shape [*shape, num_rows, num_cols]
+
+        Returns: distribution with batch_shape [*shape]
+            and event_shape [num_arcs, 3]
+        """
+        return GuideMotorNoiseDist(obs, self.num_arcs)
+
     def get_latent_dist(self, obs):
         """q(z | x) q(c | z, x)
 
@@ -231,8 +253,59 @@ class Guide(nn.Module):
             and event_shape ([num_arcs, 2], [num_arcs, 3])
         """
         return JointDistribution(
-            [
-                self.ids_and_on_offs_guide.get_latent_dist(obs),
-                GuideMotorNoiseDist(obs, self.num_arcs),
-            ]
+            [self.ids_and_on_offs_guide.get_latent_dist(obs), self.get_motor_noise_dist(None, obs),]
         )
+
+    def sample_from_latent_dist(self, latent_dist, num_particles):
+        """Samples from q(z | x) q(c | z, x)
+
+        Args:
+            latent_dist: distribution with batch_shape [batch_size]
+                and event_shape ([num_arcs, 2], [num_arcs, 3])
+            num_particles: int
+
+        Returns:
+            ids_and_on_offs: [num_particles, batch_size, num_arcs, 2]
+            motor_noise: [num_particles, batch_size, num_arcs, 3]
+        """
+        return latent_dist.sample([num_particles])
+
+    def sample(self, obs, num_particles):
+        """Samples from q(z | x) q(c | z, x)
+
+        Args:
+            obs: tensor of shape [batch_size, num_rows, num_cols]
+            num_particles: int
+
+        Returns:
+            ids_and_on_offs: [num_particles, batch_size, num_arcs, 2]
+            motor_noise: [num_particles, batch_size, num_arcs, 3]
+        """
+        return self.sample_from_latent_dist(self.get_latent_dist(obs), num_particles)
+
+    def get_log_prob_from_latent_dist(self, latent_dist, latent):
+        """Log q(z | x) q(c | z, x).
+
+        Args:
+            latent_dist: distribution with batch_shape [batch_size]
+                and event_shape ([num_arcs, 2], [num_arcs, 3])
+            latent:
+                ids_and_on_offs: [num_particles, batch_size, num_arcs, 2]
+                motor_noise: [num_particles, batch_size, num_arcs, 3]
+
+        Returns: tensor of shape [num_particles, batch_size]
+        """
+        return latent_dist.log_prob(latent)
+
+    def get_log_prob(self, latent, obs):
+        """Log q(z | x) q(c | z, x).
+
+        Args:
+            latent
+                ids_and_on_offs: [num_particles, batch_size, num_arcs, 2]
+                motor_noise: [num_particles, batch_size, num_arcs, 3]
+            obs: tensor of shape [batch_size, num_rows, num_cols]
+
+        Returns: tensor of shape [num_particles, batch_size]
+        """
+        return self.get_log_prob_from_latent_dist(self.get_latent_dist(obs), latent)

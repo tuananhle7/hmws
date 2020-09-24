@@ -244,38 +244,48 @@ def get_mws_loss(generative_model, guide, memory, obs, obs_id, num_particles):
     )
 
 
-def get_log_marginal_joint(generative_model, guide, discrete_latent, obs, num_particles):
+def get_log_marginal_joint(generative_model, guide, ids_and_on_offs, obs, num_particles):
     """
     Args:
         generative_model
         guide
-        discrete_latent [*shape, num_arcs, 2]
+        ids_and_on_offs [*shape, num_arcs, 2]
         obs: tensor of shape [*shape, num_rows, num_cols]
         num_particles
 
     Returns: [*shape]
     """
-    shape = discrete_latent.shape[:-2]
-    num_arcs = discrete_latent.shape[-2]
+    shape = ids_and_on_offs.shape[:-2]
+    num_samples = int(torch.tensor(shape).prod().long().item())
+    num_arcs = ids_and_on_offs.shape[-2]
+    num_rows, num_cols = obs.shape[-2:]
 
     # q(c | d, x)
-    # batch_shape [*shape]s
-    guide_continuous_dist = guide.get_continuous_dist(discrete_latent, obs)
+    # batch_shape [*shape]
+    guide_motor_noise_dist = guide.get_motor_noise_dist(ids_and_on_offs, obs)
 
     # c ~ q(c | d, x)
     # [num_particles, *shape, num_arcs, 3]
-    continuous_latent = guide_continuous_dist.sample((num_particles,))
+    motor_noise = guide_motor_noise_dist.sample((num_particles,))
 
     # log q(c | d)
     # [num_particles, *shape]
-    log_q_continuous = guide_continuous_dist.log_prob(continuous_latent)
-
-    # [num_particles, *shape, num_arcs, 2]
-    discrete_latent_expanded = discrete_latent[None].expand(*[num_particles, *shape, num_arcs, 2])
+    log_q_continuous = guide_motor_noise_dist.log_prob(motor_noise)
 
     # log p(d, c)
     # [num_particles, *shape]
-    log_p = generative_model.log_prob((discrete_latent_expanded, continuous_latent), obs)
+    log_p = generative_model.log_prob(
+        (
+            # [num_particles, num_samples, num_arcs, 2]
+            ids_and_on_offs[None]
+            .expand(*[num_particles, *shape, num_arcs, 2])
+            .view(num_particles, num_samples, num_arcs, 2),
+            # [num_particles, num_samples, num_arcs, 3]
+            motor_noise.view(num_particles, num_samples, num_arcs, 3),
+        ),
+        # [num_samples, num_rows, num_cols]
+        obs.view(num_samples, num_rows, num_cols),
+    ).view(*[num_particles, *shape])
 
     return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
 
@@ -285,94 +295,110 @@ def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, n
     https://www.overleaf.com/project/5dfd4bbac2914e0001efb29b
 
     Args:
-        generative_model: GenerativeModel object
-        guide: Guide object
+        generative_model
+        guide
         memory: tensor of shape [num_data, memory_size, num_arcs, 2]
         obs: tensor of shape [batch_size, num_rows, num_cols]
         obs_id: long tensor of shape [batch_size]
-        num_particles: int
-        num_proposals: int
+        num_particles (int): number of particles used to marginalize motor noie
+        num_proposals (int): number of proposed elements to be considered as new memory
 
     Returns:
         loss: scalar that we call .backward() on and step the optimizer
-        memory
     """
 
-    # TODO: CHECK!!!
-    num_arcs = memory.shape[2]
-    batch_size = obs.shape[0]
-    memory_size = memory.shape[1]
-    memory_latent = memory[obs_id]  # [batch_size, memory_size, num_arcs, 2]
+    memory_size, num_arcs = memory.shape[1:3]
+    batch_size, num_rows, num_cols = obs.shape
+
+    # Select ids_and_on_offs from memory
+    memory_ids_and_on_offs = memory[obs_id]  # [batch_size, memory_size, num_arcs, 2]
+    memory_ids_and_on_offs_transposed = memory_ids_and_on_offs.transpose(
+        0, 1
+    ).contiguous()  # [memory_size, batch_size, num_arcs, 2]
 
     # PROPOSE DISCRETE LATENT
-    # [batch_size, num_proposals, num_arcs, 2]
-    discrete = guide.sample_discrete(obs, num_proposals).permute(1, 0, 2, 3)
+    # [num_proposals, batch_size, num_arcs, 2]
+    proposed_ids_and_on_offs = guide.sample_ids_and_on_offs(obs, num_proposals)
 
     # UPDATE MEMORY
-    # [batch_size, memory_size + num_proposals, num_arcs, 2]
-    memory_and_latent = torch.cat([memory_latent, discrete], dim=1)
-    memory_and_latent_log_p = get_log_marginal_joint(
-        generative_model, guide, memory_and_latent, obs, num_particles=num_particles,
-    )  # [batch_size, memory_size + num_proposals]
+    # [memory_size + num_proposals, batch_size, num_arcs, 2]
+    ids_and_on_offs = torch.cat(
+        [memory_ids_and_on_offs_transposed, proposed_ids_and_on_offs], dim=0
+    )
+    ids_and_on_offs_log_p = get_log_marginal_joint(
+        generative_model,
+        guide,
+        ids_and_on_offs,
+        obs[None].expand(memory_size + num_proposals, batch_size, num_rows, num_cols),
+        num_particles=num_particles,
+    )  # [memory_size + num_proposals, batch_size]
 
     # KEEP TOP `memory_size` ACCORDING TO log_p
-    # Sort log_ps, replace non-unique values with -inf, choose the top k
-    # remaining (valid as long as two distinct latents don't have the same
-    # logp)
-    # [batch_size, memory_size + num_proposals],
-    # [batch_size, memory_size + num_proposals]
-    sorted1, indices1 = memory_and_latent_log_p.sort(dim=1)
+    # -- 1) Sort log_ps
+    # [memory_size + num_proposals, batch_size],
+    # [memory_size + num_proposals, batch_size]
+    sorted_without_inf, indices_without_inf = ids_and_on_offs_log_p.sort(dim=0)
 
-    # NOTE: use latents for duplicate-detection because log prob is not
-    # accurate because of bug in torch.triangular_solve
-
-    # [batch_size, memory_size + num_proposals, num_arcs, 2]
-    # sorted_m[i, j, k, l] = memory_and_latent[i, indices1[i, j], k, l]
-    sorted_memory_and_latent_1 = memory_and_latent.gather(
-        1, indices1[..., None, None].expand(batch_size, memory_size + num_proposals, num_arcs, 2),
+    # -- 2) Replace non-unique values with -inf
+    # [memory_size + num_proposals, batch_size, num_arcs, 2]
+    # sorted_m[i, j, k, l] = ids_and_on_offs[indices_without_inf[i, j], j, k, l]
+    sorted_ids_and_on_offs = ids_and_on_offs.gather(
+        0,
+        indices_without_inf[..., None, None].expand(
+            memory_size + num_proposals, batch_size, num_arcs, 2
+        ),
     )
-
-    # [batch_size, memory_size + num_proposals - 1]
+    # [memory_size + num_proposals - 1, batch_size]
     is_same = (
-        (sorted_memory_and_latent_1[:, 1:] == sorted_memory_and_latent_1[:, :-1])
-        .view(batch_size, memory_size + num_proposals - 1, -1)
+        (sorted_ids_and_on_offs[1:] == sorted_ids_and_on_offs[:-1])
+        .view(memory_size + num_proposals - 1, batch_size, -1)
         .all(dim=-1)
     )
+    sorted_without_inf[1:].masked_fill_(is_same, float("-inf"))
 
-    # [batch_size, memory_size + num_proposals - 1]
-    sorted1[:, 1:].masked_fill_(is_same, float("-inf"))
-    sorted2, indices2 = sorted1.sort(dim=1)
-    # [batch_size, memory_size]
-    memory_log_p = sorted2[:, -memory_size:]
-    # [batch_size, memory_size]
-    indices = indices1.gather(1, indices2)[:, -memory_size:]
+    # -- 3) choose the top k remaining (valid as long as two distinct latents don't have the same
+    #       logp)
+    # [memory_size + num_proposals, batch_size],
+    # [memory_size + num_proposals, batch_size]
+    sorted_with_inf, indices_with_inf = sorted_without_inf.sort(dim=0)
 
-    # [batch_size, memory_size, num_arcs, 2]
-    memory_latent = torch.gather(
-        memory_and_latent,
-        1,
-        indices[:, :, None, None].expand(batch_size, memory_size, num_arcs, 2).contiguous(),
+    # [memory_size, batch_size]
+    indices = indices_without_inf.gather(1, indices_with_inf)[-memory_size:]
+
+    # [memory_size, batch_size, num_arcs, 2]
+    memory_ids_and_on_offs = torch.gather(
+        ids_and_on_offs,
+        0,
+        indices[:, :, None, None].expand(memory_size, batch_size, num_arcs, 2).contiguous(),
     )
 
-    # COMPUTE LOSSES
-    guide_continuous_dist = guide.get_continuous_dist(
-        memory
-    )  # batch_shape [batch_size, memory_size]
-    continuous = guide_continuous_dist.sample()  # [batch_size, memory_size, num_arcs, 3]
-    log_q_continuous = guide_continuous_dist.log_prob(continuous)  # [batch_size, memory_size]
-    log_uniform = -torch.ones_like(memory) * math.log(memory_size)  # [batch_size, memory_size]
+    # memory: [len(dataset), memory_size, num_arcs, 2]
+    # [batch_size, memory_size, num_arcs, 2]
+    memory[obs_id] = memory_ids_and_on_offs.transpose(0, 1).contiguous()
 
-    log_p = generative_model.log_prob((memory, continuous))  # [batch_size, memory_size]
-    log_q = guide.log_prob((memory, continuous))  # [batch_size, memory_size]
+    # COMPUTE LOSSES
+    guide_motor_noise_dist = guide.get_motor_noise_dist(
+        memory_ids_and_on_offs, obs[None].expand(memory_size, batch_size, num_rows, num_cols)
+    )  # batch_shape [memory_size, batch_size]
+    motor_noise = guide_motor_noise_dist.sample()  # [memory_size, batch_size, num_arcs, 3]
+    log_q_continuous = guide_motor_noise_dist.log_prob(motor_noise)  # [memory_size, batch_size]
+    log_uniform = -math.log(memory_size)
+
+    log_p = generative_model.get_log_prob(
+        (memory_ids_and_on_offs, motor_noise), obs
+    )  # [memory_size, batch_size]
+    log_q = guide.get_log_prob(
+        (memory_ids_and_on_offs, motor_noise), obs
+    )  # [memory_size, batch_size]
 
     normalized_weight = util.exponentiate_and_normalize(
         log_p - (log_uniform + log_q_continuous)
-    ).detach()  # [batch_size, memory_size]
+    ).detach()  # [memory_size, batch_size]
 
-    generative_model_loss = -(log_p * normalized_weight).sum(dim=1)
-    guide_loss = -(log_q * normalized_weight).sum(dim=1)
+    generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
+    guide_loss = -(log_q * normalized_weight).sum(dim=0)
 
-    return generative_model_loss + guide_loss, memory
+    return (generative_model_loss + guide_loss).mean()
 
 
 def get_sleep_loss(generative_model, guide, num_samples=1):
