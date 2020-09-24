@@ -66,7 +66,7 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
         alphabet: None or [num_particles, batch_size, alphabet_dim]
 
     Returns: distribution object with batch_shape [] or [num_particles, batch_size] and
-        event_shape [num_arcs, 2]
+        event_shape [num_arcs, 5]
     """
 
     def __init__(self, lstm_cell, linear, num_arcs, uniform_mixture, alphabet=None):
@@ -97,10 +97,11 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
             sample_shape: torch.Size
 
         Returns:
-            ids_and_on_offs: [*sample_shape, num_arcs, 2] or
+            ids_and_on_offs: [*sample_shape, num_arcs, 5] or
                 [*sample_shape, num_particles, batch_size, num_arcs, 2]
                     ids_and_on_offs[..., 0] are ids
                     ids_and_on_offs[..., 1] are on_offs
+                    ids_and_on_offs[..., 2:4] are variations on dx, dy and theta
         """
         num_samples = torch.tensor(sample_shape).long().prod()
         num_batch = torch.tensor(self.batch_shape).prod().long().item()
@@ -165,10 +166,11 @@ class GenerativeModelIdsAndOnOffsDistribution(torch.distributions.Distribution):
     def log_prob(self, ids_and_on_offs):
         """
         Args:
-            ids_and_on_offs: [*sample_shape, num_arcs, 2] or
+            ids_and_on_offs: [*sample_shape, num_arcs, 5] or
                 [*sample_shape, num_particles, batch_size, num_arcs, 2]
                     ids_and_on_offs[..., 0] are ids
                     ids_and_on_offs[..., 1] are on_offs
+                    ids_and_on_offs[..., 2:4] are variations on dx, dy and theta
 
         Returns: tensor [*sample_shape]
         """
@@ -649,7 +651,7 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
         alphabet [num_particles, batch_size]
 
     Returns: distribution object with batch_shape [batch_size] or [num_particles, batch_size]
-        and event_shape [num_arcs, 2]
+        and event_shape [num_arcs, 5]
     """
 
     def __init__(
@@ -691,10 +693,11 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
             sample_shape: torch.Size
 
         Returns:
-            ids_and_on_offs: [*sample_shape, batch_size, num_arcs, 2] or
-                [*sample_shape, num_particles, batch_size, num_arcs, 2]
+            ids_and_on_offs: [*sample_shape, batch_size, num_arcs, 5] or
+                [*sample_shape, num_particles, batch_size, num_arcs, 5]
                     ids_and_on_offs[..., 0] are ids
                     ids_and_on_offs[..., 1] are on_offs
+                    ids_and_on_offs[..., 2:4] are variations on dx, dy and theta
         """
         num_samples = int(torch.tensor(sample_shape).prod().item())
 
@@ -779,10 +782,11 @@ class GuideIdsAndOnOffsDistribution(torch.distributions.Distribution):
     def log_prob(self, ids_and_on_offs):
         """
         Args:
-            ids_and_on_offs: [*sample_shape, batch_size, num_arcs, 2] or
-                [*sample_shape, num_particles, batch_size, num_arcs, 2]
+            ids_and_on_offs: [*sample_shape, batch_size, num_arcs, 5] or
+                [*sample_shape, num_particles, batch_size, num_arcs, 5]
                     ids_and_on_offs[..., 0] are ids
                     ids_and_on_offs[..., 1] are on_offs
+                    ids_and_on_offs[..., 2:4] are variations on dx, dy and theta
 
         Returns: tensor [*sample_shape, batch_size] or [*sample_shape, num_particles, batch_size]
         """

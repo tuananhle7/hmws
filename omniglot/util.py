@@ -129,13 +129,13 @@ def init_memory(num_data, memory_size, num_arcs, num_primitives, device):
     return torch.stack(memory)
 
 
-def init_optimizer(generative_model, inference_network, prior_lr_factor):
+def init_optimizer(generative_model, guide, prior_lr_factor):
     lr = 1e-3
     optimizer = torch.optim.Adam(
         [
             {"params": generative_model._prior.parameters(), "lr": lr * prior_lr_factor},
             {"params": generative_model._likelihood.parameters(), "lr": lr},
-            {"params": inference_network.parameters(), "lr": lr},
+            {"params": guide.parameters(), "lr": lr},
         ]
     )
     return optimizer
@@ -154,7 +154,7 @@ def init(run_args, device):
         run_args.p_uniform_mixture,
         alphabet_dim=0,
     ).to(device)
-    inference_network = models.Guide(
+    guide = models.Guide(
         run_args.num_primitives,
         run_args.q_lstm_hidden_size,
         run_args.num_rows,
@@ -164,7 +164,7 @@ def init(run_args, device):
         run_args.q_uniform_mixture,
         alphabet_dim=0,
     ).to(device)
-    optimizer = init_optimizer(generative_model, inference_network, 1,)
+    optimizer = init_optimizer(generative_model, guide, 1,)
 
     stats = Stats([], [], [], [], [], [], [], [])
 
@@ -179,14 +179,13 @@ def init(run_args, device):
     else:
         memory = None
 
-    return generative_model, inference_network, optimizer, memory, stats
+    return (generative_model, guide), optimizer, memory, stats
 
 
 def save_checkpoint(
     path,
     # models
-    generative_model,
-    inference_network,
+    model,
     optimizer,
     memory,
     # stats
@@ -194,12 +193,13 @@ def save_checkpoint(
     # run args
     run_args=None,
 ):
+    generative_model, guide = model
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
             # models
             "generative_model_state_dict": generative_model.state_dict(),
-            "inference_network_state_dict": inference_network.state_dict(),
+            "guide_state_dict": guide.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "memory": memory,
             # stats
@@ -214,15 +214,15 @@ def save_checkpoint(
 
 def load_checkpoint(path, device):
     checkpoint = torch.load(path, map_location=device)
-    generative_model, inference_network, optimizer, _, _ = init(checkpoint["run_args"], device)
+    generative_model, guide, optimizer, _, _ = init(checkpoint["run_args"], device)
 
     generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
-    inference_network.load_state_dict(checkpoint["inference_network_state_dict"])
+    guide.load_state_dict(checkpoint["guide_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     memory = checkpoint["memory"]
     stats = checkpoint["stats"]
     run_args = checkpoint["run_args"]
-    return generative_model, inference_network, optimizer, memory, stats, run_args
+    return generative_model, guide, optimizer, memory, stats, run_args
 
 
 Stats = collections.namedtuple(

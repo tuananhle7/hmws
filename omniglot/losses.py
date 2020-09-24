@@ -246,6 +246,137 @@ def get_mws_loss(generative_model, inference_network, memory, obs, obs_id, num_p
     )
 
 
+def get_log_marginal_joint(generative_model, guide, discrete_latent, obs, num_particles):
+    """
+    Args:
+        generative_model
+        guide
+        discrete_latent [*shape, num_arcs, 2]
+        obs: tensor of shape [*shape, num_rows, num_cols]
+        num_particles
+
+    Returns: [*shape]
+    """
+    shape = discrete_latent.shape[:-2]
+    num_arcs = discrete_latent.shape[-2]
+
+    # q(c | d, x)
+    # batch_shape [*shape]s
+    guide_continuous_dist = guide.get_continuous_dist(discrete_latent, obs)
+
+    # c ~ q(c | d, x)
+    # [num_particles, *shape, num_arcs, 3]
+    continuous_latent = guide_continuous_dist.sample((num_particles,))
+
+    # log q(c | d)
+    # [num_particles, *shape]
+    log_q_continuous = guide_continuous_dist.log_prob(continuous_latent)
+
+    # [num_particles, *shape, num_arcs, 2]
+    discrete_latent_expanded = discrete_latent[None].expand(*[num_particles, *shape, num_arcs, 2])
+
+    # log p(d, c)
+    # [num_particles, *shape]
+    log_p = generative_model.log_prob((discrete_latent_expanded, continuous_latent), obs)
+
+    return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
+
+
+def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, num_proposals):
+    """MWS loss for hybrid discrete-continuous models as described in
+    https://www.overleaf.com/project/5dfd4bbac2914e0001efb29b
+
+    Args:
+        generative_model: GenerativeModel object
+        guide: Guide object
+        memory: tensor of shape [num_data, memory_size, num_arcs, 2]
+        obs: tensor of shape [batch_size, num_rows, num_cols]
+        obs_id: long tensor of shape [batch_size]
+        num_particles: int
+        num_proposals: int
+
+    Returns:
+        loss: scalar that we call .backward() on and step the optimizer
+        memory
+    """
+
+    # TODO: CHECK!!!
+    num_arcs = memory.shape[2]
+    batch_size = obs.shape[0]
+    memory_size = memory.shape[1]
+    memory_latent = memory[obs_id]  # [batch_size, memory_size, num_arcs, 2]
+
+    # PROPOSE DISCRETE LATENT
+    # [batch_size, num_proposals, num_arcs, 2]
+    discrete = guide.sample_discrete(obs, num_proposals).permute(1, 0, 2, 3)
+
+    # UPDATE MEMORY
+    # [batch_size, memory_size + num_proposals, num_arcs, 2]
+    memory_and_latent = torch.cat([memory_latent, discrete], dim=1)
+    memory_and_latent_log_p = get_log_marginal_joint(
+        generative_model, guide, memory_and_latent, obs, num_particles=num_particles,
+    )  # [batch_size, memory_size + num_proposals]
+
+    # KEEP TOP `memory_size` ACCORDING TO log_p
+    # Sort log_ps, replace non-unique values with -inf, choose the top k
+    # remaining (valid as long as two distinct latents don't have the same
+    # logp)
+    # [batch_size, memory_size + num_proposals],
+    # [batch_size, memory_size + num_proposals]
+    sorted1, indices1 = memory_and_latent_log_p.sort(dim=1)
+
+    # NOTE: use latents for duplicate-detection because log prob is not
+    # accurate because of bug in torch.triangular_solve
+
+    # [batch_size, memory_size + num_proposals, num_arcs, 2]
+    # sorted_m[i, j, k, l] = memory_and_latent[i, indices1[i, j], k, l]
+    sorted_memory_and_latent_1 = memory_and_latent.gather(
+        1, indices1[..., None, None].expand(batch_size, memory_size + num_proposals, num_arcs, 2),
+    )
+
+    # [batch_size, memory_size + num_proposals - 1]
+    is_same = (
+        (sorted_memory_and_latent_1[:, 1:] == sorted_memory_and_latent_1[:, :-1])
+        .view(batch_size, memory_size + num_proposals - 1, -1)
+        .all(dim=-1)
+    )
+
+    # [batch_size, memory_size + num_proposals - 1]
+    sorted1[:, 1:].masked_fill_(is_same, float("-inf"))
+    sorted2, indices2 = sorted1.sort(dim=1)
+    # [batch_size, memory_size]
+    memory_log_p = sorted2[:, -memory_size:]
+    # [batch_size, memory_size]
+    indices = indices1.gather(1, indices2)[:, -memory_size:]
+
+    # [batch_size, memory_size, num_arcs, 2]
+    memory_latent = torch.gather(
+        memory_and_latent,
+        1,
+        indices[:, :, None, None].expand(batch_size, memory_size, num_arcs, 2).contiguous(),
+    )
+
+    # COMPUTE LOSSES
+    guide_continuous_dist = guide.get_continuous_dist(
+        memory
+    )  # batch_shape [batch_size, memory_size]
+    continuous = guide_continuous_dist.sample()  # [batch_size, memory_size, num_arcs, 3]
+    log_q_continuous = guide_continuous_dist.log_prob(continuous)  # [batch_size, memory_size]
+    log_uniform = -torch.ones_like(memory) * math.log(memory_size)  # [batch_size, memory_size]
+
+    log_p = generative_model.log_prob((memory, continuous))  # [batch_size, memory_size]
+    log_q = guide.log_prob((memory, continuous))  # [batch_size, memory_size]
+
+    normalized_weight = util.exponentiate_and_normalize(
+        log_p - (log_uniform + log_q_continuous)
+    ).detach()  # [batch_size, memory_size]
+
+    generative_model_loss = -(log_p * normalized_weight).sum(dim=1)
+    guide_loss = -(log_q * normalized_weight).sum(dim=1)
+
+    return generative_model_loss + guide_loss, memory
+
+
 def get_sleep_loss(generative_model, inference_network, num_samples=1):
     """Returns:
         loss: scalar that we call .backward() on and step the optimizer.

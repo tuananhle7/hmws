@@ -60,22 +60,14 @@ def main(args):
     checkpoint_path = util.get_checkpoint_path(args)
     if not Path(checkpoint_path).exists():
         util.logging.info("Training from scratch")
-        (generative_model, inference_network, optimizer, memory, stats) = util.init(args, device)
+        (model, optimizer, memory, stats) = util.init(args, device)
     else:
-        (
-            generative_model,
-            inference_network,
-            optimizer,
-            memory,
-            stats,
-            run_args,
-        ) = util.load_checkpoint(checkpoint_path, device)
+        (model, optimizer, memory, stats, run_args,) = util.load_checkpoint(checkpoint_path, device)
 
     # train
     if not Path(checkpoint_path).is_file():
         train.train_sleep(
-            generative_model,
-            inference_network,
+            model,
             min(500, args.batch_size * args.num_particles),
             args.pretrain_iterations,
             args.log_interval,
@@ -103,8 +95,7 @@ def main(args):
         raise NotImplementedError
     train.train(
         args.algorithm,
-        generative_model,
-        inference_network,
+        model,
         memory,
         data_loader,
         test_data_loader,
@@ -128,6 +119,7 @@ def get_args_parser():
     parser.add_argument("--num-characters-per-alphabet", type=int, default=5, help=" ")
 
     # init
+    parser.add_argument("--motor-noise", action="store_true", help="")
     parser.add_argument(
         "--likelihood", default="learned-affine", choices=["bernoulli", "learned-affine"], help=" ",
     )

@@ -7,8 +7,7 @@ import shutil
 
 def train(
     algorithm,
-    generative_model,
-    inference_network,
+    model,
     memory,
     data_loader,
     test_data_loader,
@@ -17,6 +16,7 @@ def train(
     stats,
     run_args=None,
 ):
+    generative_model, guide = model
     checkpoint_iterations = util.get_checkpoint_iterations(algorithm_params["num_iterations"])
     device = next(generative_model.parameters()).device
 
@@ -41,11 +41,7 @@ def train(
                 elif algorithm == "vimco":
                     loss_fn = losses.get_vimco_loss
                 loss, theta_loss, phi_loss = loss_fn(
-                    generative_model,
-                    inference_network,
-                    obs,
-                    obs_id,
-                    algorithm_params["num_particles"],
+                    generative_model, guide, obs, obs_id, algorithm_params["num_particles"],
                 )
             elif algorithm == "mws":
                 (
@@ -57,12 +53,7 @@ def train(
                     novel_proportion,
                     new_map,
                 ) = losses.get_mws_loss(
-                    generative_model,
-                    inference_network,
-                    memory,
-                    obs,
-                    obs_id,
-                    algorithm_params["num_particles"],
+                    generative_model, guide, memory, obs, obs_id, algorithm_params["num_particles"],
                 )
 
             # Backprop
@@ -128,7 +119,7 @@ def train(
             if iteration % algorithm_params["test_interval"] == 0:
                 log_p, kl = eval_gen_inf(
                     generative_model,
-                    inference_network,
+                    guide,
                     test_data_loader,
                     algorithm_params["test_num_particles"],
                 )
@@ -140,8 +131,7 @@ def train(
             ):
                 util.save_checkpoint(
                     algorithm_params["checkpoint_path"],
-                    generative_model,
-                    inference_network,
+                    (generative_model, guide),
                     optimizer,
                     memory,
                     stats,
@@ -157,8 +147,7 @@ def train(
 
     util.save_checkpoint(
         algorithm_params["checkpoint_path"],
-        generative_model,
-        inference_network,
+        (generative_model, guide),
         optimizer,
         memory,
         stats,
@@ -166,12 +155,12 @@ def train(
     )
 
 
-def get_log_p_and_kl(generative_model, inference_network, obs, obs_id, num_particles):
+def get_log_p_and_kl(generative_model, guide, obs, obs_id, num_particles):
     """Compute log weight and log prob of inference network.
 
     Args:
         generative_model: models.GenerativeModel object
-        inference_network: models.InferenceNetwork object
+        guide: models.InferenceNetwork object
         obs: tensor of shape [batch_size, num_data * num_dim]
         num_particles: int
 
@@ -179,13 +168,13 @@ def get_log_p_and_kl(generative_model, inference_network, obs, obs_id, num_parti
         log_p: tensor [batch_size]
         kl: tensor [batch_size]
     """
-    latent_dist = inference_network.get_latent_dist(obs)
-    latent = inference_network.sample_from_latent_dist(latent_dist, num_particles)
+    latent_dist = guide.get_latent_dist(obs)
+    latent = guide.sample_from_latent_dist(latent_dist, num_particles)
     latent_log_prob, obs_log_prob = generative_model.get_log_probss(latent, obs, obs_id)
     latent_log_prob = latent_log_prob.transpose(0, 1)
     obs_log_prob = obs_log_prob.transpose(0, 1)
     log_joint = latent_log_prob + obs_log_prob
-    log_q = inference_network.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
+    log_q = guide.get_log_prob_from_latent_dist(latent_dist, latent).transpose(0, 1)
     log_weight = log_joint - log_q
 
     log_p = torch.logsumexp(log_weight, dim=1) - math.log(num_particles)
@@ -196,14 +185,14 @@ def get_log_p_and_kl(generative_model, inference_network, obs, obs_id, num_parti
     return log_p, kl, reconstruction_log_prob
 
 
-def eval_gen_inf(generative_model, inference_network, data_loader, num_particles):
+def eval_gen_inf(generative_model, guide, data_loader, num_particles):
     log_p_total = 0
     kl_total = 0
     reconstruction_log_prob_total = 0
     num_obs = len(data_loader.dataset)
     for obs_id, obs in data_loader:
         log_p, kl, reconstruction_log_prob = get_log_p_and_kl(
-            generative_model, inference_network, obs, obs_id, num_particles
+            generative_model, guide, obs, obs_id, num_particles
         )
         log_p_total += torch.sum(log_p).item() / num_obs
         kl_total += torch.sum(kl).item() / num_obs
@@ -211,8 +200,9 @@ def eval_gen_inf(generative_model, inference_network, data_loader, num_particles
     return log_p_total, reconstruction_log_prob_total
 
 
-def train_sleep(generative_model, inference_network, num_samples, num_iterations, log_interval):
-    optimizer_phi = torch.optim.Adam(inference_network.parameters())
+def train_sleep(model, num_samples, num_iterations, log_interval):
+    generative_model, guide = model
+    optimizer_phi = torch.optim.Adam(guide.parameters())
     sleep_losses = []
     device = next(generative_model.parameters()).device
     if device.type == "cuda":
@@ -222,7 +212,7 @@ def train_sleep(generative_model, inference_network, num_samples, num_iterations
     iteration = 0
     while iteration < num_iterations:
         optimizer_phi.zero_grad()
-        sleep_phi_loss = losses.get_sleep_loss(generative_model, inference_network, num_samples)
+        sleep_phi_loss = losses.get_sleep_loss(generative_model, guide, num_samples)
         sleep_phi_loss.backward()
         optimizer_phi.step()
 
