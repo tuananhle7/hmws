@@ -130,19 +130,69 @@ def plot_kls(path, kls):
     plt.close(fig)
 
 
+def sample_from_guide(guide, obs):
+    """
+    Args:
+        guide
+        obs [batch_size, num_rows, num_cols]
+
+    Returns:
+        ids_and_on_offs [batch_size, num_arcs, 2]
+    """
+    if isinstance(guide, models.Guide):
+        return guide.sample(obs, 1)[0]
+    elif isinstance(guide, models_continuous.Guide):
+        return guide.sample(obs, 1)[0][0]
+
+
+def sample_from_memory(memory, generative_model, obs, obs_id):
+    """
+    Args:
+        memory
+        generative_model
+        obs [batch_size, num_rows, num_cols]
+        obs_id
+
+    Returns:
+        ids_and_on_offs [batch_size, num_arcs, 2]
+    """
+    # [batch_size, memory_size, num_arcs, 2]
+    memory_latent = memory[obs_id]
+    memory_latent_transposed = memory_latent.transpose(
+        0, 1
+    ).contiguous()  # [memory_size, batch_size, num_arcs, 2]
+    if isinstance(generative_model, models.GenerativeModel):
+        latent = memory_latent_transposed
+    elif isinstance(generative_model, models_continuous.GenerativeModel):
+        motor_noise = torch.zeros(
+            [*memory_latent_transposed.shape[:-1], 3], device=memory_latent_transposed.device,
+        )
+        latent = memory_latent_transposed, motor_noise
+    memory_log_p = generative_model.get_log_prob(latent, obs)  # [memory_size, batch_size]
+    dist = torch.distributions.Categorical(
+        probs=util.exponentiate_and_normalize(memory_log_p.t(), dim=1)
+    )
+    sampled_memory_id = dist.sample()  # [batch_size]
+    return torch.gather(
+        memory_latent_transposed,
+        0,
+        sampled_memory_id[None, :, None, None].repeat(1, 1, generative_model.num_arcs, 2),
+    )[
+        0
+    ]  # [batch_size, num_arcs, 2]
+
+
 def plot_reconstructions(
     path,
+    test,
     generative_model,
-    inference_network,
+    guide,
     num_reconstructions,
     dataset,
     data_location,
-    dataset_size,
     memory=None,
     resolution=28,
-    obs_ids=None,
 ):
-    show_obs_ids = obs_ids is None
     util.logging.info("plot_reconstructions")
     (
         data_train,
@@ -152,76 +202,31 @@ def plot_reconstructions(
         target_valid,
         target_test,
     ) = data.load_binarized_omniglot_with_targets(location=args.data_location)
-    if dataset_size is not None:
-        data_train, target_train = data.split_data_by_target(
-            data_train, target_train, num_data_per_target=dataset_size // 50
-        )
-    if memory is None:
-        ids = False
+
+    if test:
+        data_test = torch.tensor(data_test, device=device)
+        obs_id = torch.tensor(
+            np.random.choice(np.arange(len(data_test)), num_reconstructions), device=device
+        ).long()
+        obs = data_test[obs_id].float().view(-1, 28, 28)
+        obs_id = None
     else:
-        ids = True
-    data_train = torch.tensor(data_train, device=device)
-    target_train = torch.tensor(target_train, device=device)
-    if obs_ids is None:
+        data_train = torch.tensor(data_train, device=device)
         obs_id = torch.tensor(
             np.random.choice(np.arange(len(data_train)), num_reconstructions), device=device
         ).long()
-    else:
-        obs_id = torch.tensor(obs_ids, device=device).long()
-        num_reconstructions = len(obs_ids)
-
-    obs = data_train[obs_id].float().view(-1, 28, 28)
+        obs = data_train[obs_id].float().view(-1, 28, 28)
 
     start_point = torch.Tensor([0.5, 0.5]).unsqueeze(0).expand(num_reconstructions, -1).to(device)
     if memory is None:
         # [batch_size, num_arcs, 2]
-        latent = inference_network.sample(obs, 1)[0]
-        latent2 = inference_network.sample(obs, 1)[0]
+        ids_and_on_offs = sample_from_guide(guide, obs)
     else:
-        # [batch_size, memory_size, num_arcs, 2]
-        memory_latent = memory[obs_id]
-        memory_latent_transposed = memory_latent.transpose(
-            0, 1
-        ).contiguous()  # [memory_size, batch_size, num_arcs, 2]
-        if isinstance(generative_model, models.GenerativeModel):
-            latent = memory_latent_transposed
-        elif isinstance(generative_model, models_continuous.GenerativeModel):
-            motor_noise = torch.zeros(
-                [*memory_latent_transposed.shape[:-1], 3], device=memory_latent_transposed.device,
-            )
-            latent = memory_latent_transposed, motor_noise
-        memory_log_p = generative_model.get_log_prob(latent, obs)  # [memory_size, batch_size]
-        dist = torch.distributions.Categorical(
-            probs=util.exponentiate_and_normalize(memory_log_p.t(), dim=1)
-        )
-        sampled_memory_id = dist.sample()  # [batch_size]
-        latent = torch.gather(
-            memory_latent_transposed,
-            0,
-            sampled_memory_id[None, :, None, None].repeat(1, 1, generative_model.num_arcs, 2),
-        )[
-            0
-        ]  # [batch_size, num_arcs, 2]
-        # sampled_memory_id2 = dist.sample()  # [batch_size]
-        # latent2 = torch.gather(
-        #    memory_latent_transposed,
-        #    0,
-        #    sampled_memory_id2[None, :, None, None].repeat(
-        #        1, 1, generative_model.num_arcs, 2)
-        # )[0]  # [batch_size, num_arcs, 2]
+        # [batch_size, num_arcs, 2]
+        ids_and_on_offs = sample_from_memory(memory, generative_model, obs, obs_id)
 
-    # log_prob, accuracy = generative_model.get_log_prob(
-    #    latent2[None], obs, obs_id, get_accuracy=True)
-    # sort_by = accuracy*100 if accuracy is not None else log_prob[0]
-    # sort_idxs = torch.sort(sort_by, descending=True).indices
-    # obs = obs[sort_idxs]
-    # obs_id = obs_id[sort_idxs]
-    # latent = latent[sort_idxs]
-    # latent2 = latent2[sort_idxs]
-    # sort_by = sort_by[sort_idxs]
-
-    ids = latent[..., 0]
-    on_offs = latent[..., 1]
+    ids = ids_and_on_offs[..., 0]
+    on_offs = ids_and_on_offs[..., 1]
     num_arcs = ids.shape[1]
 
     reconstructed_images = []
@@ -237,18 +242,6 @@ def plot_reconstructions(
                 resolution,
             ).detach()
         )
-
-    ### plot another sample
-    # ids2 = latent2[..., 0]
-    # on_offs2 = latent2[..., 1]
-    # reconstructed_images.append(
-    #    models.get_image_probs(
-    #        ids2[:, :(num_arcs)], on_offs2[:, :(num_arcs)],
-    #        start_point, generative_model.get_primitives(),
-    #        generative_model.get_rendering_params(),
-    #        resolution, resolution
-    #    ).detach()
-    # )
 
     fig, axss = plt.subplots(
         num_reconstructions,
@@ -270,33 +263,14 @@ def plot_reconstructions(
                     ax.imshow(reconstructed_images[-k][i].cpu(), "Greys", vmin=0, vmax=1)
                     break
 
-        if show_obs_ids:
-            axs[0].text(
-                0.5,
-                0.99,
-                str(obs_id[i].item()),
-                horizontalalignment="center",
-                verticalalignment="top",
-                fontsize=12,
-            )
-            #    ax.text(
-            #        .5, .99,
-            #        "({:.2f})".format(sort_by[i].item()),
-            #        horizontalalignment='center', verticalalignment='top',
-            #        transform=ax.transAxes, fontsize=12)
-
-            # if j < num_arcs:
-            #    ax.text(
-            #        .99, .99,
-            #        '{} {}'.format(ids[i, j], 'ON' if on_offs[i, j] else 'OFF'),
-            #        horizontalalignment='right', verticalalignment='top',
-            #        transform=ax.transAxes)
-            # else:
-            #    ax.text(
-            #        .5, .99,
-            #        "({:.2f})".format(sort_by[i].item()),
-            #        horizontalalignment='center', verticalalignment='top',
-            #        transform=ax.transAxes, fontsize=12)
+        # axs[0].text(
+        #     0.5,
+        #     0.99,
+        #     str(obs_id[i].item()),
+        #     horizontalalignment="center",
+        #     verticalalignment="top",
+        #     fontsize=12,
+        # )
 
     for axs in axss:
         for ax in axs:
@@ -391,18 +365,6 @@ def plot_prior(path, generative_model, num_samples, resolution=28):
                 ids_and_on_offs = latent[0]
             arc_ids = ids_and_on_offs[i * num_cols + j][:, 0]
             on_off_ids = ids_and_on_offs[i * num_cols + j][:, 1]
-            latent_str = " ".join(
-                [
-                    "{}{}".format(int(arc_id.item()), "" if int(on_off_id.item()) == 1 else "-")
-                    for arc_id, on_off_id in zip(arc_ids, on_off_ids)
-                ]
-            )
-            # ax.text(
-            #    .99, .99,
-            #    latent_str,
-            #    horizontalalignment='right', verticalalignment='top',
-            #    transform=ax.transAxes,
-            #    fontsize=6)
 
     fig.tight_layout(pad=1)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -527,74 +489,6 @@ def plot_renderer(path):
     plt.close(fig)
 
 
-# helper function for plot_alphabets
-def tile(obs, num_rows, num_cols, resolution=28):
-    result = torch.zeros(num_rows * resolution, num_cols * resolution)
-    for i in range(num_rows):
-        for j in range(num_cols):
-            if i * num_cols + j < len(obs):
-                result[
-                    i * resolution : (i + 1) * resolution, j * resolution : (j + 1) * resolution
-                ] = obs[i * num_cols + j]
-    return result
-
-
-# helper function for plot_alphabets
-def get_obs_probs_from_alphabet(generative_model, alphabet_id, num_samples, resolution=28):
-    alphabet = F.one_hot(alphabet_id, 50).float()
-    latent, obs = generative_model.sample_latent_and_obs(alphabet[None], num_samples)
-    latent = latent[:, 0, :, :]
-    obs = obs[:, 0, :, :]
-    generative_model.num_rows, generative_model.num_cols = resolution, resolution
-    obs_probs = generative_model.get_obs_params(latent).sigmoid().detach()
-    generative_model.num_rows, generative_model.num_cols = 28, 28
-    return obs_probs
-
-
-# helper function for plot_alphabets
-def get_reconstructions(
-    obs_id, obs, generative_model, inference_network, memory=None, resolution=28
-):
-    batch_size = len(obs_id)
-    start_point = torch.tensor([0.5, 0.5], device=device).unsqueeze(0).expand(batch_size, -1)
-    if memory is None:
-        # [batch_size, num_arcs, 2]
-        latent = inference_network.sample(obs, 1)[0]
-    else:
-        # [batch_size, memory_size, num_arcs, 2]
-        memory_latent = memory[obs_id]
-        memory_latent_transposed = memory_latent.transpose(
-            0, 1
-        ).contiguous()  # [memory_size, batch_size, num_arcs, 2]
-        memory_log_p = generative_model.get_log_prob(
-            memory_latent_transposed, obs, obs_id
-        )  # [memory_size, batch_size]
-        dist = torch.distributions.Categorical(
-            probs=util.exponentiate_and_normalize(memory_log_p.t(), dim=1)
-        )
-        sampled_memory_id = dist.sample()  # [batch_size]
-        latent = torch.gather(
-            memory_latent_transposed,
-            0,
-            sampled_memory_id[None, :, None, None].repeat(1, 1, generative_model.num_arcs, 2),
-        )[
-            0
-        ]  # [batch_size, num_arcs, 2]
-
-    ids = latent[..., 0]
-    on_offs = latent[..., 1]
-
-    return models.get_image_probs(
-        ids,
-        on_offs,
-        start_point,
-        generative_model.get_primitives(),
-        generative_model.get_rendering_params(),
-        resolution,
-        resolution,
-    ).detach()
-
-
 def main(args):
     # plot_renderer('{}/renderer.pdf'.format(args.diagnostics_dir))
     dataset = "omniglot"
@@ -609,13 +503,9 @@ def main(args):
 
     for checkpoint_path in checkpoint_paths:
         try:
-            (
-                (generative_model, inference_network),
-                optimizer,
-                memory,
-                stats,
-                run_args,
-            ) = util.load_checkpoint(checkpoint_path, device=device)
+            ((generative_model, guide), optimizer, memory, stats, run_args,) = util.load_checkpoint(
+                checkpoint_path, device=device
+            )
         except FileNotFoundError as e:
             print(e)
             if "No such file or directory" in str(e):
@@ -653,17 +543,35 @@ def main(args):
             plot_log_ps(f"{diagnostics_dir}/logp.pdf", stats.log_ps)
             plot_kls(f"{diagnostics_dir}/kl.pdf", stats.kls)
 
-        plot_reconstructions(
-            f"{diagnostics_dir}/reconstructions/{iteration}.pdf",
-            generative_model,
-            inference_network,
-            args.num_reconstructions,
-            dataset,
-            args.data_location,
-            dataset_size,
-            memory,
-            args.resolution,
-        )
+        for test in [False, True]:
+            test_str = "test" if test else "train"
+
+            # Guide
+            plot_reconstructions(
+                f"{diagnostics_dir}/reconstructions/{test_str}/guide/{iteration}.pdf",
+                test,
+                generative_model,
+                guide,
+                args.num_reconstructions,
+                dataset,
+                args.data_location,
+                None,
+                args.resolution,
+            )
+
+            # Memory
+            if not test and memory is not None:
+                plot_reconstructions(
+                    f"{diagnostics_dir}/reconstructions/{test_str}/memory/{iteration}.pdf",
+                    test,
+                    generative_model,
+                    guide,
+                    args.num_reconstructions,
+                    dataset,
+                    args.data_location,
+                    memory,
+                    args.resolution,
+                )
 
         plot_primitives(f"{diagnostics_dir}/primitives/{iteration}.pdf", generative_model)
         plot_prior(
