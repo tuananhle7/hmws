@@ -496,7 +496,7 @@ class GenerativeModel(nn.Module):
         else:
             raise NotImplementedError
 
-    def get_log_prob(self, latent, obs, obs_id, get_accuracy=False):
+    def get_log_prob(self, latent, obs, obs_id=None, get_accuracy=False):
         """Log of joint probability.
 
         Args:

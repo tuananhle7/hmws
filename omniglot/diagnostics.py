@@ -6,6 +6,7 @@ import torch
 import data
 import numpy as np
 import models
+import models_continuous
 import math
 import random
 import rendering
@@ -22,7 +23,6 @@ def plot_losses(
     theta_losses,
     phi_losses,
     dataset_size,
-    condition_on_alphabet,
     prior_losses=None,
     accuracies=None,
     novel_proportions=None,
@@ -39,18 +39,9 @@ def plot_losses(
     ax.plot(theta_losses)
     if prior_losses is not None:
         ax.plot(np.abs(prior_losses))  # abs because I accidentally saved them negative whoops
-        if condition_on_alphabet:
-            ax.plot(
-                np.ones(len(prior_losses)) * math.log(dataset_size / 50),
-                color="gray",
-                linestyle="dashed",
-            )
-        else:
-            ax.plot(
-                np.ones(len(prior_losses)) * math.log(dataset_size),
-                color="gray",
-                linestyle="dashed",
-            )
+        ax.plot(
+            np.ones(len(prior_losses)) * math.log(dataset_size), color="gray", linestyle="dashed",
+        )
 
     ax.set_xlabel("iteration (batch_split={})".format(batch_split))
     ax.set_ylabel("theta loss")
@@ -180,9 +171,6 @@ def plot_reconstructions(
         num_reconstructions = len(obs_ids)
 
     obs = data_train[obs_id].float().view(-1, 28, 28)
-    if generative_model.use_alphabet:
-        alphabet = torch.tensor(target_train[obs_id], device=device).float()
-        obs = (obs, alphabet)
 
     start_point = torch.Tensor([0.5, 0.5]).unsqueeze(0).expand(num_reconstructions, -1).to(device)
     if memory is None:
@@ -195,9 +183,14 @@ def plot_reconstructions(
         memory_latent_transposed = memory_latent.transpose(
             0, 1
         ).contiguous()  # [memory_size, batch_size, num_arcs, 2]
-        memory_log_p = generative_model.get_log_prob(
-            memory_latent_transposed, obs, obs_id
-        )  # [memory_size, batch_size]
+        if isinstance(generative_model, models.GenerativeModel):
+            latent = memory_latent_transposed
+        elif isinstance(generative_model, models_continuous.GenerativeModel):
+            motor_noise = torch.zeros(
+                [*memory_latent_transposed.shape[:-1], 3], device=memory_latent_transposed.device,
+            )
+            latent = memory_latent_transposed, motor_noise
+        memory_log_p = generative_model.get_log_prob(latent, obs)  # [memory_size, batch_size]
         dist = torch.distributions.Categorical(
             probs=util.exponentiate_and_normalize(memory_log_p.t(), dim=1)
         )
@@ -265,10 +258,7 @@ def plot_reconstructions(
         sharey=False,
     )
     for i, axs in enumerate(axss):
-        if generative_model.use_alphabet:
-            obs_ = obs[0][i]
-        else:
-            obs_ = obs[i]
+        obs_ = obs[i]
         axs[0].imshow(obs_.cpu(), "Greys", vmin=0, vmax=1)
         for j, ax in enumerate(axs[1:]):
             l = len(axs[1:])
@@ -395,8 +385,12 @@ def plot_prior(path, generative_model, num_samples, resolution=28):
             sns.despine(ax=ax, left=True, right=True, top=True, bottom=True)
             ax.set_xticks([])
             ax.set_yticks([])
-            arc_ids = latent[i * num_cols + j][:, 0]
-            on_off_ids = latent[i * num_cols + j][:, 1]
+            if isinstance(generative_model, models.GenerativeModel):
+                ids_and_on_offs = latent
+            elif isinstance(generative_model, models_continuous.GenerativeModel):
+                ids_and_on_offs = latent[0]
+            arc_ids = ids_and_on_offs[i * num_cols + j][:, 0]
+            on_off_ids = ids_and_on_offs[i * num_cols + j][:, 1]
             latent_str = " ".join(
                 [
                     "{}{}".format(int(arc_id.item()), "" if int(on_off_id.item()) == 1 else "-")
@@ -601,137 +595,6 @@ def get_reconstructions(
     ).detach()
 
 
-def plot_alphabets(
-    path,
-    generative_model,
-    dataset_size,
-    data_location,
-    inference_network,
-    memory=None,
-    resolution=28,
-    alphabet_ids=None,
-    num_rows=4,
-    num_cols=5,
-):
-
-    show_alphabet_ids = alphabet_ids is None
-    util.logging.info("plot_alphabets")
-    (
-        data_train,
-        data_valid,
-        data_test,
-        target_train,
-        target_valid,
-        target_test,
-    ) = data.load_binarized_omniglot_with_targets(location=data_location)
-
-    if dataset_size is not None:
-        data_train, target_train = data.split_data_by_target(
-            data_train, target_train, num_data_per_target=dataset_size // 50
-        )
-
-    data_train = torch.tensor(data_train, dtype=torch.float, device=device)
-    target_train = torch.tensor(target_train, dtype=torch.float, device=device)
-    target_train_numeric = torch.mv(target_train, torch.arange(50, device=device).float()).long()
-
-    if alphabet_ids is None:
-        num_alphabets = 50
-        alphabet_ids = torch.arange(num_alphabets, device=device)
-    else:
-        num_alphabets = len(alphabet_ids)
-        alphabet_ids = torch.tensor(alphabet_ids, device=device).long()
-    # alphabet_ids = torch.randint(50, (num_alphabets,))
-
-    num_obs_per_alphabet = num_rows * num_cols
-    num_generalizations = 1
-    fig, axss = plt.subplots(
-        num_alphabets,
-        (2 + num_generalizations),
-        figsize=((2 + num_generalizations) * num_cols / 2, num_alphabets * num_rows / 2),
-        dpi=200,
-    )
-
-    for axs, alphabet_id in zip(axss, alphabet_ids):
-        axs[0].imshow(
-            tile(
-                data_train[target_train_numeric == alphabet_id][:num_obs_per_alphabet],
-                num_rows,
-                num_cols,
-                28,
-            ),
-            cmap="Greys",
-            vmin=0,
-            vmax=1,
-        )
-        torch.manual_seed(0)
-        axs[1].imshow(
-            tile(
-                get_reconstructions(
-                    obs_id=torch.arange(len(data_train), device=device)[
-                        target_train_numeric == alphabet_id
-                    ],
-                    obs=(
-                        data_train[target_train_numeric == alphabet_id],
-                        target_train[target_train_numeric == alphabet_id],
-                    ),
-                    generative_model=generative_model,
-                    inference_network=inference_network,
-                    memory=memory,
-                    resolution=resolution,
-                ),
-                num_rows,
-                num_cols,
-                resolution,
-            ),
-            cmap="Greys",
-            vmin=0,
-            vmax=1,
-        )
-        for i in range(2, num_generalizations + 2):
-            try:
-                axs[i].imshow(
-                    tile(
-                        get_obs_probs_from_alphabet(
-                            generative_model, alphabet_id, num_obs_per_alphabet, resolution
-                        ),
-                        num_rows,
-                        num_cols,
-                        resolution=resolution,
-                    ),
-                    cmap="Greys",
-                    vmin=0,
-                    vmax=1,
-                )
-            except NotImplementedError:
-                util.logging.info("Can't sample from this model")
-                return
-        if show_alphabet_ids:
-            axs[0].text(
-                0.5,
-                0.99,
-                str(alphabet_id.item()),
-                horizontalalignment="center",
-                verticalalignment="bottom",
-                transform=axs[0].transAxes,
-                fontsize=10,
-            )
-
-    for axs in axss:
-        for ax in axs:
-            ax.set_xticks([])
-            ax.set_yticks([])
-            sns.despine(ax=ax, left=True, right=True, top=True, bottom=True)
-    axss[0, 0].set_title("Alphabet")
-    axss[0, 1].set_title("Reconstructions")
-    axss[0, 2].set_title("Generalizations")
-
-    fig.tight_layout(pad=1.0)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
-
-
 def main(args):
     # plot_renderer('{}/renderer.pdf'.format(args.diagnostics_dir))
     dataset = "omniglot"
@@ -747,8 +610,7 @@ def main(args):
     for checkpoint_path in checkpoint_paths:
         try:
             (
-                generative_model,
-                inference_network,
+                (generative_model, inference_network),
                 optimizer,
                 memory,
                 stats,
@@ -774,25 +636,11 @@ def main(args):
         diagnostics_dir = util.get_save_dir(run_args)
         Path(diagnostics_dir).mkdir(parents=True, exist_ok=True)
 
-        if run_args.condition_on_alphabet and dataset == "omniglot":
-            plot_alphabets(
-                f"{diagnostics_dir}/alphabets/{iteration}.pdf",
-                generative_model,
-                dataset_size,
-                run_args.data_location,
-                inference_network,
-                memory,
-                resolution=args.resolution,
-                num_rows=args.alphabet_num_rows,
-                num_cols=args.alphabet_num_cols,
-            )
-
         plot_losses(
             f"{diagnostics_dir}/losses.pdf",
             stats.theta_losses,
             stats.phi_losses,
             dataset_size,
-            run_args.condition_on_alphabet,
             stats.prior_losses,
             stats.accuracies,
             stats.novel_proportions,
@@ -805,26 +653,22 @@ def main(args):
             plot_log_ps(f"{diagnostics_dir}/logp.pdf", stats.log_ps)
             plot_kls(f"{diagnostics_dir}/kl.pdf", stats.kls)
 
-        if not run_args.condition_on_alphabet:
-            plot_reconstructions(
-                f"{diagnostics_dir}/reconstructions/{iteration}.pdf",
-                generative_model,
-                inference_network,
-                args.num_reconstructions,
-                dataset,
-                args.data_location,
-                dataset_size,
-                memory,
-                args.resolution,
-            )
+        plot_reconstructions(
+            f"{diagnostics_dir}/reconstructions/{iteration}.pdf",
+            generative_model,
+            inference_network,
+            args.num_reconstructions,
+            dataset,
+            args.data_location,
+            dataset_size,
+            memory,
+            args.resolution,
+        )
 
         plot_primitives(f"{diagnostics_dir}/primitives/{iteration}.pdf", generative_model)
-        if (not run_args.condition_on_alphabet) and (not generative_model.likelihood == "classify"):
-            plot_prior(
-                f"{diagnostics_dir}/prior/{iteration}.pdf",
-                generative_model,
-                args.num_prior_samples,
-            )
+        plot_prior(
+            f"{diagnostics_dir}/prior/{iteration}.pdf", generative_model, args.num_prior_samples,
+        )
         print("-----------------")
 
 
@@ -846,13 +690,10 @@ def get_parser():
     parser.add_argument("--resolution", type=int, default=28)
     parser.add_argument("--num-reconstructions", type=int, default=100, help=" ")
     parser.add_argument("--num-prior-samples", type=int, default=100)
-    parser.add_argument("--alphabet-num-rows", type=int, default=4)
-    parser.add_argument("--alphabet-num-cols", type=int, default=5)
 
     # for custom checkpoints
     parser.add_argument("--checkpoint-iteration", default=None, type=int)
     parser.add_argument("--dataset-size", default=500, type=int)
-    parser.add_argument("--alphabet-ids", default=None, type=str)
     parser.add_argument("--obs-ids", default=None, type=str)
     return parser
 

@@ -102,6 +102,10 @@ class GenerativeModel(nn.Module):
         self.num_arcs = self.ids_and_on_offs_generative_model.num_arcs
         self.num_primitives = self.ids_and_on_offs_generative_model.num_primitives
         self.generative_motor_noise_dist = GenerativeMotorNoiseDist(self.num_arcs)
+        self.get_primitives = self.ids_and_on_offs_generative_model.get_primitives
+        self.get_rendering_params = self.ids_and_on_offs_generative_model.get_rendering_params
+        self.num_rows = self.ids_and_on_offs_generative_model.num_rows
+        self.num_cols = self.ids_and_on_offs_generative_model.num_cols
 
     @property
     def start_point(self):
