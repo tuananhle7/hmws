@@ -375,6 +375,8 @@ def plot_prior(path, generative_model, num_samples, resolution=28):
 
 def plot_renderer(path):
     util.logging.info("plot_renderer")
+
+    # Set up sweep
     num_interpolations = 20
 
     dx = torch.linspace(-0.4, 0.4, num_interpolations)
@@ -396,20 +398,27 @@ def plot_renderer(path):
     bias_constant = -3
     constants = [dx_constant, dy_constant, theta_constant, sharpness_constant, width_constant]
 
+    # Plot
     num_rows, num_cols = 100, 100
     fig, axss = plt.subplots(
         7, num_interpolations, figsize=(num_interpolations * 2, 7 * 2), dpi=200
     )
 
-    for interpolation_id in range(2, 3):
+    # Sweep over `dx`, `dy`, `theta`, `sharpness`, `width`
+    for interpolation_id in range(5):
+        # Render
         # [num_interpolations, 1, 7]
         arcs = torch.cat(
+            # [x_start, y_start]
             [torch.tensor(0.5).repeat(num_interpolations, 2)]
+            # keep properties before `interpolation_id` constant
             + [
                 torch.tensor(constants[i]).repeat(num_interpolations, 1)
                 for i in range(interpolation_id)
             ]
+            # interpolate `interpolation_id`'s property
             + [interpolations[interpolation_id][:, None]]
+            # keep properties after `interpolation_id` constant
             + [
                 torch.tensor(constants[i]).repeat(num_interpolations, 1)
                 for i in range(interpolation_id + 1, 5)
@@ -424,60 +433,69 @@ def plot_renderer(path):
         rendering_params = torch.tensor([scale_constant, bias_constant])
 
         probs = rendering.get_probs(arcs, on_offs, rendering_params, num_rows, num_cols)
+
+        # Plot rendered images
         for i in range(num_interpolations):
             ax = axss[interpolation_id, i]
             ax.imshow(probs[i], vmin=0, vmax=1, cmap="Greys")
             if interpolations_str[interpolation_id] == "theta":
-                interpolation = "{:.2f}°".format(
-                    math.degrees(interpolations[interpolation_id][i].item())
-                )
+                interpolation = f"{math.degrees(interpolations[interpolation_id][i].item()):.2f}°"
             else:
-                interpolation = "{:.2f}".format(interpolations[interpolation_id][i])
-            # ax.text(
-            #    .99, .99,
-            #    '{} = {}'.format(
-            #        interpolations_str[interpolation_id], interpolation),
-            #    horizontalalignment='right', verticalalignment='top',
-            #    transform=ax.transAxes)
+                interpolation = f"{interpolations[interpolation_id][i]:.2f}"
+            ax.text(
+                0.99,
+                0.99,
+                f"{interpolations_str[interpolation_id]} = {interpolation}",
+                horizontalalignment="right",
+                verticalalignment="top",
+                transform=ax.transAxes,
+            )
 
-            # Rendering params
-            # [1, 1, 7]
-            arcs = torch.cat(
-                [torch.tensor(0.5).repeat(1, 2)]
-                + [torch.tensor(constants[i]).repeat(1, 1) for i in range(5)],
-                dim=1,
-            )[:, None, :]
+    # Sweep over `scale`, `bias`
+    for i in range(num_interpolations):
+        # Rendering params
+        # [1, 1, 7]
+        arcs = torch.cat(
+            [torch.tensor(0.5).repeat(1, 2)]
+            + [torch.tensor(constants[i]).repeat(1, 1) for i in range(5)],
+            dim=1,
+        )[:, None, :]
 
-            # [1, 1]
-            on_offs = torch.ones(1, 1).long()
+        # [1, 1]
+        on_offs = torch.ones(1, 1).long()
 
-            # Scale
-            # [2]
-            # rendering_params = torch.tensor([scale[i], bias_constant])
-            # prob = rendering.get_probs(
-            #    arcs, on_offs, rendering_params, num_rows, num_cols)[0]
-            # ax = axss[5, i]
-            # ax.imshow(prob, vmin=0, vmax=1, cmap='Greys')
-            # ax.text(
-            #    .99, .99,
-            #    'scale = {:.2f}'.format(scale[i]),
-            #    horizontalalignment='right', verticalalignment='top',
-            #    transform=ax.transAxes)
+        # Render `scale`
+        # [2]
+        rendering_params = torch.tensor([scale[i], bias_constant])
+        prob = rendering.get_probs(arcs, on_offs, rendering_params, num_rows, num_cols)[0]
+        ax = axss[5, i]
+        ax.imshow(prob, vmin=0, vmax=1, cmap="Greys")
+        ax.text(
+            0.99,
+            0.99,
+            f"scale = {scale[i]:.2f}",
+            horizontalalignment="right",
+            verticalalignment="top",
+            transform=ax.transAxes,
+        )
 
-            ## Bias
-            ## [2]
-            # rendering_params = torch.tensor([scale_constant, bias[i]])
-            # prob = rendering.get_probs(
-            #    arcs, on_offs, rendering_params, num_rows, num_cols)[0]
-            # ax = axss[6, i]
-            # ax.imshow(prob, vmin=0, vmax=1, cmap='Greys')
-            # ax.text(
-            #    .99, .99,
-            #    'bias = {:.2f}'.format(bias[i]),
-            #    color='grey',
-            #    horizontalalignment='right', verticalalignment='top',
-            #    transform=ax.transAxes)
+        # Render `bias`
+        # [2]
+        rendering_params = torch.tensor([scale_constant, bias[i]])
+        prob = rendering.get_probs(arcs, on_offs, rendering_params, num_rows, num_cols)[0]
+        ax = axss[6, i]
+        ax.imshow(prob, vmin=0, vmax=1, cmap="Greys")
+        ax.text(
+            0.99,
+            0.99,
+            f"bias = {bias[i]:.2f}",
+            color="grey",
+            horizontalalignment="right",
+            verticalalignment="top",
+            transform=ax.transAxes,
+        )
 
+    # Save fig
     for axs in axss:
         for ax in axs:
             ax.set_xticks([])
@@ -490,7 +508,7 @@ def plot_renderer(path):
 
 
 def main(args):
-    # plot_renderer('{}/renderer.pdf'.format(args.diagnostics_dir))
+    plot_renderer("save/renderer.pdf")
     dataset = "omniglot"
 
     if args.checkpoint_path is None:
