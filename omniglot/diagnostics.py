@@ -517,9 +517,16 @@ def plot_motor_noise(path):
         dim=-1,
     )
     # Add motor noise
-    arcs[:, 1:, 2:5] += torch.distributions.Normal(0, 0.1).sample(
-        (num_interpolations, num_motor_noise_samples, 3)
+    dx_motor_noise = torch.distributions.Normal(0, 0.05).sample(
+        (num_interpolations, num_motor_noise_samples)
     )
+    dy_motor_noise = torch.distributions.Normal(0, 0.05).sample(
+        (num_interpolations, num_motor_noise_samples)
+    )
+    theta_motor_noise = torch.distributions.Normal(0, math.pi / 18).sample(
+        (num_interpolations, num_motor_noise_samples)
+    )
+    arcs[:, 1:, 2:5] += torch.stack([dx_motor_noise, dy_motor_noise, theta_motor_noise], dim=-1)
 
     # [num_interpolations, 1 + num_motor_noise_samples, 100, 100]
     probs = rendering.get_probs(

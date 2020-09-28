@@ -12,6 +12,7 @@ import torch.nn as nn
 import models
 import rendering
 import einops
+import math
 
 
 class JointDistribution:
@@ -42,7 +43,17 @@ class GenerativeMotorNoiseDist(nn.Module):
         super().__init__()
         self.num_arcs = num_arcs
         self.register_buffer("loc", torch.zeros((num_arcs, 3)))
-        self.register_buffer("scale", 0.1 * torch.ones((num_arcs, 3)))
+        self.register_buffer(
+            "scale",
+            torch.stack(
+                [
+                    0.05 * torch.ones((num_arcs,)),
+                    0.05 * torch.ones((num_arcs,)),
+                    math.pi / 18 * torch.ones((num_arcs,)),
+                ],
+                dim=-1,
+            ),
+        )
 
     @property
     def dist(self):
@@ -75,7 +86,14 @@ class GuideMotorNoiseDist:
         device = obs.device
         self.num_arcs = num_arcs
         self.loc = torch.zeros((*[*shape, num_arcs, 3]), device=device)
-        self.scale = 0.1 * torch.ones((*[*shape, num_arcs, 3]), device=device)
+        self.scale = torch.stack(
+            [
+                0.05 * torch.ones((num_arcs,), device=device),
+                0.05 * torch.ones((num_arcs,), device=device),
+                math.pi / 18 * torch.ones((num_arcs,), device=device),
+            ],
+            dim=-1,
+        )
 
     @property
     def dist(self):
