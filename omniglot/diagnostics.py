@@ -98,10 +98,8 @@ def plot_losses(
 
     for ax in axs:
         sns.despine(ax=ax, trim=True)
-    fig.tight_layout(pad=0)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
+
+    util.save_fig(fig, path)
 
 
 def plot_log_ps(path, log_ps):
@@ -111,10 +109,7 @@ def plot_log_ps(path, log_ps):
     ax.set_xlabel("iteration")
     ax.set_ylabel("log p")
     sns.despine(ax=ax, trim=True)
-    fig.tight_layout(pad=0)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
+    util.save_fig(fig, path)
 
 
 def plot_kls(path, kls):
@@ -124,10 +119,7 @@ def plot_kls(path, kls):
     ax.set_xlabel("iteration")
     ax.set_ylabel("KL")
     sns.despine(ax=ax, trim=True)
-    fig.tight_layout(pad=0)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
+    util.save_fig(fig, path)
 
 
 def sample_from_guide(guide, obs):
@@ -280,11 +272,8 @@ def plot_reconstructions(
 
     axss[0, 0].set_title(r"Image $x$")
     axss[0, 1].set_title("Sequential\nreconstruction ->")
-    fig.tight_layout(pad=0)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
+
+    util.save_fig(fig, path)
 
 
 def plot_primitives(path, generative_model):
@@ -366,11 +355,7 @@ def plot_prior(path, generative_model, num_samples, resolution=28):
             arc_ids = ids_and_on_offs[i * num_cols + j][:, 0]
             on_off_ids = ids_and_on_offs[i * num_cols + j][:, 1]
 
-    fig.tight_layout(pad=1)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
+    util.save_fig(fig, path)
 
 
 def plot_renderer(path):
@@ -501,10 +486,7 @@ def plot_renderer(path):
             ax.set_xticks([])
             ax.set_yticks([])
 
-    fig.tight_layout(pad=0)
-    fig.savefig(path, bbox_inches="tight")
-    util.logging.info(f"Saved to {path}")
-    plt.close(fig)
+    util.save_fig(fig, path)
 
 
 def main(args):

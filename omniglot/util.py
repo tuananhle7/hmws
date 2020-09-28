@@ -11,6 +11,7 @@ import pprint
 import subprocess
 import getpass
 import sys
+import matplotlib.pyplot as plt
 
 logging.basicConfig(
     level=logging.INFO,
@@ -307,3 +308,11 @@ def cnn(output_dim, n_hidden=128, dropout=False):
     layers.append(nn.ReLU(inplace=True))
     layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
     return nn.Sequential(*layers)
+
+
+def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout(**tight_layout_kwargs)
+    fig.savefig(path, bbox_inches="tight", dpi=dpi)
+    logging.info(f"Saved to {path}")
+    plt.close(fig)
