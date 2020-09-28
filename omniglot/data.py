@@ -23,7 +23,9 @@ def download_omniglot(path=OMNIGLOT_PATH, url=OMNIGLOT_URL):
         logging.info("Downloaded {} to {}".format(url, path))
 
 
-def load_binarized_omniglot_with_targets(location=None, path=OMNIGLOT_PATH, url=OMNIGLOT_URL):
+def load_binarized_omniglot_with_targets(
+    location=None, path=OMNIGLOT_PATH, url=OMNIGLOT_URL, small_dataset=False
+):
     (
         x_train,
         x_valid,
@@ -35,6 +37,9 @@ def load_binarized_omniglot_with_targets(location=None, path=OMNIGLOT_PATH, url=
         z_valid,
         z_test,
     ) = load_binarized_omniglot_with_everything(location, path, url)
+
+    if small_dataset:
+        x_train, y_train = split_data_by_target(x_train, y_train, num_data_per_target=10)
 
     return x_train, x_valid, x_test, y_train, y_valid, y_test
 

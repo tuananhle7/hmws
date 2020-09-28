@@ -184,6 +184,7 @@ def plot_reconstructions(
     data_location,
     memory=None,
     resolution=28,
+    small_dataset=False,
 ):
     util.logging.info("plot_reconstructions")
     (
@@ -193,7 +194,9 @@ def plot_reconstructions(
         target_train,
         target_valid,
         target_test,
-    ) = data.load_binarized_omniglot_with_targets(location=args.data_location)
+    ) = data.load_binarized_omniglot_with_targets(
+        location=args.data_location, small_dataset=small_dataset
+    )
 
     if test:
         data_test = torch.tensor(data_test, device=device)
@@ -589,7 +592,9 @@ def main(args):
             target_train,
             target_valid,
             target_test,
-        ) = data.load_binarized_omniglot_with_targets(location=args.data_location)
+        ) = data.load_binarized_omniglot_with_targets(
+            location=args.data_location, small_dataset=run_args.small_dataset
+        )
         dataset_size = data_train.shape[0]
 
         diagnostics_dir = util.get_save_dir(run_args)
@@ -626,6 +631,7 @@ def main(args):
                 args.data_location,
                 None,
                 args.resolution,
+                small_dataset=run_args.small_dataset,
             )
 
             # Memory
@@ -640,6 +646,7 @@ def main(args):
                     args.data_location,
                     memory,
                     args.resolution,
+                    small_dataset=run_args.small_dataset,
                 )
 
         plot_primitives(f"{diagnostics_dir}/primitives/{iteration}.pdf", generative_model)
