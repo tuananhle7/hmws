@@ -10,7 +10,6 @@ import models_continuous
 import math
 import random
 import rendering
-import torch.nn.functional as F
 from pathlib import Path
 
 # hack for https://github.com/dmlc/xgboost/issues/1715
@@ -561,8 +560,8 @@ def plot_motor_noise(path):
 
 
 def main(args):
-    plot_motor_noise("save/motor_noise.pdf")
-    plot_renderer("save/renderer.pdf")
+    # plot_motor_noise("save/motor_noise.pdf")
+    # plot_renderer("save/renderer.pdf")
     dataset = "omniglot"
 
     if args.checkpoint_path is None:
@@ -677,8 +676,6 @@ def get_parser():
 
     # for custom checkpoints
     parser.add_argument("--checkpoint-iteration", default=None, type=int)
-    parser.add_argument("--dataset-size", default=500, type=int)
-    parser.add_argument("--obs-ids", default=None, type=str)
     return parser
 
 
