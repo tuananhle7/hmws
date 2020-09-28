@@ -489,7 +489,69 @@ def plot_renderer(path):
     util.save_fig(fig, path)
 
 
+def plot_motor_noise(path):
+    util.logging.info("plot_motor_noise")
+
+    # Set up sweep
+    num_interpolations = 5
+    num_motor_noise_samples = 10
+
+    dx = torch.linspace(-0.4, 0.4, num_interpolations)
+    dy_constant = 0.2
+    theta_constant = math.pi / 3
+    sharpness_constant = 20.0
+    width_constant = 0.01
+    scale_constant = 3.0
+    bias_constant = -3
+
+    # [num_interpolations, 1 + num_motor_noise_samples, 7]
+    arcs = torch.cat(
+        [
+            torch.ones((num_interpolations, 1 + num_motor_noise_samples, 2)) * 0.5,
+            dx[:, None, None].expand(num_interpolations, 1 + num_motor_noise_samples, 1),
+            torch.ones((num_interpolations, 1 + num_motor_noise_samples, 1)) * dy_constant,
+            torch.ones((num_interpolations, 1 + num_motor_noise_samples, 1)) * theta_constant,
+            torch.ones((num_interpolations, 1 + num_motor_noise_samples, 1)) * sharpness_constant,
+            torch.ones((num_interpolations, 1 + num_motor_noise_samples, 1)) * width_constant,
+        ],
+        dim=-1,
+    )
+    # Add motor noise
+    arcs[:, 1:, 2:5] += torch.distributions.Normal(0, 0.1).sample(
+        (num_interpolations, num_motor_noise_samples, 3)
+    )
+
+    # [num_interpolations, 1 + num_motor_noise_samples, 100, 100]
+    probs = rendering.get_probs(
+        arcs.view(num_interpolations * (1 + num_motor_noise_samples), 1, 7),
+        torch.ones(num_interpolations * (1 + num_motor_noise_samples), 1).long(),
+        torch.tensor([scale_constant, bias_constant]),
+        100,
+        100,
+    ).view(num_interpolations, 1 + num_motor_noise_samples, 100, 100)
+
+    # Plot
+    num_rows, num_cols = num_interpolations, 1 + num_motor_noise_samples
+    fig, axss = plt.subplots(num_rows, num_cols, figsize=(num_cols * 2, num_rows * 2), dpi=200)
+
+    for i in range(num_interpolations):
+        for j in range(1 + num_motor_noise_samples):
+            ax = axss[i, j]
+            ax.imshow(probs[i, j], vmin=0, vmax=1, cmap="Greys")
+
+    axss[0, 0].set_title("Stroke type")
+    axss[0, 1].set_title(f"Stroke tokens ->")
+    # Save fig
+    for axs in axss:
+        for ax in axs:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    util.save_fig(fig, path)
+
+
 def main(args):
+    plot_motor_noise("save/motor_noise.pdf")
     plot_renderer("save/renderer.pdf")
     dataset = "omniglot"
 
