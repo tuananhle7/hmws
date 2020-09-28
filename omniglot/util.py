@@ -23,7 +23,11 @@ logging.basicConfig(
 
 def get_path_base_from_args(args):
     model_type = "hybrid" if args.motor_noise else "discrete"
-    return f"{model_type}_{args.algorithm}"
+    if args.small_dataset:
+        suffix = "_small"
+    else:
+        suffix = ""
+    return f"{model_type}_{args.algorithm}{suffix}"
 
 
 def get_save_job_name_from_args(args):

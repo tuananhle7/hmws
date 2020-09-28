@@ -18,25 +18,27 @@ import math
 
 
 def get_sweep_argss(test_run=False):
-    for motor_noise in [True, False]:
-        for algorithm in ["cmws" if motor_noise else "mws", "rws", "vimco"]:
-            args = run.get_args_parser().parse_args([])
-            args.motor_noise = motor_noise
-            num_particles = 20
-            if algorithm == "mws":
-                args.memory_size = math.ceil(num_particles / 2)
-                args.num_particles = num_particles - args.memory_size
-            elif algorithm == "cmws":
-                args.memory_size = math.ceil(num_particles / 2)
-                args.num_particles = num_particles - args.memory_size
-                args.num_proposals = num_particles - args.memory_size
-                args.batch_size = 60
-            else:
-                args.num_particles = num_particles
-            args.test_run = test_run
-            args.algorithm = algorithm
-            args.data_location = "om"
-            yield args
+    for small_dataset in [True, False]:
+        for motor_noise in [True, False]:
+            for algorithm in ["cmws" if motor_noise else "mws", "rws", "vimco"]:
+                args = run.get_args_parser().parse_args([])
+                args.motor_noise = motor_noise
+                num_particles = 20
+                if algorithm == "mws":
+                    args.memory_size = math.ceil(num_particles / 2)
+                    args.num_particles = num_particles - args.memory_size
+                elif algorithm == "cmws":
+                    args.memory_size = math.ceil(num_particles / 2)
+                    args.num_particles = num_particles - args.memory_size
+                    args.num_proposals = num_particles - args.memory_size
+                    args.batch_size = 60
+                else:
+                    args.num_particles = num_particles
+                args.small_dataset = small_dataset
+                args.test_run = test_run
+                args.algorithm = algorithm
+                args.data_location = "om"
+                yield args
 
 
 def args_to_str(args):
