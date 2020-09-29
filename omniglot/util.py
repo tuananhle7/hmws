@@ -12,6 +12,8 @@ import subprocess
 import getpass
 import sys
 import matplotlib.pyplot as plt
+import random
+import numpy as np
 
 logging.basicConfig(
     level=logging.INFO,
@@ -138,6 +140,7 @@ def init_optimizer(generative_model, guide, prior_lr_factor):
 
 
 def init(run_args, device):
+    set_seed(run_args.seed)
     ids_and_on_offs_generative_model_args = [
         run_args.num_primitives,
         run_args.initial_max_curve,
@@ -320,3 +323,9 @@ def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
     fig.savefig(path, bbox_inches="tight", dpi=dpi)
     logging.info(f"Saved to {path}")
     plt.close(fig)
+
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)

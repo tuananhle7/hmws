@@ -135,6 +135,7 @@ def get_args_parser():
         "--algorithm", default="mws", choices=["mws", "rws", "vimco", "cmws"], help=" "
     )
     parser.add_argument("--prior-lr-factor", default=1.0, type=float)
+    parser.add_argument("--seed", type=int, default=1, help=" ")
     parser.add_argument("--pretrain-iterations", type=int, default=10000, help=" ")
     parser.add_argument("--prior-anneal-iterations", type=int, default=0, help=" ")
     parser.add_argument("--num-iterations", type=int, default=200000, help=" ")
