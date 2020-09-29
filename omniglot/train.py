@@ -73,6 +73,14 @@ def train(
             optimizer.step()
             optimizer.zero_grad()
 
+            # Check for nans
+            if torch.isnan(loss).all():
+                raise RuntimeError("nan loss")
+
+            for name, parameter in generative_model.named_parameters():
+                if parameter.isnan().any():
+                    raise RuntimeError(f"{name} is nan")
+
             stats.theta_losses.append(theta_loss)
             stats.phi_losses.append(phi_loss)
 
