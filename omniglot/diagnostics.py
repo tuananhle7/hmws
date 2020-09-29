@@ -559,9 +559,45 @@ def plot_motor_noise(path):
     util.save_fig(fig, path)
 
 
+def plot_dataset(small_dataset, max_num_imgs=1000):
+    util.logging.info("plot_dataset")
+    (
+        data_train,
+        data_valid,
+        data_test,
+        target_train,
+        target_valid,
+        target_test,
+    ) = data.load_binarized_omniglot_with_targets(
+        location=args.data_location, small_dataset=small_dataset
+    )
+
+    for test, imgs in zip([True, False], [data_test[:max_num_imgs], data_train[:max_num_imgs]]):
+        num_cols = 10
+        num_rows = math.ceil(len(imgs) / 10)
+
+        fig, axss = plt.subplots(num_rows, num_cols, figsize=(num_cols * 2, num_rows * 2))
+
+        for ax, img in zip(axss.flat, imgs):
+            ax.imshow(img, "Greys", vmin=0, vmax=1)
+
+        for axs in axss:
+            for ax in axs:
+                ax.set_xticks([])
+                ax.set_yticks([])
+                sns.despine(ax=ax, left=True, right=True, top=True, bottom=True)
+
+        dir_ = "small" if small_dataset else "full"
+        filename = "test.pdf" if test else "train.pdf"
+        path = f"save/_data/{dir_}/{filename}"
+        util.save_fig(fig, path)
+
+
 def main(args):
-    # plot_motor_noise("save/motor_noise.pdf")
-    # plot_renderer("save/renderer.pdf")
+    for small_dataset in [False, True]:
+        plot_dataset(small_dataset)
+    plot_motor_noise("save/_model/motor_noise.pdf")
+    plot_renderer("save/_model/renderer.pdf")
     dataset = "omniglot"
 
     if args.checkpoint_path is None:
