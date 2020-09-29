@@ -599,9 +599,6 @@ def plot_dataset(data_size, max_num_imgs=1000):
 def main(args):
     for data_size in ["mini", "full", "small"]:
         plot_dataset(data_size)
-    import pdb
-
-    pdb.set_trace()
     plot_motor_noise("save/_model/motor_noise.pdf")
     plot_renderer("save/_model/renderer.pdf")
     dataset = "omniglot"
