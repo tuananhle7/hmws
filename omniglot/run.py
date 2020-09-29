@@ -29,7 +29,7 @@ def main(args):
         target_valid,
         target_test,
     ) = data.load_binarized_omniglot_with_targets(
-        location=args.data_location, small_dataset=args.small_dataset
+        location=args.data_location, data_size=args.data_size
     )
 
     id_offset_test = len(data_train) + len(data_valid)
@@ -107,7 +107,9 @@ def get_args_parser():
     # data
     parser.add_argument("--data-location", default="local", help=" ")
     parser.add_argument("--batch-size", type=int, default=250, help=" ")
-    parser.add_argument("--small-dataset", action="store_true", help="")
+    parser.add_argument(
+        "--data-size", default="full", choices=["full", "small", "mini"], help=" ",
+    )
 
     # init
     parser.add_argument("--motor-noise", action="store_true", help="")

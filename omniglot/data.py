@@ -24,7 +24,7 @@ def download_omniglot(path=OMNIGLOT_PATH, url=OMNIGLOT_URL):
 
 
 def load_binarized_omniglot_with_targets(
-    location=None, path=OMNIGLOT_PATH, url=OMNIGLOT_URL, small_dataset=False
+    location=None, path=OMNIGLOT_PATH, url=OMNIGLOT_URL, data_size="full"
 ):
     (
         x_train,
@@ -38,8 +38,33 @@ def load_binarized_omniglot_with_targets(
         z_test,
     ) = load_binarized_omniglot_with_everything(location, path, url)
 
-    if small_dataset:
+    if data_size == "small":
         x_train, y_train = split_data_by_target(x_train, y_train, num_data_per_target=10)
+    elif data_size == "mini":
+        max_num_instances_per_char = 5
+        # train_char_ids = range(100)
+        train_char_ids = [0, 3, 4, 5, 7, 12, 17, 28, 31, 43]
+        test_char_ids = train_char_ids
+
+        # Create train data
+        x_train_selected, y_train_selected = [], []
+        for train_char_id in train_char_ids:
+            x_train_selected.append(x_train[z_train == train_char_id][:max_num_instances_per_char])
+            y_train_selected.append(y_train[z_train == train_char_id][:max_num_instances_per_char])
+        x_train = np.concatenate(x_train_selected, axis=0)
+        y_train = np.concatenate(y_train_selected, axis=0)
+
+        # Create test data
+        x_test_selected, y_test_selected = [], []
+        for test_char_id in test_char_ids:
+            x_test_selected.append(x_test[z_test == test_char_id][:max_num_instances_per_char])
+            y_test_selected.append(y_test[z_test == test_char_id][:max_num_instances_per_char])
+        x_test = np.concatenate(x_test_selected, axis=0)
+        y_test = np.concatenate(y_test_selected, axis=0)
+    elif data_size == "full":
+        pass
+    else:
+        raise NotImplementedError
 
     return x_train, x_valid, x_test, y_train, y_valid, y_test
 

@@ -183,7 +183,7 @@ def plot_reconstructions(
     data_location,
     memory=None,
     resolution=28,
-    small_dataset=False,
+    data_size="small",
 ):
     util.logging.info("plot_reconstructions")
     (
@@ -193,9 +193,7 @@ def plot_reconstructions(
         target_train,
         target_valid,
         target_test,
-    ) = data.load_binarized_omniglot_with_targets(
-        location=args.data_location, small_dataset=small_dataset
-    )
+    ) = data.load_binarized_omniglot_with_targets(location=args.data_location, data_size=data_size)
 
     if test:
         data_test = torch.tensor(data_test, device=device)
@@ -559,7 +557,7 @@ def plot_motor_noise(path):
     util.save_fig(fig, path)
 
 
-def plot_dataset(small_dataset, max_num_imgs=1000):
+def plot_dataset(data_size, max_num_imgs=1000):
     util.logging.info("plot_dataset")
     (
         data_train,
@@ -568,9 +566,7 @@ def plot_dataset(small_dataset, max_num_imgs=1000):
         target_train,
         target_valid,
         target_test,
-    ) = data.load_binarized_omniglot_with_targets(
-        location=args.data_location, small_dataset=small_dataset
-    )
+    ) = data.load_binarized_omniglot_with_targets(location=args.data_location, data_size=data_size)
 
     for test, imgs in zip([True, False], [data_test[:max_num_imgs], data_train[:max_num_imgs]]):
         num_cols = 10
@@ -578,8 +574,16 @@ def plot_dataset(small_dataset, max_num_imgs=1000):
 
         fig, axss = plt.subplots(num_rows, num_cols, figsize=(num_cols * 2, num_rows * 2))
 
-        for ax, img in zip(axss.flat, imgs):
+        for i, (ax, img) in enumerate(zip(axss.flat, imgs)):
             ax.imshow(img, "Greys", vmin=0, vmax=1)
+            ax.text(
+                0.99,
+                0.99,
+                str(i),
+                horizontalalignment="right",
+                verticalalignment="top",
+                transform=ax.transAxes,
+            )
 
         for axs in axss:
             for ax in axs:
@@ -587,15 +591,17 @@ def plot_dataset(small_dataset, max_num_imgs=1000):
                 ax.set_yticks([])
                 sns.despine(ax=ax, left=True, right=True, top=True, bottom=True)
 
-        dir_ = "small" if small_dataset else "full"
         filename = "test.pdf" if test else "train.pdf"
-        path = f"save/_data/{dir_}/{filename}"
+        path = f"save/_data/{data_size}/{filename}"
         util.save_fig(fig, path)
 
 
 def main(args):
-    for small_dataset in [False, True]:
-        plot_dataset(small_dataset)
+    for data_size in ["mini", "full", "small"]:
+        plot_dataset(data_size)
+    import pdb
+
+    pdb.set_trace()
     plot_motor_noise("save/_model/motor_noise.pdf")
     plot_renderer("save/_model/renderer.pdf")
     dataset = "omniglot"
@@ -628,7 +634,7 @@ def main(args):
             target_valid,
             target_test,
         ) = data.load_binarized_omniglot_with_targets(
-            location=args.data_location, small_dataset=run_args.small_dataset
+            location=args.data_location, data_size=run_args.data_size
         )
         dataset_size = data_train.shape[0]
 
@@ -666,7 +672,7 @@ def main(args):
                 args.data_location,
                 None,
                 args.resolution,
-                small_dataset=run_args.small_dataset,
+                data_size=run_args.data_size,
             )
 
             # Memory
@@ -681,7 +687,7 @@ def main(args):
                     args.data_location,
                     memory,
                     args.resolution,
-                    small_dataset=run_args.small_dataset,
+                    data_size=run_args.data_size,
                 )
 
         plot_primitives(f"{diagnostics_dir}/primitives/{iteration}.pdf", generative_model)
