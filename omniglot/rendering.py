@@ -23,6 +23,10 @@ def get_center(arcs):
     dy = arcs[..., 3]
     theta = arcs[..., 4]
 
+    # HACK
+    theta = theta.clone()
+    theta[theta == 0] += 1e-7
+
     x_center = x_start + dx / 2 + safe_div(dy, (2 * torch.tan(theta)))
     y_center = y_start + dy / 2 - safe_div(dx, (2 * torch.tan(theta)))
     return torch.stack([x_center, y_center], dim=-1)
