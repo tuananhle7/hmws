@@ -197,19 +197,23 @@ def plot_reconstructions(
 
     if test:
         data_test = torch.tensor(data_test, device=device)
-        obs_id = torch.tensor(
-            np.random.choice(np.arange(len(data_test)), num_reconstructions), device=device
-        ).long()
+        # obs_id = torch.tensor(
+        #     np.random.choice(np.arange(len(data_test)), num_reconstructions), device=device
+        # ).long()
+        num_reconstructions = min(len(data_test), num_reconstructions)
+        obs_id = torch.arange(num_reconstructions, device=device).long()
         obs = data_test[obs_id].float().view(-1, 28, 28)
         obs_id = None
     else:
         data_train = torch.tensor(data_train, device=device)
-        obs_id = torch.tensor(
-            np.random.choice(np.arange(len(data_train)), num_reconstructions), device=device
-        ).long()
+        # obs_id = torch.tensor(
+        #     np.random.choice(np.arange(len(data_train)), num_reconstructions), device=device
+        # ).long()
+        num_reconstructions = min(len(data_train), num_reconstructions)
+        obs_id = torch.arange(num_reconstructions, device=device).long()
         obs = data_train[obs_id].float().view(-1, 28, 28)
 
-    start_point = torch.Tensor([0.5, 0.5]).unsqueeze(0).expand(num_reconstructions, -1).to(device)
+    start_point = torch.tensor([0.5, 0.5], device=device)[None].expand(num_reconstructions, -1)
     if memory is None:
         # [batch_size, num_arcs, 2]
         ids_and_on_offs = sample_from_guide(guide, obs)
@@ -246,23 +250,24 @@ def plot_reconstructions(
         obs_ = obs[i]
         axs[0].imshow(obs_.cpu(), "Greys", vmin=0, vmax=1)
         for j, ax in enumerate(axs[1:]):
-            l = len(axs[1:])
+            tmp = len(axs[1:])
             char_on = on_offs[i].cpu()
             for k in range(num_arcs):
                 if char_on[-k]:
-                    l = l - 1
-                if l == j:
+                    tmp = tmp - 1
+                if tmp == j:
                     ax.imshow(reconstructed_images[-k][i].cpu(), "Greys", vmin=0, vmax=1)
                     break
 
-        # axs[0].text(
-        #     0.5,
-        #     0.99,
-        #     str(obs_id[i].item()),
-        #     horizontalalignment="center",
-        #     verticalalignment="top",
-        #     fontsize=12,
-        # )
+            if j < num_arcs:
+                ax.text(
+                    0.99,
+                    0.99,
+                    f"{ids[i, j]} {'ON' if on_offs[i, j] else 'OFF'}",
+                    horizontalalignment="right",
+                    verticalalignment="top",
+                    transform=ax.transAxes,
+                )
 
     for axs in axss:
         for ax in axs:
