@@ -109,7 +109,8 @@ def main(args):
             device = "cuda"
             generative_model = models.GenerativeModel().to(device)
             num_test_obs = 10
-            _, obs = generative_model.sample((num_test_obs,))
+            latent, obs = generative_model.sample((num_test_obs,))
+            util.logging.info(f"ground truth latent = {latent}")
 
             # Plot
             plot_stats(f"{util.get_save_dir(run_args)}/stats.pdf", stats)
