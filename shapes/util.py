@@ -1,7 +1,7 @@
 import imageio
 import scipy
 import collections
-import models
+from models import rectangles
 import os
 import random
 import numpy as np
@@ -152,10 +152,10 @@ def get_checkpoint_paths(checkpoint_iteration=-1):
 # Init, saving, etc
 def init(run_args, device):
     # Generative model
-    generative_model = models.GenerativeModel().to(device)
+    generative_model = rectangles.GenerativeModel().to(device)
 
     # Guide
-    guide = models.Guide().to(device)
+    guide = rectangles.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)

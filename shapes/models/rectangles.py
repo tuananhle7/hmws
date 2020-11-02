@@ -1,8 +1,8 @@
 import util
+import render
 import numpy as np
 import torch
 import torch.nn as nn
-import render
 
 
 class GenerativeModel(nn.Module):

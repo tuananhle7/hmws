@@ -1,6 +1,6 @@
-import models
-import os
 import util
+from models import rectangles
+import os
 import matplotlib.pyplot as plt
 import torch
 import seaborn as sns
@@ -107,7 +107,7 @@ def main(args):
 
             # Test data
             device = "cuda"
-            generative_model = models.GenerativeModel().to(device)
+            generative_model = rectangles.GenerativeModel().to(device)
             num_test_obs = 10
             latent, obs = generative_model.sample((num_test_obs,))
             util.logging.info(f"ground truth latent = {latent}")

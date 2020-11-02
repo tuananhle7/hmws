@@ -1,9 +1,9 @@
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch
-import render
-import util
 import torch.nn as nn
+import util
+import render
 
 
 class Model(nn.Module):
