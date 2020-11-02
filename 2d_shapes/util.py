@@ -1,3 +1,4 @@
+import imageio
 import scipy
 import collections
 import models
@@ -214,3 +215,11 @@ def plot_normal2d(ax, mean, cov, num_points=100, confidence=0.95, **kwargs):
     xy = eigvecs @ np.array([np.cos(theta) * a, np.sin(theta) * b]) + np.expand_dims(mean, -1)
     ax.plot(xy[0, :], xy[1, :], **kwargs)
     return ax
+
+
+def make_gif(img_paths, gif_path, fps):
+    images = []
+    for img_path in img_paths:
+        images.append(imageio.imread(img_path))
+    imageio.mimsave(gif_path, images, duration=1 / fps)
+    logging.info(f"Saved to {gif_path}")

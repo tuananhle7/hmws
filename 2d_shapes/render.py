@@ -2,7 +2,9 @@ import torch
 
 
 def heart_occupancy_function(x, y):
-    """
+    """Heartoid
+    https://www.desmos.com/calculator/arefbhfejg
+
     Args
         x [*shape]
         y [*shape]
@@ -14,6 +16,28 @@ def heart_occupancy_function(x, y):
     y = y / 0.5
 
     return (x ** 2 + y ** 2 - 1) ** 3 - x ** 2 * y ** 3 < 0
+
+
+def get_canvas_xy(num_rows, num_cols, device):
+    """Create xy points on the canvas
+
+    Args
+        num_rows (int)
+        num_cols (int)
+
+    Returns
+        canvas_x [num_rows, num_cols]
+        canvas_y [num_rows, num_cols]
+    """
+
+    x_range = torch.linspace(-1, 1, steps=num_cols, device=device)
+    y_range = torch.linspace(-1, 1, steps=num_rows, device=device).flip(dims=[0])
+    # [num_cols, num_rows]
+    canvas_x, canvas_y = torch.meshgrid(x_range, y_range)
+    # [num_rows, num_cols]
+    canvas_x, canvas_y = canvas_x.T, canvas_y.T
+
+    return canvas_x, canvas_y
 
 
 def render_heart(position_scale, canvas):
@@ -34,13 +58,9 @@ def render_heart(position_scale, canvas):
     num_rows, num_cols = canvas.shape
     device = canvas.device
 
-    # Create xy points on the canvas
-    x_range = torch.linspace(-1, 1, steps=num_cols, device=device)
-    y_range = torch.linspace(-1, 1, steps=num_rows, device=device).flip(dims=[0])
-    # [num_cols, num_rows]
-    canvas_x, canvas_y = torch.meshgrid(x_range, y_range)
+    # Canvas xy
     # [num_rows, num_cols]
-    canvas_x, canvas_y = canvas_x.T, canvas_y.T
+    canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
 
     # Draw heart
     new_canvas = canvas.clone()
@@ -68,13 +88,9 @@ def render_rectangle(xy_lims, canvas):
     num_rows, num_cols = canvas.shape
     device = xy_lims.device
 
-    # Create xy points on the canvas
-    x_range = torch.linspace(-1, 1, steps=num_cols, device=device)
-    y_range = torch.linspace(-1, 1, steps=num_rows, device=device).flip(dims=[0])
-    # [num_cols, num_rows]
-    canvas_x, canvas_y = torch.meshgrid(x_range, y_range)
+    # Canvas xy
     # [num_rows, num_cols]
-    canvas_x, canvas_y = canvas_x.T, canvas_y.T
+    canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
 
     # Draw on canvas
     new_canvas = canvas.clone()
