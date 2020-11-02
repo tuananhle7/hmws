@@ -8,7 +8,7 @@ import torch.nn as nn
 class GenerativeModel(nn.Module):
     def __init__(self, im_size=64):
         super().__init__()
-        self.im_size = 64
+        self.im_size = im_size
         self.register_buffer("blank_canvas", torch.zeros((self.im_size, self.im_size)))
 
     @property
