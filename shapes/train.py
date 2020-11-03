@@ -26,20 +26,17 @@ def train(model, optimizer, stats, args):
             loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
         elif args.model_type == "heartangles":
             _, obs = true_generative_model.sample((args.batch_size,))
-            if args.algorithm == "rws":
-                loss = (
-                    losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
-                    + losses.get_sleep_loss(
-                        generative_model, guide, args.batch_size * args.num_particles
-                    ).mean()
-                )
-            elif args.algorithm == "vimco":
-                loss = (
-                    losses.get_vimco_loss(generative_model, guide, obs, args.num_particles).mean()
-                    + losses.get_sleep_loss(
-                        generative_model, guide, args.batch_size * args.num_particles
-                    ).mean()
-                )
+            if "rws" in args.algorithm:
+                loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
+            elif "vimco" in args.algorithm:
+                loss = losses.get_vimco_loss(
+                    generative_model, guide, obs, args.num_particles
+                ).mean()
+
+            if "sleep" in args.algorithm:
+                loss += losses.get_sleep_loss(
+                    generative_model, guide, args.batch_size * args.num_particles
+                ).mean()
         loss.backward()
 
         # Step gradient

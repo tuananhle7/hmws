@@ -469,28 +469,26 @@ class Guide(nn.Module):
     def __init__(self, im_size=64):
         super().__init__()
         self.im_size = im_size
-        self.rectangle_cnn = util.init_cnn(output_dim=16)
-        self.heart_cnn = util.init_cnn(output_dim=16)
-        self.is_heart_cnn = util.init_cnn(output_dim=16)
+        self.cnn = util.init_cnn(output_dim=16)
         self.cnn_features_dim = 400  # computed manually
 
         # Object id MLP
-        self.is_heart_mlp = util.init_mlp(self.cnn_features_dim, 1, hidden_dim=100, num_layers=1)
+        self.is_heart_mlp = util.init_mlp(self.cnn_features_dim, 1, hidden_dim=100, num_layers=3)
 
         # Heart pose MLP
         self.raw_position_mlp = util.init_mlp(
-            self.cnn_features_dim, 2 * 2, hidden_dim=100, num_layers=1
+            self.cnn_features_dim, 2 * 2, hidden_dim=100, num_layers=3
         )
-        self.raw_scale_mlp = util.init_mlp(self.cnn_features_dim, 2, hidden_dim=100, num_layers=1)
+        self.raw_scale_mlp = util.init_mlp(self.cnn_features_dim, 2, hidden_dim=100, num_layers=3)
 
         # Rectangle pose MLP
         self.rectangle_mlp = util.init_mlp(
-            self.cnn_features_dim, 4 * 2, hidden_dim=100, num_layers=1
+            self.cnn_features_dim, 4 * 2, hidden_dim=100, num_layers=3
         )
 
     @property
     def device(self):
-        return next(self.rectangle_cnn.parameters()).device
+        return next(self.is_heart_mlp.parameters()).device
 
     def get_cnn_features(self, obs, cnn_type):
         """
@@ -501,13 +499,7 @@ class Guide(nn.Module):
         Returns: [batch_size, cnn_features_dim]
         """
         batch_size = obs.shape[0]
-        if cnn_type == "heart":
-            cnn = self.heart_cnn
-        elif cnn_type == "rectangle":
-            cnn = self.rectangle_cnn
-        elif cnn_type == "is_heart":
-            cnn = self.is_heart_cnn
-        return cnn(obs[:, None]).view(batch_size, -1)
+        return self.cnn(obs[:, None]).view(batch_size, -1)
 
     def get_is_heart_dist(self, obs):
         """q_I(z_I | x)

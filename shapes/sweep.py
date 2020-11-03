@@ -8,10 +8,11 @@ import run
 
 
 def get_sweep_argss():
-    for algorithm in ["rws", "vimco"]:
+    for algorithm in ["rws", "vimco", "rws_sleep", "vimco_sleep"]:
         args = run.get_args_parser().parse_args([])
         args.model_type = "heartangles"
         args.algorithm = algorithm
+        args.continue_training = True
         yield args
 
 
