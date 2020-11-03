@@ -10,6 +10,7 @@ import run
 def get_sweep_argss():
     for algorithm in ["rws", "vimco"]:
         args = run.get_args_parser().parse_args([])
+        args.model_type = "heartangles"
         args.algorithm = algorithm
         yield args
 

@@ -27,11 +27,19 @@ def train(model, optimizer, stats, args):
         elif args.model_type == "heartangles":
             _, obs = true_generative_model.sample((args.batch_size,))
             if args.algorithm == "rws":
-                loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
+                loss = (
+                    losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
+                    + losses.get_sleep_loss(
+                        generative_model, guide, args.batch_size * args.num_particles
+                    ).mean()
+                )
             elif args.algorithm == "vimco":
-                loss = losses.get_vimco_loss(
-                    generative_model, guide, obs, args.num_particles
-                ).mean()
+                loss = (
+                    losses.get_vimco_loss(generative_model, guide, obs, args.num_particles).mean()
+                    + losses.get_sleep_loss(
+                        generative_model, guide, args.batch_size * args.num_particles
+                    ).mean()
+                )
         loss.backward()
 
         # Step gradient

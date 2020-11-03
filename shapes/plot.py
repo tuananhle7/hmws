@@ -131,10 +131,10 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
     util.logging.info(f"is_heart = {is_heart}")
 
     # Sample reconstructions
-    reconstructed_obs = generative_model.sample_obs(latent)
+    reconstructed_obs_probs = generative_model.get_obs_probs(latent)
 
     # Plot
-    num_rows = 2
+    num_rows = 3
     num_cols = num_test_obs
     fig, axss = plt.subplots(
         num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
@@ -147,7 +147,12 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
 
     for sample_id in range(num_test_obs):
         axss[0, sample_id].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
-        axss[1, sample_id].imshow(reconstructed_obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        axss[1, sample_id].imshow(
+            reconstructed_obs_probs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1
+        )
+        axss[2, sample_id].imshow(
+            reconstructed_obs_probs[sample_id].cpu() > 0.5, cmap="Greys", vmin=0, vmax=1
+        )
 
     util.save_fig(fig, path)
 
@@ -253,7 +258,7 @@ def main(args):
                 true_generative_model = heartangles.TrueGenerativeModel().to(device)
                 num_test_obs = 10
                 latent, obs = true_generative_model.sample((num_test_obs,))
-                util.logging.info(f"ground truth latent = {latent}")
+                util.logging.info(f"ground truth is_heart = {latent[0]}")
 
                 # Plot
                 plot_heartangles_reconstructions(

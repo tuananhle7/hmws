@@ -427,7 +427,7 @@ class GenerativeModel(nn.Module):
 
         return (is_heart, heart_pose, rectangle_pose), obs
 
-    def sample_obs(self, latent):
+    def get_obs_probs(self, latent):
         """
         Args:
             latent
@@ -438,29 +438,31 @@ class GenerativeModel(nn.Module):
                 rectangle_pose [*shape, 4]
 
         Returns:
-            obs [*shape, im_size, im_size]
+            obs_probs [*shape, im_size, im_size]
         """
         is_heart, heart_pose, rectangle_pose = latent
         shape = is_heart.shape
 
         # Sample OBS
         # [*shape, im_size, im_size]
-        heart_obs = self.get_heart_obs_dist(heart_pose, self.im_size, self.im_size).sample()
-        rectangle_obs = self.get_rectangle_obs_dist(
+        heart_obs_probs = self.get_heart_obs_dist(
+            heart_pose, self.im_size, self.im_size
+        ).base_dist.probs
+        rectangle_obs_probs = self.get_rectangle_obs_dist(
             rectangle_pose, self.im_size, self.im_size
-        ).sample()
+        ).base_dist.probs
 
         # Select OBS
         # [*shape, im_size, im_size]
-        obs = torch.gather(
-            torch.stack([rectangle_obs, heart_obs]),  # [2, *shape, im_size, im_size]
+        obs_probs = torch.gather(
+            torch.stack([rectangle_obs_probs, heart_obs_probs]),  # [2, *shape, im_size, im_size]
             dim=0,
             index=is_heart.long()[None, ..., None, None].expand(
                 *[1, *shape, self.im_size, self.im_size]
             ),  # [1, *shape, im_size, im_size]
         )[0]
 
-        return obs
+        return obs_probs
 
 
 class Guide(nn.Module):
