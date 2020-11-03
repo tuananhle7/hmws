@@ -1,6 +1,7 @@
 import losses
 import util
 from models import hearts
+from models import heartangles
 
 
 def train(model, optimizer, stats, args):
@@ -10,6 +11,8 @@ def train(model, optimizer, stats, args):
     generative_model, guide = model
     if args.model_type == "hearts":
         true_generative_model = hearts.TrueGenerativeModel().to(guide.device)
+    elif args.model_type == "heartangles":
+        true_generative_model = heartangles.TrueGenerativeModel().to(guide.device)
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Zero grad
@@ -21,6 +24,14 @@ def train(model, optimizer, stats, args):
         elif args.model_type == "hearts":
             _, obs = true_generative_model.sample((args.batch_size,))
             loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
+        elif args.model_type == "heartangles":
+            _, obs = true_generative_model.sample((args.batch_size,))
+            if args.algorithm == "rws":
+                loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
+            elif args.algorithm == "vimco":
+                loss = losses.get_vimco_loss(
+                    generative_model, guide, obs, args.num_particles
+                ).mean()
         loss.backward()
 
         # Step gradient

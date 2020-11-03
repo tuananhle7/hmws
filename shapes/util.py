@@ -1,9 +1,12 @@
+import subprocess
+import getpass
 import itertools
 import imageio
 import scipy
 import collections
 from models import rectangles
 from models import hearts
+from models import heartangles
 import os
 import random
 import numpy as np
@@ -118,7 +121,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return "uh"
+    return args.algorithm
 
 
 def get_save_job_name_from_args(args):
@@ -159,6 +162,12 @@ def init(run_args, device):
 
         # Guide
         guide = rectangles.Guide().to(device)
+    if run_args.model_type == "heartangles":
+        # Generative model
+        generative_model = heartangles.GenerativeModel().to(device)
+
+        # Guide
+        guide = heartangles.Guide().to(device)
     elif run_args.model_type == "hearts":
         # Generative model
         generative_model = hearts.GenerativeModel().to(device)
@@ -172,7 +181,7 @@ def init(run_args, device):
     # Optimizer
     if run_args.model_type == "rectangles":
         parameters = guide.parameters()
-    elif run_args.model_type == "hearts":
+    elif run_args.model_type == "hearts" or run_args.model_type == "heartangles":
         parameters = itertools.chain(generative_model.parameters(), guide.parameters())
     optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
@@ -244,3 +253,60 @@ def make_gif(img_paths, gif_path, fps):
 
 def logit(z):
     return z.log() - (1 - z).log()
+
+
+def lognormexp(values, dim=0):
+    """Exponentiates, normalizes and takes log of a tensor.
+
+    Args:
+        values: tensor [dim_1, ..., dim_N]
+        dim: n
+
+    Returns:
+        result: tensor [dim_1, ..., dim_N]
+            where result[i_1, ..., i_N] =
+                                 exp(values[i_1, ..., i_N])
+            log( ------------------------------------------------------------ )
+                    sum_{j = 1}^{dim_n} exp(values[i_1, ..., j, ..., i_N])
+    """
+
+    log_denominator = torch.logsumexp(values, dim=dim, keepdim=True)
+    # log_numerator = values
+    return values - log_denominator
+
+
+def exponentiate_and_normalize(values, dim=0):
+    """Exponentiates and normalizes a tensor.
+
+    Args:
+        values: tensor [dim_1, ..., dim_N]
+        dim: n
+
+    Returns:
+        result: tensor [dim_1, ..., dim_N]
+            where result[i_1, ..., i_N] =
+                            exp(values[i_1, ..., i_N])
+            ------------------------------------------------------------
+             sum_{j = 1}^{dim_n} exp(values[i_1, ..., j, ..., i_N])
+    """
+
+    return torch.exp(lognormexp(values, dim=dim))
+
+
+def cancel_all_my_non_bash_jobs():
+    logging.info("Cancelling all non-bash jobs.")
+    jobs_status = (
+        subprocess.check_output(f"squeue -u {getpass.getuser()}", shell=True)
+        .decode()
+        .split("\n")[1:-1]
+    )
+    non_bash_job_ids = []
+    for job_status in jobs_status:
+        if not ("bash" in job_status.split() or "zsh" in job_status.split()):
+            non_bash_job_ids.append(job_status.split()[0])
+    if len(non_bash_job_ids) > 0:
+        cmd = "scancel {}".format(" ".join(non_bash_job_ids))
+        logging.info(cmd)
+        logging.info(subprocess.check_output(cmd, shell=True).decode())
+    else:
+        logging.info("No non-bash jobs to cancel.")

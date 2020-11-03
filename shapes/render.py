@@ -45,25 +45,35 @@ def render_heart(position_scale, canvas):
 
     Args
         position_scale
-            position [2]
-            scale [] (scalar)
-        canvas [num_rows, num_cols]
+            position [*shape, 2]
+            scale [*shape]
+        canvas [*shape, num_rows, num_cols]
 
     Returns
-        new_canvas [num_rows, num_cols]
+        new_canvas [*shape, num_rows, num_cols]
     """
     # Extract
     position, scale = position_scale
-    position_x, position_y = position
-    num_rows, num_cols = canvas.shape
+    position_x, position_y = position[..., 0], position[..., 1]
+    shape = canvas.shape[:-2]
+    num_samples = int(torch.tensor(shape).prod().long().item())
+    num_rows, num_cols = canvas.shape[-2:]
     device = canvas.device
+
+    # Expand
+    # [num_samples, 1, 1]
+    position_x, position_y, scale = [
+        x.view(num_samples, 1, 1) for x in [position_x, position_y, scale]
+    ]
 
     # Canvas xy
     # [num_rows, num_cols]
     canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
+    # [1, num_rows, num_cols]
+    canvas_x, canvas_y = canvas_x[None], canvas_y[None]
 
     # Draw heart
-    new_canvas = canvas.clone()
+    new_canvas = canvas.clone().view(num_samples, num_rows, num_cols)
     new_canvas[
         heart_occupancy_function((canvas_x - position_x) / scale, (canvas_y - position_x) / scale)
     ] = 1.0
@@ -75,30 +85,40 @@ def render_rectangle(xy_lims, canvas):
     """Draws a rectangle on a canvas whose xy limits are [-1, 1].
 
     Args
-        xy_lims [4] (min_x, min_y, max_x, max_y)
-        canvas [num_rows, num_cols]
+        xy_lims [*shape, 4] (min_x, min_y, max_x, max_y)
+        canvas [*shape, num_rows, num_cols]
 
     Returns
-        new_canvas [num_rows, num_cols]
+        new_canvas [*shape, num_rows, num_cols]
     """
     # Extract
-    # top_left_x, top_left_y, width, height = tlwh
-    # min_x, min_y, max_x, max_y = top_left_x, top_left_x + width, top_left_y - height, top_left_y
-    min_x, min_y, max_x, max_y = xy_lims
-    num_rows, num_cols = canvas.shape
+    # [*shape]
+    min_x, min_y, max_x, max_y = [xy_lims[..., i] for i in range(4)]
+    shape = canvas.shape[:-2]
+    num_samples = int(torch.tensor(shape).prod().long().item())
+    num_rows, num_cols = canvas.shape[-2:]
     device = xy_lims.device
+
+    # Expand
+    # [num_samples, 1, 1]
+    min_x, min_y, max_x, max_y = [x.view(num_samples, 1, 1) for x in [min_x, min_y, max_x, max_y]]
 
     # Canvas xy
     # [num_rows, num_cols]
     canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
 
+    # Expand canvas xy
+    # [1, num_rows, num_cols]
+    canvas_x = canvas_x[None]
+    canvas_y = canvas_y[None]
+
     # Draw on canvas
-    new_canvas = canvas.clone()
+    new_canvas = canvas.clone().view(num_samples, num_rows, num_cols)
     new_canvas[
         (canvas_x >= min_x) & (canvas_x <= max_x) & (canvas_y >= min_y) & (canvas_y <= max_y)
     ] = 1.0
 
-    return new_canvas
+    return new_canvas.view(*[*shape, num_rows, num_cols])
 
 
 if __name__ == "__main__":

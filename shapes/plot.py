@@ -1,6 +1,7 @@
 import util
 from models import rectangles
 from models import hearts
+from models import heartangles
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -115,6 +116,42 @@ def plot_hearts_reconstructions(path, generative_model, guide, obs):
     util.save_fig(fig, path)
 
 
+def plot_heartangles_reconstructions(path, generative_model, guide, obs):
+    """
+    Args:
+        generative_model
+        guide
+        obs: [num_test_obs, im_size, im_size]
+    """
+    num_test_obs, im_size, _ = obs.shape
+
+    # Sample latent
+    latent = guide.sample(obs)
+    is_heart, heart_pose, rectangle_pose = latent
+    util.logging.info(f"is_heart = {is_heart}")
+
+    # Sample reconstructions
+    reconstructed_obs = generative_model.sample_obs(latent)
+
+    # Plot
+    num_rows = 2
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        axss[0, sample_id].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        axss[1, sample_id].imshow(reconstructed_obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+
+    util.save_fig(fig, path)
+
+
 def plot_occupancy_network(path, generative_model):
     """
     Args:
@@ -142,8 +179,13 @@ def plot_occupancy_network(path, generative_model):
             scale = torch.tensor(0.1, device=device)
             raw_position = util.logit(position + 0.5)
             raw_scale = util.logit((scale - 0.1) / 0.8)
-            obs = generative_model.get_obs_dist((raw_position, raw_scale)).base_dist.probs
-            axss[i, j].imshow(obs.cpu() > 0.5, cmap="Greys", vmin=0, vmax=1)
+            if isinstance(generative_model, hearts.GenerativeModel):
+                obs = generative_model.get_obs_dist((raw_position, raw_scale)).base_dist.probs
+            elif isinstance(generative_model, heartangles.GenerativeModel):
+                obs = generative_model.get_heart_obs_dist((raw_position, raw_scale)).base_dist.probs
+
+            # axss[i, j].imshow(obs.cpu() > 0.5, cmap="Greys", vmin=0, vmax=1)
+            axss[i, j].imshow(obs.cpu(), cmap="Greys", vmin=0, vmax=1)
 
     util.save_fig(fig, path)
 
@@ -176,7 +218,7 @@ def main(args):
             model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
             generative_model, guide = model
 
-            plot_stats(f"{util.get_save_dir(run_args)}/stats.pdf", stats)
+            plot_stats(f"{util.get_save_dir(run_args)}/stats.png", stats)
 
             # Test data
             device = "cuda"
@@ -189,7 +231,7 @@ def main(args):
 
                 # Plot
                 plot_rectangles_posterior(
-                    f"{util.get_save_dir(run_args)}/posterior.pdf", guide, obs
+                    f"{util.get_save_dir(run_args)}/posterior.png", guide, obs
                 )
             elif run_args.model_type == "hearts":
                 true_generative_model = hearts.TrueGenerativeModel().to(device)
@@ -199,13 +241,29 @@ def main(args):
 
                 # Plot
                 plot_hearts_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions.pdf",
+                    f"{util.get_save_dir(run_args)}/reconstructions.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network.pdf", generative_model,
+                    f"{util.get_save_dir(run_args)}/occupancy_network.png", generative_model,
+                )
+            elif run_args.model_type == "heartangles":
+                true_generative_model = heartangles.TrueGenerativeModel().to(device)
+                num_test_obs = 10
+                latent, obs = true_generative_model.sample((num_test_obs,))
+                util.logging.info(f"ground truth latent = {latent}")
+
+                # Plot
+                plot_heartangles_reconstructions(
+                    f"{util.get_save_dir(run_args)}/reconstructions.png",
+                    generative_model,
+                    guide,
+                    obs,
+                )
+                plot_occupancy_network(
+                    f"{util.get_save_dir(run_args)}/occupancy_network.png", generative_model,
                 )
         else:
             # Checkpoint doesn't exist
