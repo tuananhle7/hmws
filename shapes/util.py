@@ -187,7 +187,9 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
     generative_model, guide = model
     torch.save(
         {
-            "generative_model_state_dict": None,
+            "generative_model_state_dict": None
+            if run_args.model_type == "rectangles"
+            else generative_model.state_dict(),
             "guide_state_dict": guide.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "stats": stats,
@@ -205,6 +207,9 @@ def load_checkpoint(path, device):
 
     generative_model, guide = model
     guide.load_state_dict(checkpoint["guide_state_dict"])
+
+    if run_args.model_type != "rectangles":
+        generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
 
     model = (generative_model, guide)
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -235,3 +240,7 @@ def make_gif(img_paths, gif_path, fps):
         images.append(imageio.imread(img_path))
     imageio.mimsave(gif_path, images, duration=1 / fps)
     logging.info(f"Saved to {gif_path}")
+
+
+def logit(z):
+    return z.log() - (1 - z).log()

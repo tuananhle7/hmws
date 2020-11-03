@@ -94,8 +94,8 @@ def plot_hearts_reconstructions(path, generative_model, guide, obs):
     reconstructed_obs = generative_model.get_obs_dist(latent).base_dist.probs
 
     # Plot
-    num_rows = num_test_obs
-    num_cols = 2
+    num_rows = 3
+    num_cols = num_test_obs
     fig, axss = plt.subplots(
         num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
     )
@@ -106,9 +106,44 @@ def plot_hearts_reconstructions(path, generative_model, guide, obs):
         ax.set_yticks([])
 
     for sample_id in range(num_test_obs):
-        axs = axss[sample_id]
-        axs[0].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
-        axs[1].imshow(reconstructed_obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        axss[0, sample_id].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        axss[1, sample_id].imshow(reconstructed_obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        axss[2, sample_id].imshow(
+            reconstructed_obs[sample_id].cpu() > 0.5, cmap="Greys", vmin=0, vmax=1
+        )
+
+    util.save_fig(fig, path)
+
+
+def plot_occupancy_network(path, generative_model):
+    """
+    Args:
+        generative_model
+    """
+    device = generative_model.device
+    im_size = generative_model.im_size
+    grid_size = 5
+    positions = torch.linspace(-0.5, 0.5, grid_size, device=device)
+
+    # Plot
+    num_rows, num_cols = grid_size, grid_size
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for i in range(num_rows):
+        for j in range(num_cols):
+            position = torch.stack([positions[j], positions[grid_size - 1 - i]])
+            scale = torch.tensor(0.1, device=device)
+            raw_position = util.logit(position + 0.5)
+            raw_scale = util.logit((scale - 0.1) / 0.8)
+            obs = generative_model.get_obs_dist((raw_position, raw_scale)).base_dist.probs
+            axss[i, j].imshow(obs.cpu() > 0.5, cmap="Greys", vmin=0, vmax=1)
 
     util.save_fig(fig, path)
 
@@ -168,6 +203,9 @@ def main(args):
                     generative_model,
                     guide,
                     obs,
+                )
+                plot_occupancy_network(
+                    f"{util.get_save_dir(run_args)}/occupancy_network.pdf", generative_model,
                 )
         else:
             # Checkpoint doesn't exist

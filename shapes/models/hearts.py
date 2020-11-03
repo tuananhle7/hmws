@@ -85,7 +85,7 @@ class GenerativeModel(nn.Module):
     def __init__(self, im_size=64):
         super().__init__()
         self.im_size = im_size
-        self.mlp = util.init_mlp(2, 1, 100, 3)
+        self.mlp = util.init_mlp(2, 1, 100, 3, non_linearity=nn.ReLU())
 
     @property
     def device(self):
