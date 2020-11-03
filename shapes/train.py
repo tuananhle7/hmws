@@ -1,5 +1,6 @@
 import losses
 import util
+from models import hearts
 
 
 def train(model, optimizer, stats, args):
@@ -7,13 +8,19 @@ def train(model, optimizer, stats, args):
     num_iterations_so_far = len(stats.losses)
 
     generative_model, guide = model
+    if args.model_type == "hearts":
+        true_generative_model = hearts.TrueGenerativeModel().to(guide.device)
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Zero grad
         optimizer.zero_grad()
 
         # Evaluate loss
-        loss = losses.get_sleep_loss(generative_model, guide, args.batch_size).mean()
+        if args.model_type == "rectangles":
+            loss = losses.get_sleep_loss(generative_model, guide, args.batch_size).mean()
+        elif args.model_type == "hearts":
+            _, obs = true_generative_model.sample((args.batch_size,))
+            loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
         loss.backward()
 
         # Step gradient

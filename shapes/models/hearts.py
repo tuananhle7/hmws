@@ -16,6 +16,9 @@ class JointDistribution:
     def sample(self, sample_shape=[]):
         return tuple([dist.sample(sample_shape) for dist in self.dists])
 
+    def rsample(self, sample_shape=[]):
+        return tuple([dist.rsample(sample_shape) for dist in self.dists])
+
     def log_prob(self, values):
         return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
 
@@ -88,21 +91,29 @@ class GenerativeModel(nn.Module):
     def device(self):
         return next(self.mlp.parameters()).device
 
-    def get_obs_dist(self, latent, num_rows, num_cols):
+    def get_obs_dist(self, latent, num_rows=None, num_cols=None):
         """p(obs | latent)
 
         Args
             latent
-                position [*shape, 2]
-                scale [*shape]
+                raw_position [*shape, 2]
+                raw_scale [*shape]
             num_rows (int)
             num_cols (int)
 
         Returns: distribution with batch_shape [*shape] and event_shape
             [num_rows, num_cols]
         """
+        if num_rows is None:
+            num_rows = self.im_size
+        if num_cols is None:
+            num_cols = self.im_size
         # Extract
-        position, scale = latent
+        raw_position, raw_scale = latent
+        position = raw_position.sigmoid() - 0.5
+        scale = raw_scale.sigmoid() * 0.8 + 0.1
+
+        # util.logging.info(f"position = {position} | scale = {scale}")
         shape = scale.shape
         # num_samples = int(torch.tensor(shape).prod().long().item())
         position_x, position_y = position[..., 0], position[..., 1]  # [*shape]
@@ -121,6 +132,9 @@ class GenerativeModel(nn.Module):
         # Run MLP
         logits = self.mlp(mlp_input).view(*[*shape, num_rows, num_cols])
 
+        if torch.isnan(logits).any():
+            raise RuntimeError("nan")
+
         return torch.distributions.Independent(
             torch.distributions.Bernoulli(logits=logits), reinterpreted_batch_ndims=2
         )
@@ -131,31 +145,37 @@ class GenerativeModel(nn.Module):
         Returns distribution with batch_shape [] and event_shape ([2], [])
         """
         # Position distribution
-        half = torch.ones((2,), device=self.device) * 0.5
-        position_dist = torch.distributions.Independent(
-            torch.distributions.Uniform(-half, half), reinterpreted_batch_ndims=1
+        raw_position_dist = torch.distributions.Independent(
+            torch.distributions.Normal(
+                torch.zeros((2,), device=self.device), torch.ones((2,), device=self.device)
+            ),
+            reinterpreted_batch_ndims=1,
         )
 
         # Scale distribution
-        scale_dist = torch.distributions.Uniform(
-            torch.tensor(0.1, device=self.device), torch.tensor(0.9, device=self.device)
+        raw_scale_dist = torch.distributions.Normal(
+            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
         )
 
-        return JointDistribution([position_dist, scale_dist])
+        return JointDistribution([raw_position_dist, raw_scale_dist])
 
     def log_prob(self, latent, obs):
         """
         Args:
             latent
-                position [*shape, 2]
-                scale [*shape]
+                raw_position [*shape, 2]
+                raw_scale [*shape]
             obs [*shape, num_rows, num_cols]
 
         Returns: [*shape]
         """
-        return self.latent_dist.log_prob(latent) + self.get_obs_dist(
-            latent, self.im_size, self.im_size
-        ).log_prob(obs)
+        latent_log_prob = self.latent_dist.log_prob(latent)
+        obs_log_prob = self.get_obs_dist(latent, self.im_size, self.im_size).log_prob(obs)
+
+        if torch.isnan(latent_log_prob + obs_log_prob).any():
+            raise RuntimeError("nan")
+
+        return latent_log_prob + obs_log_prob
 
     def sample(self, sample_shape=[]):
         """
@@ -164,8 +184,8 @@ class GenerativeModel(nn.Module):
 
         Returns:
             latent
-                position [*sample_shape, 2]
-                scale [*sample_shape]
+                raw_position [*sample_shape, 2]
+                raw_scale [*sample_shape]
             obs [*sample_shape, im_size, im_size]
         """
         # Sample latent
@@ -183,10 +203,10 @@ class Guide(nn.Module):
         self.im_size = im_size
         self.cnn = util.init_cnn(output_dim=16)
         self.cnn_features_dim = 400  # computed manually
-        self.position_mlp = util.init_mlp(
+        self.raw_position_mlp = util.init_mlp(
             self.cnn_features_dim, 2 * 2, hidden_dim=100, num_layers=1
         )
-        self.scale_mlp = util.init_mlp(self.cnn_features_dim, 2, hidden_dim=100, num_layers=1)
+        self.raw_scale_mlp = util.init_mlp(self.cnn_features_dim, 2, hidden_dim=100, num_layers=1)
 
     @property
     def device(self):
@@ -212,18 +232,18 @@ class Guide(nn.Module):
         cnn_features = self.get_cnn_features(obs)
 
         # Position dist
-        raw_loc, raw_scale = self.position_mlp(cnn_features).chunk(2, dim=-1)
+        raw_loc, raw_scale = self.raw_position_mlp(cnn_features).chunk(2, dim=-1)
         loc, scale = raw_loc, raw_scale.exp()
-        position_dist = torch.distributions.Independent(
+        raw_position_dist = torch.distributions.Independent(
             torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
         )
 
         # Scale dist
-        raw_loc, raw_scale = self.scale_mlp(cnn_features).chunk(2, dim=-1)
+        raw_loc, raw_scale = self.raw_scale_mlp(cnn_features).chunk(2, dim=-1)
         loc, scale = raw_loc.view(-1), raw_scale.view(-1).exp()
-        scale_dist = torch.distributions.Normal(loc, scale)
+        raw_scale_dist = torch.distributions.Normal(loc, scale)
 
-        return JointDistribution([position_dist, scale_dist])
+        return JointDistribution([raw_position_dist, raw_scale_dist])
 
     def log_prob(self, obs, latent):
         """
@@ -236,9 +256,11 @@ class Guide(nn.Module):
         Returns: [*shape]
         """
         obs_flattened = obs.view(-1, self.im_size, self.im_size)
-        position, scale = latent
-        shape = scale.shape
-        latent_flattened = position.view(-1, 2), scale.view(-1)
+
+        # Flatten latent
+        raw_position, raw_scale = latent
+        shape = raw_scale.shape
+        latent_flattened = raw_position.view(-1, 2), raw_scale.view(-1)
 
         return self.get_dist(obs_flattened).log_prob(latent_flattened).view(*shape)
 
@@ -249,15 +271,39 @@ class Guide(nn.Module):
 
         Returns:
             latent
-                position [*sample_shape, *shape, 2]
-                scale [*sample_shape, *shape]
+                raw_position [*sample_shape, *shape, 2]
+                raw_scale [*sample_shape, *shape]
         """
-        shape = obs.shape[:-1]
+        shape = obs.shape[:-2]
         obs_flattened = obs.view(-1, self.im_size, self.im_size)
 
-        position_flattened, scale_flattened = self.get_dist(obs_flattened).sample(sample_shape)
+        raw_position_flattened, raw_scale_flattened = self.get_dist(obs_flattened).sample(
+            sample_shape
+        )
         latent = (
-            position_flattened.view(*[*sample_shape, *shape, 2]),
-            scale_flattened.view(*[*sample_shape, *shape]),
+            raw_position_flattened.view(*[*sample_shape, *shape, 2]),
+            raw_scale_flattened.view(*[*sample_shape, *shape]),
+        )
+        return latent
+
+    def rsample(self, obs, sample_shape=[]):
+        """
+        Args:
+            obs [*shape, im_size, im_size]
+
+        Returns:
+            latent
+                raw_position [*sample_shape, *shape, 2]
+                raw_scale [*sample_shape, *shape]
+        """
+        shape = obs.shape[:-2]
+        obs_flattened = obs.view(-1, self.im_size, self.im_size)
+
+        raw_position_flattened, raw_scale_flattened = self.get_dist(obs_flattened).rsample(
+            sample_shape
+        )
+        latent = (
+            raw_position_flattened.view(*[*sample_shape, *shape, 2]),
+            raw_scale_flattened.view(*[*sample_shape, *shape]),
         )
         return latent

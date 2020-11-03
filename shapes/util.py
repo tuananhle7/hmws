@@ -1,7 +1,9 @@
+import itertools
 import imageio
 import scipy
 import collections
 from models import rectangles
+from models import hearts
 import os
 import random
 import numpy as np
@@ -151,17 +153,27 @@ def get_checkpoint_paths(checkpoint_iteration=-1):
 
 # Init, saving, etc
 def init(run_args, device):
-    # Generative model
-    generative_model = rectangles.GenerativeModel().to(device)
+    if run_args.model_type == "rectangles":
+        # Generative model
+        generative_model = rectangles.GenerativeModel().to(device)
 
-    # Guide
-    guide = rectangles.Guide().to(device)
+        # Guide
+        guide = rectangles.Guide().to(device)
+    elif run_args.model_type == "hearts":
+        # Generative model
+        generative_model = hearts.GenerativeModel().to(device)
+
+        # Guide
+        guide = hearts.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)
 
     # Optimizer
-    parameters = guide.parameters()
+    if run_args.model_type == "rectangles":
+        parameters = guide.parameters()
+    elif run_args.model_type == "hearts":
+        parameters = itertools.chain(generative_model.parameters(), guide.parameters())
     optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats

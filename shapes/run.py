@@ -27,6 +27,9 @@ def get_args_parser():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument(
+        "--model-type", default="rectangles", choices=["rectangles", "hearts"], help=" "
+    )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=100, type=int, help=" ")
 
@@ -35,7 +38,7 @@ def get_args_parser():
     parser.add_argument("--num-iterations", default=10000, type=int, help=" ")
     parser.add_argument("--lr", default=1e-3, type=float, help=" ")
     parser.add_argument("--log-interval", default=10, type=int, help=" ")
-    parser.add_argument("--save-interval", default=1000, type=int, help=" ")
+    parser.add_argument("--save-interval", default=100, type=int, help=" ")
     parser.add_argument("--checkpoint-interval", default=10001, type=int, help=" ")
 
     return parser

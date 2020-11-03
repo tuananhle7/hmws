@@ -1,5 +1,6 @@
 import util
 from models import rectangles
+from models import hearts
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -21,7 +22,7 @@ def xy_to_im_coords(xy, im_size):
     return im_coords
 
 
-def plot_posterior(path, guide, obs):
+def plot_rectangles_posterior(path, guide, obs):
     """
     Args:
         guide
@@ -77,6 +78,41 @@ def plot_posterior(path, guide, obs):
     util.save_fig(fig, path)
 
 
+def plot_hearts_reconstructions(path, generative_model, guide, obs):
+    """
+    Args:
+        generative_model
+        guide
+        obs: [num_test_obs, im_size, im_size]
+    """
+    num_test_obs, im_size, _ = obs.shape
+
+    # Sample latent
+    latent = guide.sample(obs)
+
+    # Sample reconstructions
+    reconstructed_obs = generative_model.get_obs_dist(latent).base_dist.probs
+
+    # Plot
+    num_rows = num_test_obs
+    num_cols = 2
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        axs = axss[sample_id]
+        axs[0].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        axs[1].imshow(reconstructed_obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+
+    util.save_fig(fig, path)
+
+
 def plot_stats(path, stats):
     fig, ax_losses = plt.subplots(1, 1)
 
@@ -105,16 +141,34 @@ def main(args):
             model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
             generative_model, guide = model
 
+            plot_stats(f"{util.get_save_dir(run_args)}/stats.pdf", stats)
+
             # Test data
             device = "cuda"
-            generative_model = rectangles.GenerativeModel().to(device)
-            num_test_obs = 10
-            latent, obs = generative_model.sample((num_test_obs,))
-            util.logging.info(f"ground truth latent = {latent}")
 
-            # Plot
-            plot_stats(f"{util.get_save_dir(run_args)}/stats.pdf", stats)
-            plot_posterior(f"{util.get_save_dir(run_args)}/posterior.pdf", guide, obs)
+            if run_args.model_type == "rectangles":
+                generative_model = rectangles.GenerativeModel().to(device)
+                num_test_obs = 10
+                latent, obs = generative_model.sample((num_test_obs,))
+                util.logging.info(f"ground truth latent = {latent}")
+
+                # Plot
+                plot_rectangles_posterior(
+                    f"{util.get_save_dir(run_args)}/posterior.pdf", guide, obs
+                )
+            elif run_args.model_type == "hearts":
+                true_generative_model = hearts.TrueGenerativeModel().to(device)
+                num_test_obs = 10
+                latent, obs = true_generative_model.sample((num_test_obs,))
+                util.logging.info(f"ground truth latent = {latent}")
+
+                # Plot
+                plot_hearts_reconstructions(
+                    f"{util.get_save_dir(run_args)}/reconstructions.pdf",
+                    generative_model,
+                    guide,
+                    obs,
+                )
         else:
             # Checkpoint doesn't exist
             util.logging.info(f"No checkpoint in {checkpoint_path}")
