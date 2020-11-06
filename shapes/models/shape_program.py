@@ -17,6 +17,49 @@ PROGRAMS = {
 }
 
 
+def latent_to_str(latent):
+    """
+    Args
+        latent
+            program_id []
+            heart_poses
+                raw_positions [max_num_shapes, 2]
+                raw_scales [max_num_shapes]
+            rectangle_poses [max_num_shapes, 4]
+
+    Returns (str)
+    """
+    program_id, (raw_positions, raw_scales), rectangle_poses = latent
+
+    # Extract component strings
+    heart_1_str = util.heart_pose_to_str((raw_positions[0], raw_scales[0]))
+    heart_2_str = util.heart_pose_to_str((raw_positions[1], raw_scales[1]))
+    rectangle_1_str = util.rectangle_pose_to_str(rectangle_poses[0])
+    rectangle_2_str = util.rectangle_pose_to_str(rectangle_poses[1])
+
+    program = PROGRAMS[int(program_id.item())]
+    if program == "H":
+        return heart_1_str
+    elif program == "R":
+        return rectangle_1_str
+    elif program == "H + R":
+        return f"{heart_1_str}+\n{rectangle_1_str}"
+    elif program == "H + H":
+        return f"{heart_1_str}+\n{heart_2_str}"
+    elif program == "R + R":
+        return f"{rectangle_1_str}+\n{rectangle_2_str}"
+    elif program == "H - H":
+        return f"{heart_1_str}-\n{heart_2_str}"
+    elif program == "H - R":
+        return f"{heart_1_str}-\n{rectangle_1_str}"
+    elif program == "R - H":
+        return f"{rectangle_1_str}-\n{heart_1_str}"
+    elif program == "R - R":
+        return f"{rectangle_1_str}-\n{rectangle_2_str}"
+    else:
+        raise RuntimeError("program not found")
+
+
 def evaluate_log_prob(program_id, heart_log_prob, rectangle_log_prob):
     """
     Args
@@ -61,7 +104,7 @@ def evaluate_log_prob(program_id, heart_log_prob, rectangle_log_prob):
         elif program == "H - R":
             log_probs.append(heart_1_log_prob + rectangle_1_log_prob)
         elif program == "R - H":
-            log_probs.append(rectangle_1_log_prob + heart_2_log_prob)
+            log_probs.append(rectangle_1_log_prob + heart_1_log_prob)
         elif program == "R - R":
             log_probs.append(rectangle_1_log_prob + rectangle_2_log_prob)
         else:
@@ -113,7 +156,7 @@ def evaluate_obs(program_id, hearts_obs, rectangles_obs):
         elif program == "H - R":
             obs = heart_1 - rectangle_1
         elif program == "R - H":
-            obs = rectangle_1 - heart_2
+            obs = rectangle_1 - heart_1
         elif program == "R - R":
             obs = rectangle_1 - rectangle_2
         else:

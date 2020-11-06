@@ -4,6 +4,25 @@ import torch
 import torch.nn as nn
 
 
+def latent_to_str(latent):
+    """
+    Args
+        latent
+            is_heart []
+            heart_pose
+                raw_position [2]
+                raw_scale []
+            rectangle_pose [4]
+
+    Returns (str)
+    """
+    is_heart, heart_pose, rectangle_pose = latent
+    if is_heart.item():
+        return util.heart_pose_to_str(heart_pose)
+    else:
+        return util.rectangle_pose_to_str(rectangle_pose)
+
+
 class TrueGenerativeModel(nn.Module):
     def __init__(self, im_size=64):
         super().__init__()

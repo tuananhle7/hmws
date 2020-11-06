@@ -376,3 +376,30 @@ class RectanglePoseDistribution:
         # max_y_log_prob = torch.distributions.Uniform(min_y, self.one).log_prob(max_y)
         # return min_x_log_prob + max_x_log_prob + min_y_log_prob + max_y_log_prob
 
+
+def heart_pose_to_str(heart_pose):
+    """
+    Args
+        heart_pose
+            raw_position [2]
+            raw_scale []
+
+    Returns (str)
+    """
+    raw_position, raw_scale = heart_pose
+    position = raw_position.sigmoid() - 0.5
+    scale = raw_scale.sigmoid() * 0.8 + 0.1
+    return f"H(x={position[0].item():.1f},y={position[0].item():.1f},s={scale.item():.1f})"
+
+
+def rectangle_pose_to_str(rectangle_pose):
+    """
+    Args
+        rectangle_pose [4]
+
+    Returns (str)
+    """
+    return (
+        f"R(bl=({rectangle_pose[0].item():.1f},{rectangle_pose[1].item():.1f}),"
+        f"tr=({rectangle_pose[2].item():.1f},{rectangle_pose[3].item():.1f}))"
+    )

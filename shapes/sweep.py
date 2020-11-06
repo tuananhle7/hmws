@@ -8,13 +8,12 @@ import run
 
 
 def get_sweep_argss():
-    for algorithm in ["rws_sleep", "rws", "vimco_sleep", "vimco"]:
-        for model_type in ["shape_program", "heartangles"]:
-            args = run.get_args_parser().parse_args([])
-            args.model_type = model_type
-            args.algorithm = algorithm
-            args.continue_training = True
-            yield args
+    for model_type in ["shape_program", "heartangles"]:
+        args = run.get_args_parser().parse_args([])
+        args.model_type = model_type
+        args.algorithm = "rws_sleep"
+        args.continue_training = True
+        yield args
 
 
 def args_to_str(args):

@@ -123,12 +123,13 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
         generative_model
         guide
         obs: [num_test_obs, im_size, im_size]
+        true_latent
     """
     num_test_obs, im_size, _ = obs.shape
 
     # Sample latent
     latent = guide.sample(obs)
-    util.logging.info(f"latent[0] = {latent[0]}")
+    is_heart, (raw_position, raw_scale), rectangle_pose = latent
 
     # Sample reconstructions
     reconstructed_obs_probs = generative_model.get_obs_probs(latent)
@@ -146,10 +147,29 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
         ax.set_yticks([])
 
     for sample_id in range(num_test_obs):
+        # Plot obs
         axss[0, sample_id].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
-        axss[1, sample_id].imshow(
-            reconstructed_obs_probs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1
+
+        # Plot probs
+        ax = axss[1, sample_id]
+        ax.imshow(reconstructed_obs_probs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.text(
+            0.95,
+            0.95,
+            heartangles.latent_to_str(
+                (
+                    is_heart[sample_id],
+                    (raw_position[sample_id], raw_scale[sample_id]),
+                    rectangle_pose[sample_id],
+                )
+            ),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
         )
+
+        # Plot probs > 0.5
         axss[2, sample_id].imshow(
             reconstructed_obs_probs[sample_id].cpu() > 0.5, cmap="Greys", vmin=0, vmax=1
         )
@@ -164,7 +184,56 @@ def plot_shape_program_reconstructions(path, generative_model, guide, obs):
         guide
         obs: [num_test_obs, im_size, im_size]
     """
-    plot_heartangles_reconstructions(path, generative_model, guide, obs)
+    num_test_obs, im_size, _ = obs.shape
+
+    # Sample latent
+    latent = guide.sample(obs)
+    program_id, (raw_positions, raw_scales), rectangle_poses = latent
+
+    # Sample reconstructions
+    reconstructed_obs_probs = generative_model.get_obs_probs(latent)
+
+    # Plot
+    num_rows = 3
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        # Plot obs
+        axss[0, sample_id].imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+
+        # Plot probs
+        ax = axss[1, sample_id]
+        ax.imshow(reconstructed_obs_probs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.text(
+            0.95,
+            0.95,
+            shape_program.latent_to_str(
+                (
+                    program_id[sample_id],
+                    (raw_positions[sample_id], raw_scales[sample_id]),
+                    rectangle_poses[sample_id],
+                )
+            ),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+        )
+
+        # Plot probs > 0.5
+        axss[2, sample_id].imshow(
+            reconstructed_obs_probs[sample_id].cpu() > 0.5, cmap="Greys", vmin=0, vmax=1
+        )
+
+    util.save_fig(fig, path)
 
 
 def plot_occupancy_network(path, generative_model):
@@ -273,7 +342,6 @@ def main(args):
                 true_generative_model = heartangles.TrueGenerativeModel().to(device)
                 num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
-                util.logging.info(f"ground truth is_heart = {latent[0]}")
 
                 # Plot
                 plot_heartangles_reconstructions(
@@ -289,7 +357,6 @@ def main(args):
                 true_generative_model = shape_program.TrueGenerativeModel().to(device)
                 num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
-                util.logging.info(f"ground truth is_heart = {latent[0]}")
 
                 # Plot
                 plot_shape_program_reconstructions(
