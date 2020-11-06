@@ -219,9 +219,6 @@ def plot_stats(path, stats):
 
 
 def main(args):
-    # Fix seed
-    util.set_seed(1)
-
     # Cuda
     device = util.get_device()
 
@@ -233,6 +230,9 @@ def main(args):
 
     # Plot for all checkpoints
     for checkpoint_path in checkpoint_paths:
+        # Fix seed
+        util.set_seed(1)
+
         if os.path.exists(checkpoint_path):
             # Load checkpoint
             model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
