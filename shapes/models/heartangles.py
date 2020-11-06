@@ -456,7 +456,7 @@ class Guide(nn.Module):
 
         # [num_samples, cnn_features_dim]
         cnn_features = self.get_cnn_features(
-            obs.view(num_samples, self.im_size, self.im_size), "is_heart"
+            obs.reshape(num_samples, self.im_size, self.im_size), "is_heart"
         )
 
         logits = self.is_heart_mlp(cnn_features).view(*shape)
@@ -479,7 +479,7 @@ class Guide(nn.Module):
 
         # [num_samples, cnn_features_dim]
         cnn_features = self.get_cnn_features(
-            obs.view(num_samples, self.im_size, self.im_size), "heart"
+            obs.reshape(num_samples, self.im_size, self.im_size), "heart"
         )
 
         # Position dist
@@ -512,7 +512,7 @@ class Guide(nn.Module):
 
         # [num_samples, cnn_features_dim]
         cnn_features = self.get_cnn_features(
-            obs.view(num_samples, self.im_size, self.im_size), "rectangle"
+            obs.reshape(num_samples, self.im_size, self.im_size), "rectangle"
         )
 
         raw_loc, raw_scale = self.rectangle_mlp(cnn_features).chunk(2, dim=-1)

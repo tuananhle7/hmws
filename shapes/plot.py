@@ -219,6 +219,9 @@ def plot_stats(path, stats):
 
 
 def main(args):
+    # Fix seed
+    util.set_seed(1)
+
     # Cuda
     device = util.get_device()
 
@@ -242,7 +245,7 @@ def main(args):
 
             if run_args.model_type == "rectangles":
                 generative_model = rectangles.GenerativeModel().to(device)
-                num_test_obs = 10
+                num_test_obs = 20
                 latent, obs = generative_model.sample((num_test_obs,))
                 util.logging.info(f"ground truth latent = {latent}")
 
@@ -252,7 +255,7 @@ def main(args):
                 )
             elif run_args.model_type == "hearts":
                 true_generative_model = hearts.TrueGenerativeModel().to(device)
-                num_test_obs = 10
+                num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
                 util.logging.info(f"ground truth latent = {latent}")
 
@@ -268,7 +271,7 @@ def main(args):
                 )
             elif run_args.model_type == "heartangles":
                 true_generative_model = heartangles.TrueGenerativeModel().to(device)
-                num_test_obs = 10
+                num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
                 util.logging.info(f"ground truth is_heart = {latent[0]}")
 
@@ -284,7 +287,7 @@ def main(args):
                 )
             elif run_args.model_type == "shape_program":
                 true_generative_model = shape_program.TrueGenerativeModel().to(device)
-                num_test_obs = 10
+                num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
                 util.logging.info(f"ground truth is_heart = {latent[0]}")
 
