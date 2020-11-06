@@ -181,7 +181,7 @@ def plot_occupancy_network(path, generative_model):
     for i in range(num_rows):
         for j in range(num_cols):
             position = torch.stack([positions[j], positions[grid_size - 1 - i]])
-            scale = torch.tensor(0.1, device=device)
+            scale = torch.tensor(0.5, device=device)
             raw_position = util.logit(position + 0.5)
             raw_scale = util.logit((scale - 0.1) / 0.8)
             if isinstance(generative_model, hearts.GenerativeModel):
