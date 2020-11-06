@@ -400,6 +400,23 @@ def rectangle_pose_to_str(rectangle_pose):
     Returns (str)
     """
     return (
-        f"R(bl=({rectangle_pose[0].item():.1f},{rectangle_pose[1].item():.1f}),"
-        f"tr=({rectangle_pose[2].item():.1f},{rectangle_pose[3].item():.1f}))"
+        f"R(bl=({rectangle_lim_to_str(rectangle_pose[0].item())},"
+        f"{rectangle_lim_to_str(rectangle_pose[1].item())}),"
+        f"tr=({rectangle_lim_to_str(rectangle_pose[2].item())},"
+        f"{rectangle_lim_to_str(rectangle_pose[3].item())}))"
     )
+
+
+def rectangle_lim_to_str(rectangle_lim):
+    """
+    Args
+        rectangle_lim (float)
+
+    Returns (str)
+    """
+    if rectangle_lim > 1:
+        return ">1"
+    elif rectangle_lim < 0:
+        return "<0"
+    else:
+        return f"{rectangle_lim:.1f}"
