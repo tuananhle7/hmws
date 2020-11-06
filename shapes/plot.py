@@ -167,6 +167,7 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
             fontsize=7,
             va="top",
             ha="right",
+            color="gray",
         )
 
         # Plot probs > 0.5
@@ -226,6 +227,7 @@ def plot_shape_program_reconstructions(path, generative_model, guide, obs):
             fontsize=7,
             va="top",
             ha="right",
+            color="gray",
         )
 
         # Plot probs > 0.5
@@ -306,67 +308,69 @@ def main(args):
             # Load checkpoint
             model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
             generative_model, guide = model
+            num_iterations = len(stats.losses)
 
+            # Plot stats
             plot_stats(f"{util.get_save_dir(run_args)}/stats.png", stats)
 
-            # Test data
-            device = "cuda"
-
+            # Plot reconstructions and other things
+            num_test_obs = 20
             if run_args.model_type == "rectangles":
+                # Test data
                 generative_model = rectangles.GenerativeModel().to(device)
-                num_test_obs = 20
                 latent, obs = generative_model.sample((num_test_obs,))
-                util.logging.info(f"ground truth latent = {latent}")
 
                 # Plot
                 plot_rectangles_posterior(
-                    f"{util.get_save_dir(run_args)}/posterior.png", guide, obs
+                    f"{util.get_save_dir(run_args)}/posterior/{num_iterations}.png", guide, obs
                 )
             elif run_args.model_type == "hearts":
+                # Test data
                 true_generative_model = hearts.TrueGenerativeModel().to(device)
-                num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
-                util.logging.info(f"ground truth latent = {latent}")
 
                 # Plot
                 plot_hearts_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions.png",
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network.png", generative_model,
+                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
+                    generative_model,
                 )
             elif run_args.model_type == "heartangles":
+                # Test data
                 true_generative_model = heartangles.TrueGenerativeModel().to(device)
-                num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
 
                 # Plot
                 plot_heartangles_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions.png",
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network.png", generative_model,
+                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
+                    generative_model,
                 )
             elif run_args.model_type == "shape_program":
+                # Test data
                 true_generative_model = shape_program.TrueGenerativeModel().to(device)
-                num_test_obs = 20
                 latent, obs = true_generative_model.sample((num_test_obs,))
 
                 # Plot
                 plot_shape_program_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions.png",
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network.png", generative_model,
+                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
+                    generative_model,
                 )
         else:
             # Checkpoint doesn't exist
