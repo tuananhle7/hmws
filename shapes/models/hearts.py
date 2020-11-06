@@ -4,25 +4,6 @@ import torch
 import torch.nn as nn
 
 
-class JointDistribution:
-    """p(x_{1:N}) = ∏_n p(x_n)
-    Args:
-        dists: list of distributions p(x_n)
-    """
-
-    def __init__(self, dists):
-        self.dists = dists
-
-    def sample(self, sample_shape=[]):
-        return tuple([dist.sample(sample_shape) for dist in self.dists])
-
-    def rsample(self, sample_shape=[]):
-        return tuple([dist.rsample(sample_shape) for dist in self.dists])
-
-    def log_prob(self, values):
-        return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
-
-
 class TrueGenerativeModel(nn.Module):
     def __init__(self, im_size=64):
         super().__init__()
@@ -49,7 +30,7 @@ class TrueGenerativeModel(nn.Module):
             torch.tensor(0.1, device=self.device), torch.tensor(0.9, device=self.device)
         )
 
-        return JointDistribution([position_dist, scale_dist])
+        return util.JointDistribution([position_dist, scale_dist])
 
     def sample(self, sample_shape=[]):
         """
@@ -157,7 +138,7 @@ class GenerativeModel(nn.Module):
             torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
         )
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     def log_prob(self, latent, obs):
         """
@@ -243,7 +224,7 @@ class Guide(nn.Module):
         loc, scale = raw_loc.view(-1), raw_scale.view(-1).exp()
         raw_scale_dist = torch.distributions.Normal(loc, scale)
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     def log_prob(self, obs, latent):
         """

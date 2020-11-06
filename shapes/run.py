@@ -30,7 +30,7 @@ def get_args_parser():
     parser.add_argument(
         "--model-type",
         default="rectangles",
-        choices=["rectangles", "hearts", "heartangles"],
+        choices=["rectangles", "hearts", "heartangles", "shape_program"],
         help=" ",
     )
     parser.add_argument(

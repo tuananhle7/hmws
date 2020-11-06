@@ -2,6 +2,7 @@ import losses
 import util
 from models import hearts
 from models import heartangles
+from models import shape_program
 
 
 def train(model, optimizer, stats, args):
@@ -13,6 +14,8 @@ def train(model, optimizer, stats, args):
         true_generative_model = hearts.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "heartangles":
         true_generative_model = heartangles.TrueGenerativeModel().to(guide.device)
+    elif args.model_type == "shape_program":
+        true_generative_model = shape_program.TrueGenerativeModel().to(guide.device)
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Zero grad
@@ -24,7 +27,7 @@ def train(model, optimizer, stats, args):
         elif args.model_type == "hearts":
             _, obs = true_generative_model.sample((args.batch_size,))
             loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
-        elif args.model_type == "heartangles":
+        elif args.model_type == "heartangles" or args.model_type == "shape_program":
             _, obs = true_generative_model.sample((args.batch_size,))
             if "rws" in args.algorithm:
                 loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()

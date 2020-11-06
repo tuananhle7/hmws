@@ -78,7 +78,7 @@ def render_heart(position_scale, canvas):
         heart_occupancy_function((canvas_x - position_x) / scale, (canvas_y - position_x) / scale)
     ] = 1.0
 
-    return new_canvas
+    return new_canvas.view(*[*shape, num_rows, num_cols])
 
 
 def render_rectangle(xy_lims, canvas):

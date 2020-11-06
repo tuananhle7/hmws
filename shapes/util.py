@@ -7,6 +7,7 @@ import collections
 from models import rectangles
 from models import hearts
 from models import heartangles
+from models import shape_program
 import os
 import random
 import numpy as np
@@ -121,7 +122,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return args.algorithm
+    return f"{args.model_type}_{args.algorithm}"
 
 
 def get_save_job_name_from_args(args):
@@ -162,7 +163,7 @@ def init(run_args, device):
 
         # Guide
         guide = rectangles.Guide().to(device)
-    if run_args.model_type == "heartangles":
+    elif run_args.model_type == "heartangles":
         # Generative model
         generative_model = heartangles.GenerativeModel().to(device)
 
@@ -174,6 +175,12 @@ def init(run_args, device):
 
         # Guide
         guide = hearts.Guide().to(device)
+    elif run_args.model_type == "shape_program":
+        # Generative model
+        generative_model = shape_program.GenerativeModel().to(device)
+
+        # Guide
+        guide = shape_program.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)
@@ -181,7 +188,7 @@ def init(run_args, device):
     # Optimizer
     if run_args.model_type == "rectangles":
         parameters = guide.parameters()
-    elif run_args.model_type == "hearts" or run_args.model_type == "heartangles":
+    else:
         parameters = itertools.chain(generative_model.parameters(), guide.parameters())
     optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
@@ -310,3 +317,62 @@ def cancel_all_my_non_bash_jobs():
         logging.info(subprocess.check_output(cmd, shell=True).decode())
     else:
         logging.info("No non-bash jobs to cancel.")
+
+
+class JointDistribution:
+    """p(x_{1:N}) = ∏_n p(x_n)
+    Args:
+        dists: list of distributions p(x_n)
+    """
+
+    def __init__(self, dists):
+        self.dists = dists
+
+    def sample(self, sample_shape=[]):
+        return tuple([dist.sample(sample_shape) for dist in self.dists])
+
+    def rsample(self, sample_shape=[]):
+        return tuple([dist.rsample(sample_shape) for dist in self.dists])
+
+    def log_prob(self, values):
+        return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
+
+
+class RectanglePoseDistribution:
+    def __init__(self, device):
+        self.device = device
+        self.lim = torch.tensor(0.8, device=self.device)
+
+    def sample(self, sample_shape):
+        """
+        Args
+            sample_shape
+
+        Returns [*sample_shape, 4]
+        """
+        minus_lim = -self.lim
+        padding = 0.2
+        min_x = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
+        max_x = torch.distributions.Uniform(min_x + padding, self.lim).sample()
+        min_y = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
+        max_y = torch.distributions.Uniform(min_y + padding, self.lim).sample()
+        return torch.stack([min_x, min_y, max_x, max_y], dim=-1)
+
+    def log_prob(self, xy_lims):
+        """
+        Args
+            xy_lims [*shape, 4]
+
+        Returns [*shape]
+        """
+        # HACK
+        shape = xy_lims.shape[:-1]
+        return torch.zeros(shape, device=xy_lims.device)
+        # min_x, min_y, max_x, max_y = [xy_lims[..., i] for i in range(4)]
+        # minus_one = -self.one
+        # min_x_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_x)
+        # max_x_log_prob = torch.distributions.Uniform(min_x, self.one).log_prob(max_x)
+        # min_y_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_y)
+        # max_y_log_prob = torch.distributions.Uniform(min_y, self.one).log_prob(max_y)
+        # return min_x_log_prob + max_x_log_prob + min_y_log_prob + max_y_log_prob
+

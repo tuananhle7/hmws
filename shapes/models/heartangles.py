@@ -4,64 +4,6 @@ import torch
 import torch.nn as nn
 
 
-class JointDistribution:
-    """p(x_{1:N}) = ∏_n p(x_n)
-    Args:
-        dists: list of distributions p(x_n)
-    """
-
-    def __init__(self, dists):
-        self.dists = dists
-
-    def sample(self, sample_shape=[]):
-        return tuple([dist.sample(sample_shape) for dist in self.dists])
-
-    def rsample(self, sample_shape=[]):
-        return tuple([dist.rsample(sample_shape) for dist in self.dists])
-
-    def log_prob(self, values):
-        return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
-
-
-class RectanglePoseDistribution:
-    def __init__(self, device):
-        self.device = device
-        self.lim = torch.tensor(0.8, device=self.device)
-
-    def sample(self, sample_shape):
-        """
-        Args
-            sample_shape
-
-        Returns [*sample_shape, 4]
-        """
-        minus_lim = -self.lim
-        padding = 0.2
-        min_x = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
-        max_x = torch.distributions.Uniform(min_x + padding, self.lim).sample()
-        min_y = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
-        max_y = torch.distributions.Uniform(min_y + padding, self.lim).sample()
-        return torch.stack([min_x, min_y, max_x, max_y], dim=-1)
-
-    def log_prob(self, xy_lims):
-        """
-        Args
-            xy_lims [*shape, 4]
-
-        Returns [*shape]
-        """
-        # HACK
-        shape = xy_lims.shape[:-1]
-        return torch.zeros(shape, device=xy_lims.device)
-        # min_x, min_y, max_x, max_y = [xy_lims[..., i] for i in range(4)]
-        # minus_one = -self.one
-        # min_x_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_x)
-        # max_x_log_prob = torch.distributions.Uniform(min_x, self.one).log_prob(max_x)
-        # min_y_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_y)
-        # max_y_log_prob = torch.distributions.Uniform(min_y, self.one).log_prob(max_y)
-        # return min_x_log_prob + max_x_log_prob + min_y_log_prob + max_y_log_prob
-
-
 class TrueGenerativeModel(nn.Module):
     def __init__(self, im_size=64):
         super().__init__()
@@ -139,7 +81,7 @@ class TrueGenerativeModel(nn.Module):
 
         Returns distribution with batch_shape [] and event_shape [4]
         """
-        return RectanglePoseDistribution(self.device)
+        return util.RectanglePoseDistribution(self.device)
 
     @property
     def heart_pose_dist(self):
@@ -160,7 +102,7 @@ class TrueGenerativeModel(nn.Module):
             torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
         )
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     @property
     def is_heart_dist(self):
@@ -182,7 +124,7 @@ class TrueGenerativeModel(nn.Module):
             obs [*sample_shape, im_size, im_size]
         """
         # Sample LATENT
-        is_heart, heart_pose, rectangle_pose = JointDistribution(
+        is_heart, heart_pose, rectangle_pose = util.JointDistribution(
             [self.is_heart_dist, self.heart_pose_dist, self.rectangle_pose_dist]
         ).sample(sample_shape)
 
@@ -297,7 +239,7 @@ class GenerativeModel(nn.Module):
 
         Returns distribution with batch_shape [] and event_shape [4]
         """
-        return RectanglePoseDistribution(self.device)
+        return util.RectanglePoseDistribution(self.device)
 
     @property
     def heart_pose_dist(self):
@@ -318,7 +260,7 @@ class GenerativeModel(nn.Module):
             torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
         )
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     @property
     def is_heart_dist(self):
@@ -404,7 +346,7 @@ class GenerativeModel(nn.Module):
             obs [*sample_shape, im_size, im_size]
         """
         # Sample LATENT
-        is_heart, heart_pose, rectangle_pose = JointDistribution(
+        is_heart, heart_pose, rectangle_pose = util.JointDistribution(
             [self.is_heart_dist, self.heart_pose_dist, self.rectangle_pose_dist]
         ).sample(sample_shape)
 
@@ -555,7 +497,7 @@ class Guide(nn.Module):
         scale_loc, scale_scale = scale_raw_loc.view(*shape), scale_raw_scale.view(*shape).exp()
         raw_scale_dist = torch.distributions.Normal(scale_loc, scale_scale)
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     def get_rectangle_pose_dist(self, obs):
         """q_R(z_R | x)
@@ -578,19 +520,6 @@ class Guide(nn.Module):
         return torch.distributions.Independent(
             torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
         )
-
-    def get_dist(self, obs):
-        """
-        Args:
-            obs: [batch_size, im_size, im_size]
-
-        Returns: dist with batch_shape [batch_size] and event_shape ([], ([2], []), [4])
-        """
-        is_heart_dist = self.get_is_heart_dist(obs)
-        heart_pose_dist = self.get_heart_pose_dist(obs)
-        rectangle_pose_dist = self.get_rectangle_pose_dist(obs)
-
-        return JointDistribution([is_heart_dist, heart_pose_dist, rectangle_pose_dist])
 
     def log_prob(self, obs, latent):
         """

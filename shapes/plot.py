@@ -2,6 +2,7 @@ import util
 from models import rectangles
 from models import hearts
 from models import heartangles
+from models import shape_program
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -127,8 +128,7 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
 
     # Sample latent
     latent = guide.sample(obs)
-    is_heart, heart_pose, rectangle_pose = latent
-    util.logging.info(f"is_heart = {is_heart}")
+    util.logging.info(f"latent[0] = {latent[0]}")
 
     # Sample reconstructions
     reconstructed_obs_probs = generative_model.get_obs_probs(latent)
@@ -155,6 +155,16 @@ def plot_heartangles_reconstructions(path, generative_model, guide, obs):
         )
 
     util.save_fig(fig, path)
+
+
+def plot_shape_program_reconstructions(path, generative_model, guide, obs):
+    """
+    Args:
+        generative_model
+        guide
+        obs: [num_test_obs, im_size, im_size]
+    """
+    plot_heartangles_reconstructions(path, generative_model, guide, obs)
 
 
 def plot_occupancy_network(path, generative_model):
@@ -187,6 +197,8 @@ def plot_occupancy_network(path, generative_model):
             if isinstance(generative_model, hearts.GenerativeModel):
                 obs = generative_model.get_obs_dist((raw_position, raw_scale)).base_dist.probs
             elif isinstance(generative_model, heartangles.GenerativeModel):
+                obs = generative_model.get_heart_obs_dist((raw_position, raw_scale)).base_dist.probs
+            elif isinstance(generative_model, shape_program.GenerativeModel):
                 obs = generative_model.get_heart_obs_dist((raw_position, raw_scale)).base_dist.probs
 
             # axss[i, j].imshow(obs.cpu() > 0.5, cmap="Greys", vmin=0, vmax=1)
@@ -262,6 +274,22 @@ def main(args):
 
                 # Plot
                 plot_heartangles_reconstructions(
+                    f"{util.get_save_dir(run_args)}/reconstructions.png",
+                    generative_model,
+                    guide,
+                    obs,
+                )
+                plot_occupancy_network(
+                    f"{util.get_save_dir(run_args)}/occupancy_network.png", generative_model,
+                )
+            elif run_args.model_type == "shape_program":
+                true_generative_model = shape_program.TrueGenerativeModel().to(device)
+                num_test_obs = 10
+                latent, obs = true_generative_model.sample((num_test_obs,))
+                util.logging.info(f"ground truth is_heart = {latent[0]}")
+
+                # Plot
+                plot_shape_program_reconstructions(
                     f"{util.get_save_dir(run_args)}/reconstructions.png",
                     generative_model,
                     guide,

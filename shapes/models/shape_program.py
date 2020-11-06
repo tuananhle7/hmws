@@ -17,208 +17,6 @@ PROGRAMS = {
 }
 
 
-class JointDistribution:
-    """p(x_{1:N}) = ∏_n p(x_n)
-    Args:
-        dists: list of distributions p(x_n)
-    """
-
-    def __init__(self, dists):
-        self.dists = dists
-
-    def sample(self, sample_shape=[]):
-        return tuple([dist.sample(sample_shape) for dist in self.dists])
-
-    def rsample(self, sample_shape=[]):
-        return tuple([dist.rsample(sample_shape) for dist in self.dists])
-
-    def log_prob(self, values):
-        return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
-
-
-class RectanglePoseDistribution:
-    def __init__(self, device):
-        self.device = device
-        self.lim = torch.tensor(0.8, device=self.device)
-
-    def sample(self, sample_shape):
-        """
-        Args
-            sample_shape
-
-        Returns [*sample_shape, 4]
-        """
-        minus_lim = -self.lim
-        padding = 0.2
-        min_x = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
-        max_x = torch.distributions.Uniform(min_x + padding, self.lim).sample()
-        min_y = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
-        max_y = torch.distributions.Uniform(min_y + padding, self.lim).sample()
-        return torch.stack([min_x, min_y, max_x, max_y], dim=-1)
-
-    def log_prob(self, xy_lims):
-        """
-        Args
-            xy_lims [*shape, 4]
-
-        Returns [*shape]
-        """
-        # HACK
-        shape = xy_lims.shape[:-1]
-        return torch.zeros(shape, device=xy_lims.device)
-        # min_x, min_y, max_x, max_y = [xy_lims[..., i] for i in range(4)]
-        # minus_one = -self.one
-        # min_x_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_x)
-        # max_x_log_prob = torch.distributions.Uniform(min_x, self.one).log_prob(max_x)
-        # min_y_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_y)
-        # max_y_log_prob = torch.distributions.Uniform(min_y, self.one).log_prob(max_y)
-        # return min_x_log_prob + max_x_log_prob + min_y_log_prob + max_y_log_prob
-
-
-class TrueGenerativeModel(nn.Module):
-    def __init__(self, im_size=64):
-        super().__init__()
-        self.im_size = im_size
-        self.register_buffer("blank_canvas", torch.zeros((self.im_size, self.im_size)))
-
-    @property
-    def device(self):
-        return self.blank_canvas.device
-
-    def get_heart_obs_dist(self, heart_pose, num_rows=None, num_cols=None):
-        """p_H(obs | heart_pose)
-
-        Args
-            heart_pose
-                raw_position [*shape, 2]
-                raw_scale [*shape]
-            num_rows (int)
-            num_cols (int)
-
-        Returns: distribution with batch_shape [*shape] and event_shape
-            [num_rows, num_cols]
-        """
-        if num_rows is None:
-            num_rows = self.im_size
-        if num_cols is None:
-            num_cols = self.im_size
-
-        # Extract
-        raw_position, raw_scale = heart_pose
-        position = raw_position.sigmoid() - 0.5
-        scale = raw_scale.sigmoid() * 0.8 + 0.1
-
-        # Create blank canvas
-        shape = scale.shape
-        blank_canvas = torch.zeros((*shape, num_rows, num_cols), device=self.device)
-
-        return torch.distributions.Independent(
-            torch.distributions.Bernoulli(
-                probs=render.render_heart((position, scale), blank_canvas).clamp(1e-6, 1 - 1e-6)
-            ),
-            reinterpreted_batch_ndims=2,
-        )
-
-    def get_rectangle_obs_dist(self, rectangle_pose, num_rows=None, num_cols=None):
-        """p_H(obs | rectangle_pose)
-
-        Args
-            rectangle_pose [*shape, 4]
-            num_rows (int)
-            num_cols (int)
-
-        Returns: distribution with batch_shape [*shape] and event_shape
-            [num_rows, num_cols]
-        """
-        if num_rows is None:
-            num_rows = self.im_size
-        if num_cols is None:
-            num_cols = self.im_size
-
-        # Create blank canvas
-        shape = rectangle_pose.shape[:-1]
-        blank_canvas = torch.zeros((*shape, num_rows, num_cols), device=self.device)
-
-        return torch.distributions.Independent(
-            torch.distributions.Bernoulli(
-                probs=render.render_rectangle(rectangle_pose, blank_canvas).clamp(1e-6, 1 - 1e-6)
-            ),
-            reinterpreted_batch_ndims=2,
-        )
-
-    @property
-    def rectangle_pose_dist(self):
-        """p_R(z_R)
-
-        Returns distribution with batch_shape [] and event_shape [4]
-        """
-        return RectanglePoseDistribution(self.device)
-
-    @property
-    def heart_pose_dist(self):
-        """p_H(z_H)
-
-        Returns distribution with batch_shape [] and event_shape ([2], [])
-        """
-        # Position distribution
-        raw_position_dist = torch.distributions.Independent(
-            torch.distributions.Normal(
-                torch.zeros((2,), device=self.device), torch.ones((2,), device=self.device)
-            ),
-            reinterpreted_batch_ndims=1,
-        )
-
-        # Scale distribution
-        raw_scale_dist = torch.distributions.Normal(
-            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
-        )
-
-        return JointDistribution([raw_position_dist, raw_scale_dist])
-
-    @property
-    def program_id_dist(self):
-        """p_I(I)"""
-        return torch.distributions.Bernoulli(probs=torch.ones((), device=self.device) * 0.5)
-
-    def sample(self, sample_shape=[]):
-        """
-        Args:
-            sample_shape: list-like object (default [])
-
-        Returns:
-            latent
-                program_id [*sample_shape]
-                heart_pose
-                    raw_position [*sample_shape, 2]
-                    raw_scale [*sample_shape]
-                rectangle_pose [*sample_shape, 4]
-            obs [*sample_shape, im_size, im_size]
-        """
-        # Sample LATENT
-        program_id, heart_pose, rectangle_pose = JointDistribution(
-            [self.program_id_dist, self.heart_pose_dist, self.rectangle_pose_dist]
-        ).sample(sample_shape)
-
-        # Sample OBS
-        # [*sample_shape, im_size, im_size]
-        heart_obs = self.get_heart_obs_dist(heart_pose, self.im_size, self.im_size).sample()
-        rectangle_obs = self.get_rectangle_obs_dist(
-            rectangle_pose, self.im_size, self.im_size
-        ).sample()
-
-        # Select OBS
-        # [*sample_shape]
-        obs = torch.gather(
-            torch.stack([rectangle_obs, heart_obs]),  # [2, *sample_shape, im_size, im_size]
-            dim=0,
-            index=program_id.long()[None, ..., None, None].expand(
-                *[1, *sample_shape, self.im_size, self.im_size]
-            ),  # [1, *sample_shape, im_size, im_size]
-        )[0]
-
-        return (program_id, heart_pose, rectangle_pose), obs
-
-
 def evaluate_log_prob(program_id, heart_log_prob, rectangle_log_prob):
     """
     Args
@@ -232,9 +30,9 @@ def evaluate_log_prob(program_id, heart_log_prob, rectangle_log_prob):
     max_num_shapes = heart_log_prob.shape[-1]
     num_samples = int(torch.tensor(shape).prod().long().item())
 
-    program_id_flattened = program_id.view(-1)
-    heart_log_prob_flattened = heart_log_prob.view(-1, max_num_shapes)
-    rectangle_log_prob_flattened = rectangle_log_prob.view(-1, max_num_shapes)
+    program_id_flattened = program_id.reshape(-1)
+    heart_log_prob_flattened = heart_log_prob.reshape(-1, max_num_shapes)
+    rectangle_log_prob_flattened = rectangle_log_prob.reshape(-1, max_num_shapes)
 
     log_probs = []
     for sample_id in range(num_samples):
@@ -323,6 +121,148 @@ def evaluate_obs(program_id, hearts_obs, rectangles_obs):
 
         obss.append(torch.clamp(obs, 0, 1))
     return torch.stack(obss).view(*[*shape, num_rows, num_cols])
+
+
+class TrueGenerativeModel(nn.Module):
+    def __init__(self, im_size=64):
+        super().__init__()
+        self.im_size = im_size
+        self.register_buffer("blank_canvas", torch.zeros((self.im_size, self.im_size)))
+        self.max_num_shapes = 2
+        self.num_programs = 9
+
+    @property
+    def device(self):
+        return self.blank_canvas.device
+
+    def get_heart_obs_dist(self, heart_pose, num_rows=None, num_cols=None):
+        """p_H(obs | heart_pose)
+
+        Args
+            heart_pose
+                raw_position [*shape, 2]
+                raw_scale [*shape]
+            num_rows (int)
+            num_cols (int)
+
+        Returns: distribution with batch_shape [*shape] and event_shape
+            [num_rows, num_cols]
+        """
+        if num_rows is None:
+            num_rows = self.im_size
+        if num_cols is None:
+            num_cols = self.im_size
+
+        # Extract
+        raw_position, raw_scale = heart_pose
+        position = raw_position.sigmoid() - 0.5
+        scale = raw_scale.sigmoid() * 0.8 + 0.1
+
+        # Create blank canvas
+        shape = scale.shape
+        blank_canvas = torch.zeros((*shape, num_rows, num_cols), device=self.device)
+
+        return torch.distributions.Independent(
+            torch.distributions.Bernoulli(
+                probs=render.render_heart((position, scale), blank_canvas).clamp(1e-6, 1 - 1e-6)
+            ),
+            reinterpreted_batch_ndims=2,
+        )
+
+    def get_rectangle_obs_dist(self, rectangle_pose, num_rows=None, num_cols=None):
+        """p_H(obs | rectangle_pose)
+
+        Args
+            rectangle_pose [*shape, 4]
+            num_rows (int)
+            num_cols (int)
+
+        Returns: distribution with batch_shape [*shape] and event_shape
+            [num_rows, num_cols]
+        """
+        if num_rows is None:
+            num_rows = self.im_size
+        if num_cols is None:
+            num_cols = self.im_size
+
+        # Create blank canvas
+        shape = rectangle_pose.shape[:-1]
+        blank_canvas = torch.zeros((*shape, num_rows, num_cols), device=self.device)
+
+        return torch.distributions.Independent(
+            torch.distributions.Bernoulli(
+                probs=render.render_rectangle(rectangle_pose, blank_canvas).clamp(1e-6, 1 - 1e-6)
+            ),
+            reinterpreted_batch_ndims=2,
+        )
+
+    @property
+    def rectangle_pose_dist(self):
+        """p_R(z_R)
+
+        Returns distribution with batch_shape [] and event_shape [4]
+        """
+        return util.RectanglePoseDistribution(self.device)
+
+    @property
+    def heart_pose_dist(self):
+        """p_H(z_H)
+
+        Returns distribution with batch_shape [] and event_shape ([2], [])
+        """
+        # Position distribution
+        raw_position_dist = torch.distributions.Independent(
+            torch.distributions.Normal(
+                torch.zeros((2,), device=self.device), torch.ones((2,), device=self.device)
+            ),
+            reinterpreted_batch_ndims=1,
+        )
+
+        # Scale distribution
+        raw_scale_dist = torch.distributions.Normal(
+            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
+        )
+
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
+
+    @property
+    def program_id_dist(self):
+        """p_I(I)"""
+        return torch.distributions.Categorical(
+            logits=torch.ones((self.num_programs,), device=self.device)
+        )
+
+    def sample(self, sample_shape=[]):
+        """
+        Args:
+            sample_shape: list-like object (default [])
+
+        Returns:
+            latent
+                program_id [*sample_shape]
+                heart_poses
+                    raw_positions [*sample_shape, max_num_shapes, 2]
+                    raw_scales [*sample_shape, max_num_shapes]
+                rectangle_poses [*sample_shape, max_num_shapes, 4]
+            obs [*sample_shape, im_size, im_size]
+        """
+        # Sample LATENT
+        program_id = self.program_id_dist.sample(sample_shape)
+        heart_poses = self.heart_pose_dist.sample([*sample_shape, self.max_num_shapes])
+        rectangle_poses = self.rectangle_pose_dist.sample([*sample_shape, self.max_num_shapes])
+
+        # Sample OBS
+        # [*sample_shape, max_num_shapes, im_size, im_size]
+        hearts_obs = self.get_heart_obs_dist(heart_poses, self.im_size, self.im_size).sample()
+        rectangles_obs = self.get_rectangle_obs_dist(
+            rectangle_poses, self.im_size, self.im_size
+        ).sample()
+
+        # Select OBS
+        # [*sample_shape, im_size, im_size]
+        obs = evaluate_obs(program_id, hearts_obs, rectangles_obs)
+
+        return (program_id, heart_poses, rectangle_poses), obs
 
 
 class GenerativeModel(nn.Module):
@@ -418,7 +358,7 @@ class GenerativeModel(nn.Module):
 
         Returns distribution with batch_shape [] and event_shape [4]
         """
-        return RectanglePoseDistribution(self.device)
+        return util.RectanglePoseDistribution(self.device)
 
     @property
     def heart_pose_dist(self):
@@ -439,7 +379,7 @@ class GenerativeModel(nn.Module):
             torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
         )
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     @property
     def program_id_dist(self):
@@ -482,15 +422,23 @@ class GenerativeModel(nn.Module):
         latent_log_prob = program_id_log_prob + poses_log_prob
 
         # LIKELIHOOD
+        # Expand obs
+        shape = obs.shape[:-2]
+        num_rows, num_cols = obs.shape[-2:]
+        # [*shape, max_num_shapes, num_rows, num_cols]
+        obs_expanded = obs[..., None, :, :].expand(
+            *[*shape, self.max_num_shapes, num_rows, num_cols]
+        )
+
         # Evaluate individual log probs
         # [*shape, max_num_shapes]
         hearts_obs_log_prob = self.get_heart_obs_dist(
             heart_poses, self.im_size, self.im_size
-        ).log_prob(obs)
+        ).log_prob(obs_expanded)
         # [*shape, max_num_shapes]
         rectangles_obs_log_prob = self.get_rectangle_obs_dist(
             rectangle_poses, self.im_size, self.im_size
-        ).log_prob(obs)
+        ).log_prob(obs_expanded)
 
         # Combine log probs
         # [*shape]
@@ -522,8 +470,8 @@ class GenerativeModel(nn.Module):
         """
         # Sample LATENT
         program_id = self.program_id_dist.sample(sample_shape)
-        heart_poses = self.heart_pose_dist.sample(*[*sample_shape, self.max_num_shapes])
-        rectangle_poses = self.rectangle_pose_dist.sample(*[*sample_shape, self.max_num_shapes])
+        heart_poses = self.heart_pose_dist.sample([*sample_shape, self.max_num_shapes])
+        rectangle_poses = self.rectangle_pose_dist.sample([*sample_shape, self.max_num_shapes])
 
         # Sample OBS
         # [*sample_shape, max_num_shapes, im_size, im_size]
@@ -624,7 +572,7 @@ class Guide(nn.Module):
 
         # [num_samples, cnn_features_dim]
         cnn_features = self.get_cnn_features(
-            obs.view(num_samples, self.im_size, self.im_size), "program_id"
+            obs.reshape(num_samples, self.im_size, self.im_size), "program_id"
         )
 
         logits = self.program_id_mlp(cnn_features).view(*shape, self.num_programs)
@@ -647,7 +595,7 @@ class Guide(nn.Module):
 
         # [num_samples, cnn_features_dim]
         cnn_features = self.get_cnn_features(
-            obs.view(num_samples, self.im_size, self.im_size), "heart"
+            obs.reshape(num_samples, self.im_size, self.im_size), "heart"
         )
 
         # Position dist
@@ -668,7 +616,7 @@ class Guide(nn.Module):
         )
         raw_scale_dist = torch.distributions.Normal(scale_loc, scale_scale)
 
-        return JointDistribution([raw_position_dist, raw_scale_dist])
+        return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
     def get_rectangle_pose_dist(self, obs):
         """q_R(z_R | x)
@@ -683,7 +631,7 @@ class Guide(nn.Module):
 
         # [num_samples, cnn_features_dim]
         cnn_features = self.get_cnn_features(
-            obs.view(num_samples, self.im_size, self.im_size), "rectangle"
+            obs.reshape(num_samples, self.im_size, self.im_size), "rectangle"
         )
 
         raw_loc, raw_scale = self.rectangle_mlp(cnn_features).chunk(2, dim=-1)

@@ -48,9 +48,8 @@ def get_rws_loss(generative_model, guide, obs, num_particles):
     """
     # Sample from guide
     # batch_shape [batch_size]
-    guide_dist = guide.get_dist(obs)
     # [num_particles, batch_size, ...]
-    latent = guide_dist.sample((num_particles,))
+    latent = guide.sample(obs, (num_particles,))
 
     # Expand obs to [num_particles, batch_size, im_size, im_size]
     batch_size, im_size, _ = obs.shape
@@ -58,7 +57,7 @@ def get_rws_loss(generative_model, guide, obs, num_particles):
 
     # Evaluate log probs
     # [num_particles, batch_size]
-    guide_log_prob = guide_dist.log_prob(latent)
+    guide_log_prob = guide.log_prob(obs_expanded, latent)
     # [num_particles, batch_size]
     generative_model_log_prob = generative_model.log_prob(latent, obs_expanded)
 
