@@ -416,7 +416,7 @@ def rectangle_lim_to_str(rectangle_lim):
     """
     if rectangle_lim > 1:
         return ">1"
-    elif rectangle_lim < 0:
-        return "<0"
+    elif rectangle_lim < -1:
+        return "<-1"
     else:
         return f"{rectangle_lim:.1f}"
