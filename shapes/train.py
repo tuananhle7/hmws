@@ -28,18 +28,29 @@ def train(model, optimizer, stats, args):
             _, obs = true_generative_model.sample((args.batch_size,))
             loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
         elif args.model_type == "heartangles" or args.model_type == "shape_program":
-            _, obs = true_generative_model.sample((args.batch_size,))
-            if "rws" in args.algorithm:
-                loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
-            elif "vimco" in args.algorithm:
-                loss = losses.get_vimco_loss(
-                    generative_model, guide, obs, args.num_particles
+            if args.algorithm == "sleep":
+                loss = losses.get_sleep_loss(
+                    true_generative_model, guide, args.batch_size * args.num_particles
                 ).mean()
+            else:
+                _, obs = true_generative_model.sample((args.batch_size,))
+                if "rws" in args.algorithm:
+                    loss = losses.get_rws_loss(
+                        generative_model, guide, obs, args.num_particles
+                    ).mean()
+                elif "vimco" in args.algorithm:
+                    loss = losses.get_vimco_loss(
+                        generative_model, guide, obs, args.num_particles
+                    ).mean()
+                elif "iwae" in args.algorithm:
+                    loss = losses.get_iwae_loss(
+                        generative_model, guide, obs, args.num_particles
+                    ).mean()
 
-            if "sleep" in args.algorithm:
-                loss += losses.get_sleep_loss(
-                    generative_model, guide, args.batch_size * args.num_particles
-                ).mean()
+                if "sleep" in args.algorithm:
+                    loss += losses.get_sleep_loss(
+                        generative_model, guide, args.batch_size * args.num_particles
+                    ).mean()
         loss.backward()
 
         # Step gradient

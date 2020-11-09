@@ -36,7 +36,7 @@ def get_args_parser():
     parser.add_argument(
         "--algorithm",
         default="rws",
-        choices=["rws", "vimco", "rws_sleep", "vimco_sleep"],
+        choices=["rws", "vimco", "rws_sleep", "vimco_sleep", "sleep", "iwae_sleep"],
         help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
