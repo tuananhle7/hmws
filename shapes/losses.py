@@ -36,6 +36,48 @@ def get_elbo_loss(generative_model, guide, obs):
     return -elbo
 
 
+def get_iwae_loss(generative_model, guide, obs, num_particles):
+    """
+    Args:
+        generative_model
+        guide
+        obs [batch_size, im_size, im_size]
+        num_particles
+
+    Returns: [batch_size]
+    """
+    # Sample from guide
+    # [num_particles, batch_size, ...]
+    latent = guide.sample(obs, (num_particles,))
+
+    # Expand obs to [num_particles, batch_size, im_size, im_size]
+    batch_size, im_size, _ = obs.shape
+    obs_expanded = obs[None].expand(num_particles, batch_size, im_size, im_size)
+
+    # Evaluate log probs
+    # [num_particles, batch_size]
+    guide_log_prob = guide.log_prob(obs_expanded, latent)
+    # [num_particles, batch_size]
+    generative_model_log_prob = generative_model.log_prob(latent, obs_expanded)
+
+    # Compute log weight
+    # [num_particles, batch_size]
+    log_weight = generative_model_log_prob - guide_log_prob
+    # [num_particles, batch_size]
+    normalized_weight = util.exponentiate_and_normalize(log_weight, dim=0).detach()
+
+    # Compute losses
+    # [batch_size]
+    generative_model_loss = -torch.sum(normalized_weight * generative_model_log_prob, dim=0)
+
+    loss = generative_model_loss
+
+    if torch.isnan(loss).any():
+        raise RuntimeError("nan")
+
+    return loss
+
+
 def get_rws_loss(generative_model, guide, obs, num_particles):
     """
     Args:
