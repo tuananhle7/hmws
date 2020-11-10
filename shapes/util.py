@@ -420,3 +420,83 @@ def rectangle_lim_to_str(rectangle_lim):
         return "<-1"
     else:
         return f"{rectangle_lim:.1f}"
+
+
+def get_gaussian_kernel(dx, dy, kernel_size, scale, device):
+    """
+    Args
+        dx (float)
+        dy (float)
+        kernel_size (int)
+        scale (float)
+        device
+
+    Returns [kernel_size, kernel_size]
+    """
+
+    # Inputs to the kernel function
+    kernel_x_lim = dx * kernel_size / 2
+    kernel_y_lim = dy * kernel_size / 2
+    x_range = torch.linspace(-kernel_x_lim, kernel_x_lim, steps=kernel_size, device=device)
+    y_range = torch.linspace(-kernel_y_lim, kernel_y_lim, steps=kernel_size, device=device)
+    # [kernel_size, kernel_size]
+    kernel_x, kernel_y = torch.meshgrid(x_range, y_range)
+    # [kernel_size, kernel_size, 2]
+    kernel_xy = torch.stack([kernel_x, kernel_y], dim=-1)
+
+    # Kernel function
+    kernel_dist = torch.distributions.Independent(
+        torch.distributions.Normal(
+            torch.zeros((2,), device=device), torch.ones((2,), device=device) * scale
+        ),
+        reinterpreted_batch_ndims=1,
+    )
+
+    # Output from the kernel function
+    # [kernel_size, kernel_size]
+    log_kernel = kernel_dist.log_prob(kernel_xy)
+    # normalize
+    log_kernel = log_kernel - torch.logsumexp(log_kernel.view(-1), dim=0)
+
+    return log_kernel.exp()
+
+
+def smooth_image(image, kernel_size, scale):
+    """
+    Args
+        image [batch_size, num_rows, num_cols] (limits -1, 1)
+        kernel_size (int; must be odd)
+        scale (float)
+
+    Returns [batch_size, num_rows, num_cols]
+    """
+    if kernel_size % 2 == 0:
+        raise ValueError(f"kernel_size must be odd. got {kernel_size}")
+
+    # Extract
+    device = image.device
+    batch_size, num_rows, num_cols = image.shape
+
+    # Create gaussian kernel
+    dx, dy = 2 / num_cols, 2 / num_rows
+    kernel = get_gaussian_kernel(dx, dy, kernel_size, scale, device)
+
+    # Run convolution
+    return torch.nn.functional.conv2d(image[:, None], kernel[None, None], padding=kernel_size // 2)[
+        :, 0
+    ]
+
+
+if __name__ == "__main__":
+    batch_size, num_rows, num_cols = 1, 64, 64
+    kernel_size, scale = 5, 1.0
+
+    canvas = torch.zeros((num_rows, num_cols))
+    import render
+
+    image = render.render_rectangle(torch.tensor([-0.5, -0.5, 0.5, 0.5]), canvas)
+
+    fig, axs = plt.subplots(2, 1)
+    axs[0].imshow(image, vmin=0, vmax=1, cmap="Greys")
+    axs[1].imshow(smooth_image(image[None], kernel_size, scale)[0], vmin=0, vmax=1, cmap="Greys")
+    save_fig(fig, "smoothing.png")
