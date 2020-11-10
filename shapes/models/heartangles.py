@@ -225,7 +225,14 @@ class GenerativeModel(nn.Module):
             torch.distributions.Bernoulli(logits=logits), reinterpreted_batch_ndims=2
         )
 
-    def get_rectangle_obs_dist(self, rectangle_pose, num_rows=None, num_cols=None):
+    def get_rectangle_obs_dist(
+        self,
+        rectangle_pose,
+        num_rows=None,
+        num_cols=None,
+        smoothing_kwargs={"kernel_size": 1, "scale": 1.0},
+        clamp_epsilon=1e-6,
+    ):
         """p_H(obs | rectangle_pose)
 
         Args
@@ -247,7 +254,9 @@ class GenerativeModel(nn.Module):
 
         return torch.distributions.Independent(
             torch.distributions.Bernoulli(
-                probs=render.render_rectangle(rectangle_pose, blank_canvas).clamp(1e-6, 1 - 1e-6)
+                probs=util.smooth_image(
+                    render.render_rectangle(rectangle_pose, blank_canvas), **smoothing_kwargs
+                ).clamp(clamp_epsilon, 1 - clamp_epsilon)
             ),
             reinterpreted_batch_ndims=2,
         )
@@ -329,7 +338,11 @@ class GenerativeModel(nn.Module):
         ).log_prob(obs)
         # [*shape]
         rectangle_obs_log_prob = self.get_rectangle_obs_dist(
-            rectangle_pose, self.im_size, self.im_size
+            rectangle_pose,
+            self.im_size,
+            self.im_size,
+            smoothing_kwargs={"kernel_size": 1, "scale": 1.0},
+            clamp_epsilon=1e-6,
         ).log_prob(obs)
 
         # Combine log probs
