@@ -8,6 +8,7 @@ from models import rectangles
 from models import hearts
 from models import heartangles
 from models import shape_program
+from models import no_rectangle
 import os
 import random
 import numpy as np
@@ -122,7 +123,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"{args.model_type}_{args.algorithm}"
+    return f"{args.algorithm}"
 
 
 def get_save_job_name_from_args(args):
@@ -181,6 +182,12 @@ def init(run_args, device):
 
         # Guide
         guide = shape_program.Guide().to(device)
+    elif run_args.model_type == "no_rectangle":
+        # Generative model
+        generative_model = no_rectangle.GenerativeModel().to(device)
+
+        # Guide
+        guide = no_rectangle.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)

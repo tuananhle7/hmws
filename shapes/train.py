@@ -3,6 +3,7 @@ import util
 from models import hearts
 from models import heartangles
 from models import shape_program
+from models import no_rectangle
 
 
 def train(model, optimizer, stats, args):
@@ -16,6 +17,8 @@ def train(model, optimizer, stats, args):
         true_generative_model = heartangles.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "shape_program":
         true_generative_model = shape_program.TrueGenerativeModel().to(guide.device)
+    elif args.model_type == "no_rectangle":
+        true_generative_model = no_rectangle.TrueGenerativeModel().to(guide.device)
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Zero grad
@@ -27,7 +30,11 @@ def train(model, optimizer, stats, args):
         elif args.model_type == "hearts":
             _, obs = true_generative_model.sample((args.batch_size,))
             loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
-        elif args.model_type == "heartangles" or args.model_type == "shape_program":
+        elif (
+            args.model_type == "heartangles"
+            or args.model_type == "shape_program"
+            or args.model_type == "no_rectangle"
+        ):
             if args.algorithm == "sleep":
                 loss = losses.get_sleep_loss(
                     true_generative_model, guide, args.batch_size * args.num_particles

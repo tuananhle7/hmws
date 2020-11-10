@@ -3,6 +3,7 @@ from models import rectangles
 from models import hearts
 from models import heartangles
 from models import shape_program
+from models import no_rectangle
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -262,6 +263,90 @@ def plot_shape_program_reconstructions(path, generative_model, guide, obs, groun
     util.save_fig(fig, path)
 
 
+def plot_no_rectangle_reconstructions(path, generative_model, guide, obs, ground_truth_latent):
+    """
+    Args:
+        generative_model
+        guide
+        obs: [num_test_obs, im_size, im_size]
+    """
+    num_test_obs, im_size, _ = obs.shape
+
+    # Deconstruct ground truth latent
+    (
+        ground_truth_program_id,
+        (ground_truth_raw_positions, ground_truth_raw_scales),
+        ground_truth_rectangle_poses,
+    ) = ground_truth_latent
+
+    # Sample latent
+    latent = guide.sample(obs)
+    program_id, (raw_positions_1, raw_scales_1), (raw_positions_2, raw_scales_2) = latent
+
+    # Sample reconstructions
+    reconstructed_obs_probs = generative_model.get_obs_probs(latent)
+
+    # Plot
+    num_rows = 3
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        # Plot obs
+        ax = axss[0, sample_id]
+        ax.imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.text(
+            0.95,
+            0.95,
+            heartangles.latent_to_str(
+                (
+                    ground_truth_program_id[sample_id],
+                    (ground_truth_raw_positions[sample_id], ground_truth_raw_scales[sample_id]),
+                    ground_truth_rectangle_poses[sample_id],
+                )
+            ),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+
+        # Plot probs
+        ax = axss[1, sample_id]
+        ax.imshow(reconstructed_obs_probs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.text(
+            0.95,
+            0.95,
+            no_rectangle.latent_to_str(
+                (
+                    program_id[sample_id],
+                    (raw_positions_1[sample_id], raw_scales_1[sample_id]),
+                    (raw_positions_2[sample_id], raw_scales_2[sample_id]),
+                )
+            ),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+
+        # Plot probs > 0.5
+        axss[2, sample_id].imshow(
+            reconstructed_obs_probs[sample_id].cpu() > 0.5, cmap="Greys", vmin=0, vmax=1
+        )
+
+    util.save_fig(fig, path)
+
+
 def plot_occupancy_network(path, generative_model):
     """
     Args:
@@ -296,6 +381,38 @@ def plot_occupancy_network(path, generative_model):
 
             # axss[i, j].imshow(obs.cpu() > 0.5, cmap="Greys", vmin=0, vmax=1)
             axss[i, j].imshow(obs.cpu(), cmap="Greys", vmin=0, vmax=1)
+
+    util.save_fig(fig, path)
+
+
+def plot_occupancy_network_no_rectangle(path, generative_model):
+    """
+    Args:
+        generative_model
+    """
+    device = generative_model.device
+    im_size = generative_model.im_size
+
+    # Shape pose
+    position = torch.zeros((2,), device=device)
+    scale = torch.tensor(0.5, device=device)
+    raw_position = util.logit(position + 0.5)
+    raw_scale = util.logit((scale - 0.1) / 0.8)
+
+    # Plot
+    num_rows, num_cols = 1, 2
+    fig, axs = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axs.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for i, ax in enumerate(axs):
+        obs = generative_model.get_shape_obs_dist(i, (raw_position, raw_scale)).base_dist.probs
+        ax.imshow(obs.cpu(), cmap="Greys", vmin=0, vmax=1)
 
     util.save_fig(fig, path)
 
@@ -404,6 +521,27 @@ def main(args):
                     ground_truth_latent,
                 )
                 plot_occupancy_network(
+                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
+                    generative_model,
+                )
+            elif run_args.model_type == "no_rectangle":
+                # Test data
+                true_generative_model = no_rectangle.TrueGenerativeModel().to(device)
+                ground_truth_latent, obs = true_generative_model.sample((num_test_obs,))
+
+                # Replace generative model by the true generative model if algorithm is sleep
+                if run_args.algorithm == "sleep":
+                    generative_model = true_generative_model
+
+                # Plot
+                plot_no_rectangle_reconstructions(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                    ground_truth_latent,
+                )
+                plot_occupancy_network_no_rectangle(
                     f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
                     generative_model,
                 )
