@@ -464,27 +464,30 @@ def get_gaussian_kernel(dx, dy, kernel_size, scale, device):
 def smooth_image(image, kernel_size, scale):
     """
     Args
-        image [batch_size, num_rows, num_cols] (limits -1, 1)
+        image [*shape, num_rows, num_cols] (limits -1, 1)
         kernel_size (int; must be odd)
         scale (float)
 
-    Returns [batch_size, num_rows, num_cols]
+    Returns [*shape, num_rows, num_cols]
     """
     if kernel_size % 2 == 0:
         raise ValueError(f"kernel_size must be odd. got {kernel_size}")
 
     # Extract
     device = image.device
-    batch_size, num_rows, num_cols = image.shape
+    num_rows, num_cols = image.shape[-2:]
+    shape = image.shape[:-2]
+    num_samples = int(torch.tensor(shape).prod().long().item())
+    image_flattened = image.view(num_samples, num_rows, num_rows)
 
     # Create gaussian kernel
     dx, dy = 2 / num_cols, 2 / num_rows
     kernel = get_gaussian_kernel(dx, dy, kernel_size, scale, device)
 
     # Run convolution
-    return torch.nn.functional.conv2d(image[:, None], kernel[None, None], padding=kernel_size // 2)[
-        :, 0
-    ]
+    return torch.nn.functional.conv2d(
+        image_flattened[:, None], kernel[None, None], padding=kernel_size // 2
+    ).view(*[*shape, num_rows, num_cols])
 
 
 if __name__ == "__main__":
@@ -498,5 +501,5 @@ if __name__ == "__main__":
 
     fig, axs = plt.subplots(2, 1)
     axs[0].imshow(image, vmin=0, vmax=1, cmap="Greys")
-    axs[1].imshow(smooth_image(image[None], kernel_size, scale)[0], vmin=0, vmax=1, cmap="Greys")
+    axs[1].imshow(smooth_image(image, kernel_size, scale), vmin=0, vmax=1, cmap="Greys")
     save_fig(fig, "smoothing.png")
