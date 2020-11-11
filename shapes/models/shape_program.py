@@ -307,6 +307,36 @@ class TrueGenerativeModel(nn.Module):
 
         return (program_id, heart_poses, rectangle_poses), obs
 
+    def get_obs_probs(self, latent):
+        """
+        Args:
+            latent
+                program_id [*shape]
+                heart_poses
+                    raw_positions [*shape, max_num_shapes, 2]
+                    raw_scales [*shape, max_num_shapes]
+                rectangle_poses [*shape, max_num_shapes, 4]
+
+        Returns:
+            obs_probs [*shape, im_size, im_size]
+        """
+        program_id, heart_poses, rectangle_poses = latent
+
+        # Sample OBS
+        # [*shape, max_num_shapes, im_size, im_size]
+        hearts_obs_probs = self.get_heart_obs_dist(
+            heart_poses, self.im_size, self.im_size
+        ).base_dist.probs
+        rectangles_obs_probs = self.get_rectangle_obs_dist(
+            rectangle_poses, self.im_size, self.im_size
+        ).base_dist.probs
+
+        # Select OBS
+        # [*shape, im_size, im_size]
+        obs_probs = evaluate_obs(program_id, hearts_obs_probs, rectangles_obs_probs)
+
+        return obs_probs
+
 
 class GenerativeModel(nn.Module):
     def __init__(self, im_size=64):
