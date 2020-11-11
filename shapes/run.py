@@ -30,7 +30,14 @@ def get_args_parser():
     parser.add_argument(
         "--model-type",
         default="rectangles",
-        choices=["rectangles", "hearts", "heartangles", "shape_program"],
+        choices=[
+            "rectangles",
+            "hearts",
+            "heartangles",
+            "shape_program",
+            "no_rectangle",
+            "ldif_representation",
+        ],
         help=" ",
     )
     parser.add_argument(

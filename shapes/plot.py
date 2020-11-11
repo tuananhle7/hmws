@@ -4,6 +4,7 @@ from models import hearts
 from models import heartangles
 from models import shape_program
 from models import no_rectangle
+from models import ldif_representation
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -347,6 +348,20 @@ def plot_no_rectangle_reconstructions(path, generative_model, guide, obs, ground
     util.save_fig(fig, path)
 
 
+def plot_ldif_representation_reconstructions(
+    path, generative_model, guide, obs, ground_truth_latent
+):
+    """
+    Args:
+        generative_model
+        guide
+        obs: [num_test_obs, im_size, im_size]
+    """
+    return plot_no_rectangle_reconstructions(
+        path, generative_model, guide, obs, ground_truth_latent
+    )
+
+
 def plot_occupancy_network(path, generative_model):
     """
     Args:
@@ -413,6 +428,78 @@ def plot_occupancy_network_no_rectangle(path, generative_model):
     for i, ax in enumerate(axs):
         obs = generative_model.get_shape_obs_dist(i, (raw_position, raw_scale)).base_dist.probs
         ax.imshow(obs.cpu(), cmap="Greys", vmin=0, vmax=1)
+
+    util.save_fig(fig, path)
+
+
+def plot_occupancy_network_ldif_representation(path, generative_model):
+    """
+    Args:
+        generative_model
+    """
+    device = generative_model.device
+    im_size = generative_model.im_size
+
+    # Shape pose
+    position = torch.zeros((2,), device=device)
+    scale = torch.tensor(0.5, device=device)
+    raw_position = util.logit(position + 0.5)
+    raw_scale = util.logit((scale - 0.1) / 0.8)
+
+    # Plot
+    num_rows, num_cols = 6, 2
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(4 * num_cols, 4 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for i, ax in enumerate(axss[0]):
+        analytic_shape_density = generative_model._get_analytic_shape_density(
+            i, (raw_position, raw_scale)
+        )
+        im = ax.imshow(analytic_shape_density.cpu())
+        ax.set_title(f"$g_{i + 1}(x, \Sigma)$")
+        fig.colorbar(im, ax=ax)
+    for i, ax in enumerate(axss[1]):
+        deep_shape_density = generative_model._get_deep_shape_density(i, (raw_position, raw_scale))
+        im = ax.imshow(deep_shape_density.cpu())
+        ax.set_title(f"$f_{i + 1}(x, \\theta)$")
+        fig.colorbar(im, ax=ax)
+    for i, ax in enumerate(axss[2]):
+        deep_shape_density = generative_model._get_deep_shape_density(i, (raw_position, raw_scale))
+        im = ax.imshow(deep_shape_density.cpu() + 1)
+        ax.set_title(f"$f_{i + 1}(x, \\theta) + 1$")
+        fig.colorbar(im, ax=ax)
+    for i, ax in enumerate(axss[3]):
+        deep_shape_density = generative_model._get_deep_shape_density(i, (raw_position, raw_scale))
+        analytic_shape_density = generative_model._get_analytic_shape_density(
+            i, (raw_position, raw_scale)
+        )
+        im = ax.imshow(((deep_shape_density + 1) * analytic_shape_density).cpu())
+        ax.set_title(f"$LDIF_{i + 1}(x) = g_{i + 1}(x, \Sigma)(f_{i + 1}(x, \\theta) + 1)$")
+        fig.colorbar(im, ax=ax)
+    for i, ax in enumerate(axss[4]):
+        deep_shape_density = generative_model._get_deep_shape_density(i, (raw_position, raw_scale))
+        analytic_shape_density = generative_model._get_analytic_shape_density(
+            i, (raw_position, raw_scale)
+        )
+        im = ax.imshow(
+            ((deep_shape_density + 1) * analytic_shape_density).cpu() > 0,
+            cmap="Greys",
+            vmin=0,
+            vmax=1,
+        )
+        ax.set_title(f"$LDIF_{i + 1}(x) > 0$")
+        fig.colorbar(im, ax=ax)
+    for i, ax in enumerate(axss[5]):
+        obs = generative_model.get_shape_obs_dist(i, (raw_position, raw_scale)).base_dist.probs
+        im = ax.imshow(obs.cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.set_title(f"$sigmoid(LDIF_{i + 1}(x))$")
+        fig.colorbar(im, ax=ax)
 
     util.save_fig(fig, path)
 
@@ -542,6 +629,27 @@ def main(args):
                     ground_truth_latent,
                 )
                 plot_occupancy_network_no_rectangle(
+                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
+                    generative_model,
+                )
+            elif run_args.model_type == "ldif_representation":
+                # Test data
+                true_generative_model = ldif_representation.TrueGenerativeModel().to(device)
+                ground_truth_latent, obs = true_generative_model.sample((num_test_obs,))
+
+                # Replace generative model by the true generative model if algorithm is sleep
+                if run_args.algorithm == "sleep":
+                    generative_model = true_generative_model
+
+                # Plot
+                plot_ldif_representation_reconstructions(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                    ground_truth_latent,
+                )
+                plot_occupancy_network_ldif_representation(
                     f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
                     generative_model,
                 )

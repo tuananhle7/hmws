@@ -4,6 +4,7 @@ from models import hearts
 from models import heartangles
 from models import shape_program
 from models import no_rectangle
+from models import ldif_representation
 
 
 def train(model, optimizer, stats, args):
@@ -19,6 +20,8 @@ def train(model, optimizer, stats, args):
         true_generative_model = shape_program.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "no_rectangle":
         true_generative_model = no_rectangle.TrueGenerativeModel().to(guide.device)
+    elif args.model_type == "ldif_representation":
+        true_generative_model = ldif_representation.TrueGenerativeModel().to(guide.device)
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Zero grad
@@ -34,6 +37,7 @@ def train(model, optimizer, stats, args):
             args.model_type == "heartangles"
             or args.model_type == "shape_program"
             or args.model_type == "no_rectangle"
+            or args.model_type == "ldif_representation"
         ):
             if args.algorithm == "sleep":
                 loss = losses.get_sleep_loss(
