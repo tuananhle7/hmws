@@ -29,19 +29,20 @@ def train(model, optimizer, stats, args):
             model=generative_model,
             guide=guide,
             optim=optimizer,
-            loss=pyro.infer.ReweightedWakeSleep(
-                num_particles=args.num_particles,
-                vectorize_particles=False,
-                model_has_params=True,
-                insomnia=1.0,
-            ),
+            loss=pyro.infer.Trace_ELBO()
+            # loss=pyro.infer.ReweightedWakeSleep(
+            #     num_particles=args.num_particles,
+            #     vectorize_particles=False,
+            #     model_has_params=True,
+            #     insomnia=1.0,
+            # ),
         )
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         if args.model_type == "hearts_pyro":
             if "rws" in args.algorithm:
                 _, obs = true_generative_model.sample((args.batch_size,))
-                _, loss = svi.step(obs)
+                loss = svi.step(obs)
 
             # Record stats
             stats.losses.append(loss)

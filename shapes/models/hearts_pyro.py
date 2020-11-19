@@ -72,6 +72,54 @@ class GenerativeModel(nn.Module):
                 obs=obs[batch_id],
             )
 
+    def get_obs_dist(self, latent, num_rows=None, num_cols=None):
+        """p(obs | latent) -- ONLY FOR PLOTTING
+
+        Args
+            latent
+                raw_position [*shape, 2]
+                raw_scale [*shape]
+            num_rows (int)
+            num_cols (int)
+
+        Returns: distribution with batch_shape [*shape] and event_shape
+            [num_rows, num_cols]
+        """
+        if num_rows is None:
+            num_rows = self.im_size
+        if num_cols is None:
+            num_cols = self.im_size
+        # Extract
+        raw_position, raw_scale = latent
+        position = raw_position.sigmoid() - 0.5
+        scale = raw_scale.sigmoid() * 0.8 + 0.1
+
+        # util.logging.info(f"position = {position} | scale = {scale}")
+        shape = scale.shape
+        # num_samples = int(torch.tensor(shape).prod().long().item())
+        position_x, position_y = position[..., 0], position[..., 1]  # [*shape]
+        # [num_rows, num_cols]
+        canvas_x, canvas_y = render.get_canvas_xy(num_rows, num_cols, self.device)
+
+        # Shift and scale
+        # [num_samples, num_rows, num_cols]
+        canvas_x = (canvas_x[None] - position_x.view(-1, 1, 1)) / scale.view(-1, 1, 1)
+        canvas_y = (canvas_y[None] - position_y.view(-1, 1, 1)) / scale.view(-1, 1, 1)
+
+        # Build input
+        # [num_samples * num_rows * num_cols, 2]
+        occupancy_net_input = torch.stack([canvas_x, canvas_y], dim=-1).view(-1, 2)
+
+        # Run occupancy_net
+        logits = self.occupancy_net(occupancy_net_input).view(*[*shape, num_rows, num_cols])
+
+        if torch.isnan(logits).any():
+            raise RuntimeError("nan")
+
+        return torch.distributions.Independent(
+            torch.distributions.Bernoulli(logits=logits), reinterpreted_batch_ndims=2
+        )
+
 
 class Guide(nn.Module):
     def __init__(self, im_size=64):

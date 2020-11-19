@@ -5,6 +5,7 @@ from models import heartangles
 from models import shape_program
 from models import no_rectangle
 from models import ldif_representation
+from models import hearts_pyro
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -92,7 +93,10 @@ def plot_hearts_reconstructions(path, generative_model, guide, obs):
     num_test_obs, im_size, _ = obs.shape
 
     # Sample latent
-    latent = guide.sample(obs)
+    if isinstance(guide, hearts_pyro.Guide):
+        latent = guide(obs)
+    else:
+        latent = guide.sample(obs)
 
     # Sample reconstructions
     reconstructed_obs = generative_model.get_obs_dist(latent).base_dist.probs
@@ -389,7 +393,9 @@ def plot_occupancy_network(path, generative_model):
             scale = torch.tensor(0.5, device=device)
             raw_position = util.logit(position + 0.5)
             raw_scale = util.logit((scale - 0.1) / 0.8)
-            if isinstance(generative_model, hearts.GenerativeModel):
+            if isinstance(generative_model, hearts.GenerativeModel) or isinstance(
+                generative_model, hearts_pyro.GenerativeModel
+            ):
                 obs = generative_model.get_obs_dist((raw_position, raw_scale)).base_dist.probs
             else:
                 obs = generative_model.get_heart_obs_dist((raw_position, raw_scale)).base_dist.probs
@@ -550,7 +556,7 @@ def main(args):
                 plot_rectangles_posterior(
                     f"{util.get_save_dir(run_args)}/posterior/{num_iterations}.png", guide, obs
                 )
-            elif run_args.model_type == "hearts":
+            elif run_args.model_type == "hearts" or run_args.model_type == "hearts_pyro":
                 # Test data
                 true_generative_model = hearts.TrueGenerativeModel().to(device)
                 latent, obs = true_generative_model.sample((num_test_obs,))
