@@ -1,3 +1,4 @@
+import pyro
 import subprocess
 import getpass
 import itertools
@@ -10,6 +11,7 @@ from models import heartangles
 from models import shape_program
 from models import no_rectangle
 from models import ldif_representation
+from models import hearts_pyro
 import os
 import random
 import numpy as np
@@ -195,6 +197,12 @@ def init(run_args, device):
 
         # Guide
         guide = ldif_representation.Guide().to(device)
+    elif run_args.model_type == "hearts_pyro":
+        # Generative model
+        generative_model = hearts_pyro.GenerativeModel().to(device)
+
+        # Guide
+        guide = hearts_pyro.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)
@@ -204,7 +212,11 @@ def init(run_args, device):
         parameters = guide.parameters()
     else:
         parameters = itertools.chain(generative_model.parameters(), guide.parameters())
-    optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
+
+    if run_args.model_type == "hearts_pyro":
+        optimizer = pyro.optim.pytorch_optimizers.Adam({"lr": run_args.lr})
+    else:
+        optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
     stats = Stats([])
@@ -221,7 +233,9 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
             if run_args.model_type == "rectangles"
             else generative_model.state_dict(),
             "guide_state_dict": guide.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
+            "optimizer_state_dict": optimizer.get_state()
+            if run_args.model_type == "hearts_pyro"
+            else optimizer.state_dict(),
             "stats": stats,
             "run_args": run_args,
         },
@@ -242,7 +256,10 @@ def load_checkpoint(path, device):
         generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
 
     model = (generative_model, guide)
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if run_args.model_type == "hearts_pyro":
+        optimizer.set_state(checkpoint["optimizer_state_dict"])
+    else:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     stats = checkpoint["stats"]
     return model, optimizer, stats, run_args
 

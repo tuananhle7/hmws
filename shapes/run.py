@@ -37,6 +37,7 @@ def get_args_parser():
             "shape_program",
             "no_rectangle",
             "ldif_representation",
+            "hearts_pyro",
         ],
         help=" ",
     )
