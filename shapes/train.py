@@ -21,28 +21,38 @@ def train(model, optimizer, stats, args):
         true_generative_model = shape_program.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "no_rectangle":
         true_generative_model = no_rectangle.TrueGenerativeModel().to(guide.device)
-    elif args.model_type == "ldif_representation":
+    elif args.model_type == "ldif_representation" or args.model_type == "ldif_representation_pyro":
         true_generative_model = ldif_representation.TrueGenerativeModel().to(guide.device)
 
     if args.model_type == "hearts_pyro":
         svi = pyro.infer.SVI(
+            model=generative_model, guide=guide, optim=optimizer, loss=pyro.infer.Trace_ELBO()
+        )
+    elif args.model_type == "ldif_representation_pyro":
+        svi = pyro.infer.SVI(
             model=generative_model,
             guide=guide,
             optim=optimizer,
-            loss=pyro.infer.Trace_ELBO()
-            # loss=pyro.infer.ReweightedWakeSleep(
-            #     num_particles=args.num_particles,
-            #     vectorize_particles=False,
-            #     model_has_params=True,
-            #     insomnia=1.0,
-            # ),
+            loss=pyro.infer.ReweightedWakeSleep(
+                num_particles=args.num_particles,
+                vectorize_particles=False,
+                model_has_params=True,
+                insomnia=1.0,
+            ),
         )
+        util.logging.info(f"Using pyro version {pyro.__version__}")
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
-        if args.model_type == "hearts_pyro":
-            if "rws" in args.algorithm:
-                _, obs = true_generative_model.sample((args.batch_size,))
-                loss = svi.step(obs)
+        if "_pyro" in args.model_type:
+            # Generate data
+            _, obs = true_generative_model.sample((args.batch_size,))
+
+            # Step gradient
+            loss = svi.step(obs)
+
+            # Turn loss into a scalar
+            if isinstance(loss, tuple):
+                loss = sum(loss)
 
             # Record stats
             stats.losses.append(loss)
