@@ -128,7 +128,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"{args.algorithm}"
+    return f"{args.model_type}_{args.algorithm}"
 
 
 def get_save_job_name_from_args(args):
@@ -420,6 +420,40 @@ class RectanglePoseDistribution:
         # min_y_log_prob = torch.distributions.Uniform(minus_one, self.one).log_prob(min_y)
         # max_y_log_prob = torch.distributions.Uniform(min_y, self.one).log_prob(max_y)
         # return min_x_log_prob + max_x_log_prob + min_y_log_prob + max_y_log_prob
+
+
+class SquarePoseDistribution:
+    def __init__(self, device):
+        self.device = device
+        self.lim = torch.tensor(0.8, device=self.device)
+
+    def sample(self, sample_shape):
+        """
+        Args
+            sample_shape
+
+        Returns [*sample_shape, 4]
+        """
+        minus_lim = -self.lim
+        padding = 0.2
+        min_x = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
+        min_y = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
+        side = torch.distributions.Uniform(
+            torch.zeros_like(min_x), self.lim - torch.max(min_x, min_y)
+        ).sample()
+        max_x = min_x + side
+        max_y = min_y + side
+        return torch.stack([min_x, min_y, max_x, max_y], dim=-1)
+
+    def log_prob(self, xy_lims):
+        """
+        Args
+            xy_lims [*shape, 4]
+
+        Returns [*shape]
+        """
+        shape = xy_lims.shape[:-1]
+        return torch.zeros(shape, device=xy_lims.device)
 
 
 def heart_pose_to_str(heart_pose):

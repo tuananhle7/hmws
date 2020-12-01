@@ -120,7 +120,7 @@ class TrueGenerativeModel(nn.Module):
 
         Returns distribution with batch_shape [] and event_shape [4]
         """
-        return util.RectanglePoseDistribution(self.device)
+        return util.SquarePoseDistribution(self.device)
 
     @property
     def heart_pose_dist(self):
