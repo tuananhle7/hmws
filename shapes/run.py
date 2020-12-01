@@ -39,6 +39,7 @@ def get_args_parser():
             "ldif_representation",
             "hearts_pyro",
             "ldif_representation_pyro",
+            "neural_boundary",
         ],
         help=" ",
     )

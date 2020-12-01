@@ -704,7 +704,7 @@ def main(args):
                     f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
                     generative_model,
                 )
-            elif run_args.model_type == "no_rectangle":
+            elif run_args.model_type == "no_rectangle" or run_args.model_type == "neural_boundary":
                 # Test data
                 true_generative_model = no_rectangle.TrueGenerativeModel().to(device)
                 ground_truth_latent, obs = true_generative_model.sample((num_test_obs,))

@@ -19,7 +19,7 @@ def train(model, optimizer, stats, args):
         true_generative_model = heartangles.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "shape_program":
         true_generative_model = shape_program.TrueGenerativeModel().to(guide.device)
-    elif args.model_type == "no_rectangle":
+    elif args.model_type == "no_rectangle" or args.model_type == "neural_boundary":
         true_generative_model = no_rectangle.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "ldif_representation" or args.model_type == "ldif_representation_pyro":
         true_generative_model = ldif_representation.TrueGenerativeModel().to(guide.device)
@@ -71,6 +71,7 @@ def train(model, optimizer, stats, args):
                 or args.model_type == "shape_program"
                 or args.model_type == "no_rectangle"
                 or args.model_type == "ldif_representation"
+                or args.model_type == "neural_boundary"
             ):
                 if args.algorithm == "sleep":
                     loss = losses.get_sleep_loss(

@@ -13,6 +13,7 @@ from models import no_rectangle
 from models import ldif_representation
 from models import hearts_pyro
 from models import ldif_representation_pyro
+from models import neural_boundary
 import os
 import random
 import numpy as np
@@ -210,6 +211,12 @@ def init(run_args, device):
 
         # Guide
         guide = ldif_representation_pyro.Guide().to(device)
+    elif run_args.model_type == "neural_boundary":
+        # Generative model
+        generative_model = neural_boundary.GenerativeModel().to(device)
+
+        # Guide
+        guide = neural_boundary.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)
