@@ -442,12 +442,13 @@ class SquarePoseDistribution:
         Returns [*sample_shape, 4]
         """
         minus_lim = -self.lim
-        padding = 0.2
+        padding = 1.0
         min_x = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
         min_y = torch.distributions.Uniform(minus_lim, self.lim - padding).sample(sample_shape)
-        side = torch.distributions.Uniform(
-            torch.zeros_like(min_x), self.lim - torch.max(min_x, min_y)
-        ).sample()
+        # side = torch.distributions.Uniform(
+        #     torch.zeros_like(min_x), self.lim - torch.max(min_x, min_y)
+        # ).sample()
+        side = 1.0
         max_x = min_x + side
         max_y = min_y + side
         return torch.stack([min_x, min_y, max_x, max_y], dim=-1)
