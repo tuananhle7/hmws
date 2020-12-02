@@ -167,6 +167,10 @@ class TrueGenerativeModel(nn.Module):
             [self.is_heart_dist, self.heart_pose_dist, self.rectangle_pose_dist]
         ).sample(sample_shape)
 
+        # HACK: make scale constant
+        raw_position, raw_scale = heart_pose
+        heart_pose = raw_position, torch.zeros_like(raw_scale)
+
         # Sample OBS
         # [*sample_shape, im_size, im_size]
         heart_obs = self.get_heart_obs_dist(heart_pose, self.im_size, self.im_size).sample()
@@ -264,7 +268,9 @@ class GenerativeModel(nn.Module):
 
         # Scale distribution
         raw_scale_dist = torch.distributions.Normal(
-            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
+            # torch.tensor(0.0, device=self.device), torch.tensor(1., device=self.device)
+            # HACK
+            torch.tensor(0.0, device=self.device), torch.tensor(0.001, device=self.device)
         )
 
         return util.JointDistribution([raw_position_dist, raw_scale_dist])
@@ -509,6 +515,11 @@ class Guide(nn.Module):
             2, dim=-1
         )
         scale_loc, scale_scale = scale_raw_loc.view(*shape), scale_raw_scale.view(*shape).exp()
+        # HACK
+        scale_loc, scale_scale = (
+            torch.zeros_like(scale_loc),
+            torch.ones_like(scale_scale) * 0.001,
+        )
         raw_scale_dist = torch.distributions.Normal(scale_loc, scale_scale)
 
         return util.JointDistribution([raw_position_dist, raw_scale_dist])
