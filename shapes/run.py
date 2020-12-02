@@ -40,6 +40,7 @@ def get_args_parser():
             "hearts_pyro",
             "ldif_representation_pyro",
             "neural_boundary",
+            "neural_boundary_pyro",
         ],
         help=" ",
     )

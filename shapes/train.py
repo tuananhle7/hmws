@@ -13,34 +13,42 @@ def train(model, optimizer, stats, args):
     num_iterations_so_far = len(stats.losses)
 
     generative_model, guide = model
+
+    # Initialize optimizer for pyro models
+    if "_pyro" in args.model_type:
+        if args.model_type == "hearts_pyro":
+            svi = pyro.infer.SVI(
+                model=generative_model, guide=guide, optim=optimizer, loss=pyro.infer.Trace_ELBO()
+            )
+        else:
+            svi = pyro.infer.SVI(
+                model=generative_model,
+                guide=guide,
+                optim=optimizer,
+                loss=pyro.infer.ReweightedWakeSleep(
+                    num_particles=args.num_particles,
+                    vectorize_particles=False,
+                    model_has_params=True,
+                    insomnia=1.0,
+                ),
+            )
+            util.logging.info(f"Using pyro version {pyro.__version__}")
+
+    # Initialize true generative model
     if args.model_type == "hearts" or args.model_type == "hearts_pyro":
         true_generative_model = hearts.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "heartangles":
         true_generative_model = heartangles.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "shape_program":
         true_generative_model = shape_program.TrueGenerativeModel().to(guide.device)
-    elif args.model_type == "no_rectangle" or args.model_type == "neural_boundary":
+    elif (
+        args.model_type == "no_rectangle"
+        or args.model_type == "neural_boundary"
+        or args.model_type == "neural_boundary_pyro"
+    ):
         true_generative_model = no_rectangle.TrueGenerativeModel().to(guide.device)
     elif args.model_type == "ldif_representation" or args.model_type == "ldif_representation_pyro":
         true_generative_model = ldif_representation.TrueGenerativeModel().to(guide.device)
-
-    if args.model_type == "hearts_pyro":
-        svi = pyro.infer.SVI(
-            model=generative_model, guide=guide, optim=optimizer, loss=pyro.infer.Trace_ELBO()
-        )
-    elif args.model_type == "ldif_representation_pyro":
-        svi = pyro.infer.SVI(
-            model=generative_model,
-            guide=guide,
-            optim=optimizer,
-            loss=pyro.infer.ReweightedWakeSleep(
-                num_particles=args.num_particles,
-                vectorize_particles=False,
-                model_has_params=True,
-                insomnia=1.0,
-            ),
-        )
-        util.logging.info(f"Using pyro version {pyro.__version__}")
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         if "_pyro" in args.model_type:
