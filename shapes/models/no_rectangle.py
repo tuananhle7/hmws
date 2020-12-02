@@ -10,6 +10,7 @@ def shape_pose_to_str(shape_pose, shape_id):
         shape_pose
             raw_position [2]
             raw_scale []
+        sample_id
 
     Returns (str)
     """
@@ -18,7 +19,7 @@ def shape_pose_to_str(shape_pose, shape_id):
     scale = raw_scale.sigmoid() * 0.8 + 0.1
     return (
         f"S{int(shape_id.item())}(x={position[0].item():.1f},"
-        f"y={position[0].item():.1f},s={scale.item():.1f})"
+        f"y={position[1].item():.1f},s={scale.item():.1f})"
     )
 
 
