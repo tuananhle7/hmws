@@ -6,10 +6,11 @@ import torch.nn as nn
 
 
 class GenerativeModel(nn.Module):
-    def __init__(self, im_size=64, num_primitives=2):
+    def __init__(self, im_size=64, num_primitives=2, has_shape_scale=False):
         super().__init__()
         self.im_size = im_size
         self.num_primitives = num_primitives
+        self.has_shape_scale = has_shape_scale
         self.mlps = nn.ModuleList(
             [
                 util.init_mlp(1, 1, 64, 3, non_linearity=nn.ReLU())
@@ -102,12 +103,16 @@ class GenerativeModel(nn.Module):
             )
 
             # p(raw_scale)
-            raw_scale = pyro.sample(
-                f"{tag}_raw_scale",
-                pyro.distributions.Normal(
-                    torch.tensor(0.0, device=self.device), torch.tensor(0.001, device=self.device)
-                ),
-            )
+            if self.has_shape_scale:
+                raw_scale = pyro.sample(
+                    f"{tag}_raw_scale",
+                    pyro.distributions.Normal(
+                        torch.tensor(0.0, device=self.device),
+                        torch.tensor(1.0, device=self.device),
+                    ),
+                )
+            else:
+                raw_scale = torch.tensor(0.0, device=self.device)
 
             # p(obs | shape_id, raw_position, raw_scale)
             pyro.sample(
@@ -125,10 +130,11 @@ class GenerativeModel(nn.Module):
 
 
 class Guide(nn.Module):
-    def __init__(self, im_size=64, num_primitives=2):
+    def __init__(self, im_size=64, num_primitives=2, has_shape_scale=False):
         super().__init__()
         self.im_size = im_size
         self.num_primitives = num_primitives
+        self.has_shape_scale = has_shape_scale
         self.cnn = util.init_cnn(output_dim=16)
         self.cnn_features_dim = 400  # computed manually
 
@@ -141,13 +147,13 @@ class Guide(nn.Module):
         self.raw_position_mlps = nn.ModuleList(
             [
                 util.init_mlp(self.cnn_features_dim, 2 * 2, hidden_dim=100, num_layers=3)
-                for _ in range(2)
+                for _ in range(self.num_primitives)
             ]
         )
         self.raw_scale_mlps = nn.ModuleList(
             [
                 util.init_mlp(self.cnn_features_dim, 2, hidden_dim=100, num_layers=3)
-                for _ in range(2)
+                for _ in range(self.num_primitives)
             ]
         )
 
@@ -213,20 +219,17 @@ class Guide(nn.Module):
             )
 
             # q(raw_scale | obs)
-            scale_raw_loc, scale_raw_scale = self.raw_scale_mlps[shape_id[-1]](
-                cnn_features[batch_id][None]
-            ).chunk(2, dim=-1)
-            scale_loc, scale_scale = scale_raw_loc[0, 0], scale_raw_scale.exp()[0, 0]
-
-            # HACK
-            scale_loc, scale_scale = (
-                torch.zeros_like(scale_loc),
-                torch.ones_like(scale_scale) * 0.001,
-            )
-            raw_scale.append(
-                pyro.sample(
-                    f"shape_pose_{batch_id}_raw_scale",
-                    pyro.distributions.Normal(scale_loc, scale_scale),
+            if self.has_shape_scale:
+                scale_raw_loc, scale_raw_scale = self.raw_scale_mlps[shape_id[-1]](
+                    cnn_features[batch_id][None]
+                ).chunk(2, dim=-1)
+                scale_loc, scale_scale = scale_raw_loc[0, 0], scale_raw_scale.exp()[0, 0]
+                raw_scale.append(
+                    pyro.sample(
+                        f"shape_pose_{batch_id}_raw_scale",
+                        pyro.distributions.Normal(scale_loc, scale_scale),
+                    )
                 )
-            )
+            else:
+                raw_scale.append(torch.tensor(0.0, device=self.device))
         return torch.stack(shape_id), (torch.stack(raw_position), torch.stack(raw_scale))

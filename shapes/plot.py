@@ -612,7 +612,7 @@ def plot_occupancy_network_neural_boundary_pyro(path, generative_model):
     raw_scale = util.logit((scale - 0.1) / 0.8)
 
     # Plot
-    num_rows, num_cols = 1, 2
+    num_rows, num_cols = 1, generative_model.num_primitives
     fig, axs = plt.subplots(
         num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
     )

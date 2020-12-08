@@ -26,7 +26,17 @@ def get_args_parser():
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        "--algorithm",
+        default="rws",
+        choices=["rws", "vimco", "rws_sleep", "vimco_sleep", "sleep", "iwae_sleep"],
+        help=" ",
+    )
+    parser.add_argument("--seed", default=1, type=int, help=" ")
+    parser.add_argument("--batch-size", default=5, type=int, help=" ")
+    parser.add_argument("--num-particles", default=50, type=int, help=" ")
 
+    # Model
     parser.add_argument(
         "--model-type",
         default="rectangles",
@@ -44,15 +54,10 @@ def get_args_parser():
         ],
         help=" ",
     )
+    parser.add_argument("--num-primitives", default=2, type=int, help=" ")
     parser.add_argument(
-        "--algorithm",
-        default="rws",
-        choices=["rws", "vimco", "rws_sleep", "vimco_sleep", "sleep", "iwae_sleep"],
-        help=" ",
+        "--has-shape-scale", action="store_true", help="only applicable for neural_boundary_pyro"
     )
-    parser.add_argument("--seed", default=1, type=int, help=" ")
-    parser.add_argument("--batch-size", default=5, type=int, help=" ")
-    parser.add_argument("--num-particles", default=50, type=int, help=" ")
 
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
