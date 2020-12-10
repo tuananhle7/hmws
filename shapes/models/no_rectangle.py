@@ -45,9 +45,10 @@ def latent_to_str(latent):
 
 
 class TrueGenerativeModel(nn.Module):
-    def __init__(self, im_size=64):
+    def __init__(self, im_size=64, has_shape_scale=False):
         super().__init__()
         self.im_size = im_size
+        self.has_shape_scale = has_shape_scale
         self.register_buffer("blank_canvas", torch.zeros((self.im_size, self.im_size)))
 
     @property
@@ -121,7 +122,7 @@ class TrueGenerativeModel(nn.Module):
 
         Returns distribution with batch_shape [] and event_shape [4]
         """
-        return util.SquarePoseDistribution(self.device)
+        return util.SquarePoseDistribution(self.has_shape_scale, self.device)
 
     @property
     def heart_pose_dist(self):
@@ -138,9 +139,14 @@ class TrueGenerativeModel(nn.Module):
         )
 
         # Scale distribution
-        raw_scale_dist = torch.distributions.Normal(
-            torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
-        )
+        if self.has_shape_scale:
+            raw_scale_dist = torch.distributions.Normal(
+                torch.tensor(0.0, device=self.device), torch.tensor(1.0, device=self.device)
+            )
+        else:
+            raw_scale_dist = torch.distributions.Normal(
+                torch.tensor(0.0, device=self.device), torch.tensor(0.001, device=self.device)
+            )
 
         return util.JointDistribution([raw_position_dist, raw_scale_dist])
 
@@ -167,10 +173,6 @@ class TrueGenerativeModel(nn.Module):
         is_heart, heart_pose, rectangle_pose = util.JointDistribution(
             [self.is_heart_dist, self.heart_pose_dist, self.rectangle_pose_dist]
         ).sample(sample_shape)
-
-        # HACK: make scale constant
-        raw_position, raw_scale = heart_pose
-        heart_pose = raw_position, torch.zeros_like(raw_scale)
 
         # Sample OBS
         # [*sample_shape, im_size, im_size]
@@ -271,7 +273,8 @@ class GenerativeModel(nn.Module):
         raw_scale_dist = torch.distributions.Normal(
             # torch.tensor(0.0, device=self.device), torch.tensor(1., device=self.device)
             # HACK
-            torch.tensor(0.0, device=self.device), torch.tensor(0.001, device=self.device)
+            torch.tensor(0.0, device=self.device),
+            torch.tensor(0.001, device=self.device),
         )
 
         return util.JointDistribution([raw_position_dist, raw_scale_dist])
