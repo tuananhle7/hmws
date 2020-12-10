@@ -827,7 +827,9 @@ def main(args):
                 )
             elif run_args.model_type == "no_rectangle" or run_args.model_type == "neural_boundary":
                 # Test data
-                true_generative_model = no_rectangle.TrueGenerativeModel().to(device)
+                true_generative_model = no_rectangle.TrueGenerativeModel(
+                    has_shape_scale=run_args.data_has_shape_scale
+                ).to(device)
                 ground_truth_latent, obs = true_generative_model.sample((num_test_obs,))
 
                 # Replace generative model by the true generative model if algorithm is sleep
@@ -890,7 +892,9 @@ def main(args):
                 )
             elif run_args.model_type == "neural_boundary_pyro":
                 # Test data
-                true_generative_model = no_rectangle.TrueGenerativeModel().to(device)
+                true_generative_model = no_rectangle.TrueGenerativeModel(
+                    has_shape_scale=run_args.data_has_shape_scale
+                ).to(device)
                 ground_truth_latent, obs = true_generative_model.sample((num_test_obs,))
 
                 # Plot

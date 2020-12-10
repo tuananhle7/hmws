@@ -61,6 +61,13 @@ def get_args_parser():
         help="only applicable for neural_boundary_pyro",
     )
 
+    # Data
+    parser.add_argument(
+        "--data-has-shape-scale",
+        action="store_true",
+        help="only applicable for no_rectangle, neural_boundary and neural_boundary_pyro",
+    )
+
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
     parser.add_argument("--num-iterations", default=10000, type=int, help=" ")

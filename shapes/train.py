@@ -46,7 +46,9 @@ def train(model, optimizer, stats, args):
         or args.model_type == "neural_boundary"
         or args.model_type == "neural_boundary_pyro"
     ):
-        true_generative_model = no_rectangle.TrueGenerativeModel().to(guide.device)
+        true_generative_model = no_rectangle.TrueGenerativeModel(
+            has_shape_scale=args.data_has_shape_scale
+        ).to(guide.device)
     elif args.model_type == "ldif_representation" or args.model_type == "ldif_representation_pyro":
         true_generative_model = ldif_representation.TrueGenerativeModel().to(guide.device)
 
