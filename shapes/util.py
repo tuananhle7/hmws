@@ -129,7 +129,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"{args.num_primitives}_{args.has_shape_scale}"
+    return f"{args.num_primitives}_{args.model_has_shape_scale}"
 
 
 def get_save_job_name_from_args(args):
@@ -221,12 +221,12 @@ def init(run_args, device):
     elif run_args.model_type == "neural_boundary_pyro":
         # Generative model
         generative_model = neural_boundary_pyro.GenerativeModel(
-            num_primitives=run_args.num_primitives, has_shape_scale=run_args.has_shape_scale
+            num_primitives=run_args.num_primitives, has_shape_scale=run_args.model_has_shape_scale
         ).to(device)
 
         # Guide
         guide = neural_boundary_pyro.Guide(
-            num_primitives=run_args.num_primitives, has_shape_scale=run_args.has_shape_scale
+            num_primitives=run_args.num_primitives, has_shape_scale=run_args.model_has_shape_scale
         ).to(device)
 
     # Model tuple

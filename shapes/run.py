@@ -56,7 +56,9 @@ def get_args_parser():
     )
     parser.add_argument("--num-primitives", default=2, type=int, help=" ")
     parser.add_argument(
-        "--has-shape-scale", action="store_true", help="only applicable for neural_boundary_pyro"
+        "--model-has-shape-scale",
+        action="store_true",
+        help="only applicable for neural_boundary_pyro",
     )
 
     # Optimization
