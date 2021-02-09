@@ -602,14 +602,19 @@ def plot_dataset(data_size, max_num_imgs=1000):
 
 
 def main(args):
-    for data_size in ["mini", "full", "small"]:
-        plot_dataset(data_size)
-    plot_motor_noise("save/_model/motor_noise.pdf")
-    plot_renderer("save/_model/renderer.pdf")
+    # for data_size in ["mini", "full", "small"]:
+    #     plot_dataset(data_size)
+    # plot_motor_noise("save/_model/motor_noise.pdf")
+    # plot_renderer("save/_model/renderer.pdf")
     dataset = "omniglot"
 
     if args.checkpoint_path is None:
-        checkpoint_paths = list(util.get_checkpoint_paths())
+        import sweep
+
+        checkpoint_paths = [
+            util.get_checkpoint_path(sweep_args) for sweep_args in sweep.get_sweep_argss()
+        ]
+        # checkpoint_paths = list(util.get_checkpoint_paths())
     else:
         checkpoint_paths = [args.checkpoint_path]
 

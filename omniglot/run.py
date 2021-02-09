@@ -16,8 +16,8 @@ def main(args):
 
     if args.test_run:
         args.pretrain_iterations = 1
-        args.num_iterations = 1
-        args.test_interval = 2
+        args.num_iterations = 100
+        args.test_interval = 101
     util.print_args(args)
 
     # data
@@ -140,7 +140,7 @@ def get_args_parser():
     parser.add_argument("--seed", type=int, default=1, help=" ")
     parser.add_argument("--pretrain-iterations", type=int, default=10000, help=" ")
     parser.add_argument("--prior-anneal-iterations", type=int, default=0, help=" ")
-    parser.add_argument("--num-iterations", type=int, default=200000, help=" ")
+    parser.add_argument("--num-iterations", type=int, default=1000000, help=" ")
     parser.add_argument("--log-interval", type=int, default=1, help=" ")
     parser.add_argument("--save-interval", type=int, default=1000, help=" ")
     parser.add_argument("--test-interval", type=int, default=999999, help=" ")
