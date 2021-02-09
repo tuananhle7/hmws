@@ -8,15 +8,15 @@ import run
 
 
 def get_sweep_argss():
-    for num_primitives in [2, 10, 100]:
-        args = run.get_args_parser().parse_args([])
-        args.model_type = "neural_boundary_pyro"
-        args.algorithm = "rws"
-        args.model_has_shape_scale = True
-        args.data_has_shape_scale = True
-        args.num_primitives = num_primitives
-        args.continue_training = True
-        yield args
+    for num_primitives in [2, 10]:
+        for insomnia in [0.0, 0.5, 1.0]:
+            args = run.get_args_parser().parse_args([])
+            args.model_type = "shape_program_pyro"
+            args.algorithm = "rws"
+            args.num_primitives = num_primitives
+            args.insomnia = insomnia
+            args.continue_training = True
+            yield args
 
 
 def args_to_str(args):
