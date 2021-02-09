@@ -159,12 +159,15 @@ class GenerativeModel(nn.Module):
                 raise RuntimeError("Invalid program")
             return obs_probs.clamp(0, 1)
 
-    def forward(self, obs):
+    def forward(self, obs, observations=None):
         """
         Args:
             obs [batch_size, num_rows, num_cols]
         """
         pyro.module("generative_model", self)
+        if isinstance(observations, dict):
+            batch_size = len(observations)
+            obs = torch.stack([observations[f"obs_{i}"] for i in range(batch_size)])
         batch_size, num_rows, num_cols = obs.shape
         for batch_id in pyro.plate("batch", batch_size):
             # p(program)
@@ -295,7 +298,7 @@ class Guide(nn.Module):
         batch_size = obs.shape[0]
         return self.obs_embedder(obs[:, None]).view(batch_size, -1)
 
-    def forward(self, obs):
+    def forward(self, obs, observations=None):
         """
         Args:
             obs [batch_size, num_rows, num_cols]
@@ -305,6 +308,10 @@ class Guide(nn.Module):
             raw_position [batch_size, 2]
         """
         pyro.module("guide", self)
+        if isinstance(observations, dict):
+            batch_size = len(observations)
+            obs = torch.stack([observations[f"obs_{i}"] for i in range(batch_size)])
+            print("HA")
         batch_size, num_rows, num_cols = obs.shape
 
         # Get obs embedding
