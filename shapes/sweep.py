@@ -93,18 +93,12 @@ def main(args):
             else:
                 gpu_option = ""
 
-            gpu_memory_gb = 22
             cpu_memory_gb = 16
-            if "openmind" in hostname or "node" in hostname:
-                gpu_memory_option = f"--constraint={gpu_memory_gb}GB "
-            else:
-                gpu_memory_option = ""
-
             sbatch_options = (
                 f"--time={time_option} "
                 + "--ntasks=1 "
                 + f"--gres=gpu{gpu_option}:1 "
-                + gpu_memory_option
+                + "--constraint=22GB "
                 + f"--mem={cpu_memory_gb}G "
                 + partition_option
                 + f'-J "{job_name}" '
