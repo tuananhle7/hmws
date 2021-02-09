@@ -8,10 +8,13 @@ import run
 
 
 def get_sweep_argss():
-    for model_type in ["shape_program", "heartangles"]:
+    for num_primitives in [2, 10, 100]:
         args = run.get_args_parser().parse_args([])
-        args.model_type = model_type
-        args.algorithm = "rws_sleep"
+        args.model_type = "neural_boundary_pyro"
+        args.algorithm = "rws"
+        args.model_has_shape_scale = True
+        args.data_has_shape_scale = True
+        args.num_primitives = num_primitives
         args.continue_training = True
         yield args
 
@@ -92,7 +95,7 @@ def main(args):
 
             gpu_memory_gb = 22
             cpu_memory_gb = 16
-            if "openmind" in hostname:
+            if "openmind" in hostname or "node" in hostname:
                 gpu_memory_option = f"--constraint={gpu_memory_gb}GB "
             else:
                 gpu_memory_option = ""
