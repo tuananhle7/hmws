@@ -73,6 +73,13 @@ def get_args_parser():
     parser.add_argument("--continue-training", action="store_true", help=" ")
     parser.add_argument("--num-iterations", default=10000, type=int, help=" ")
     parser.add_argument("--lr", default=1e-3, type=float, help=" ")
+    parser.add_argument(
+        "--insomnia",
+        default=1.0,
+        type=float,
+        help="only applicable for RWS for pyro models - 1.0 means Wake-Wake, 0.0 means Wake-Sleep,"
+        "otherwise it's inbetween",
+    )
     parser.add_argument("--log-interval", default=10, type=int, help=" ")
     parser.add_argument("--save-interval", default=100, type=int, help=" ")
     parser.add_argument("--checkpoint-interval", default=10001, type=int, help=" ")

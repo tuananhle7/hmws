@@ -29,7 +29,7 @@ def train(model, optimizer, stats, args):
                     num_particles=args.num_particles,
                     vectorize_particles=False,
                     model_has_params=True,
-                    insomnia=1.0,
+                    insomnia=args.insomnia,
                 ),
             )
             util.logging.info(f"Using pyro version {pyro.__version__}")
