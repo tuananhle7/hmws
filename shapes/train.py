@@ -51,6 +51,8 @@ def train(model, optimizer, stats, args):
         ).to(guide.device)
     elif args.model_type == "ldif_representation" or args.model_type == "ldif_representation_pyro":
         true_generative_model = ldif_representation.TrueGenerativeModel().to(guide.device)
+    elif args.model_type == "shape_program_pyro":
+        true_generative_model = shape_program.TrueGenerativeModelFixedScale().to(guide.device)
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
         if "_pyro" in args.model_type:

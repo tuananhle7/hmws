@@ -17,7 +17,7 @@ PROGRAMS = {
 }
 
 
-def latent_to_str(latent):
+def latent_to_str(latent, fixed_scale=False):
     """
     Args
         latent
@@ -29,11 +29,22 @@ def latent_to_str(latent):
 
     Returns (str)
     """
-    program_id, (raw_positions, raw_scales), rectangle_poses = latent
-
     # Extract component strings
-    heart_1_str = util.heart_pose_to_str((raw_positions[0], raw_scales[0]))
-    heart_2_str = util.heart_pose_to_str((raw_positions[1], raw_scales[1]))
+    if fixed_scale:
+        program_id, raw_positions, rectangle_poses = latent
+
+        heart_1_str = util.heart_pose_to_str(raw_positions[0], fixed_scale=fixed_scale)
+        heart_2_str = util.heart_pose_to_str(raw_positions[1], fixed_scale=fixed_scale)
+    else:
+        program_id, (raw_positions, raw_scales), rectangle_poses = latent
+
+        heart_1_str = util.heart_pose_to_str(
+            (raw_positions[0], raw_scales[0]), fixed_scale=fixed_scale
+        )
+        heart_2_str = util.heart_pose_to_str(
+            (raw_positions[1], raw_scales[1]), fixed_scale=fixed_scale
+        )
+
     rectangle_1_str = util.rectangle_pose_to_str(rectangle_poses[0])
     rectangle_2_str = util.rectangle_pose_to_str(rectangle_poses[1])
 
@@ -773,3 +784,172 @@ class Guide(nn.Module):
         rectangle_poses = self.get_rectangle_pose_dist(obs).sample(sample_shape)
 
         return program_id, heart_poses, rectangle_poses
+
+
+class TrueGenerativeModelFixedScale(nn.Module):
+    def __init__(self, im_size=64):
+        super().__init__()
+        self.im_size = im_size
+        self.register_buffer("blank_canvas", torch.zeros((self.im_size, self.im_size)))
+        self.max_num_shapes = 2
+        self.num_programs = 9
+
+    @property
+    def device(self):
+        return self.blank_canvas.device
+
+    def get_heart_obs_dist(self, heart_pose, num_rows=None, num_cols=None):
+        """p_H(obs | heart_pose)
+
+        Args
+            heart_pose
+                raw_position [*shape, 2]
+                raw_scale [*shape]
+            num_rows (int)
+            num_cols (int)
+
+        Returns: distribution with batch_shape [*shape] and event_shape
+            [num_rows, num_cols]
+        """
+        if num_rows is None:
+            num_rows = self.im_size
+        if num_cols is None:
+            num_cols = self.im_size
+
+        # Extract
+        raw_position = heart_pose
+        position = raw_position.sigmoid() - 0.5
+        shape = position.shape[:-1]
+        device = position.device
+        scale = torch.ones(shape, device=device)
+
+        # Create blank canvas
+        shape = scale.shape
+        blank_canvas = torch.zeros((*shape, num_rows, num_cols), device=self.device)
+
+        return torch.distributions.Independent(
+            torch.distributions.Bernoulli(
+                probs=render.render_heart((position, scale), blank_canvas).clamp(1e-6, 1 - 1e-6)
+            ),
+            reinterpreted_batch_ndims=2,
+        )
+
+    def get_rectangle_obs_dist(self, rectangle_pose, num_rows=None, num_cols=None):
+        """p_H(obs | rectangle_pose)
+
+        Args
+            rectangle_pose [*shape, 4]
+            num_rows (int)
+            num_cols (int)
+
+        Returns: distribution with batch_shape [*shape] and event_shape
+            [num_rows, num_cols]
+        """
+        if num_rows is None:
+            num_rows = self.im_size
+        if num_cols is None:
+            num_cols = self.im_size
+
+        # Create blank canvas
+        shape = rectangle_pose.shape[:-1]
+        blank_canvas = torch.zeros((*shape, num_rows, num_cols), device=self.device)
+
+        return torch.distributions.Independent(
+            torch.distributions.Bernoulli(
+                probs=render.render_rectangle(rectangle_pose, blank_canvas).clamp(1e-6, 1 - 1e-6)
+            ),
+            reinterpreted_batch_ndims=2,
+        )
+
+    @property
+    def rectangle_pose_dist(self):
+        """p_R(z_R)
+
+        Returns distribution with batch_shape [] and event_shape [4]
+        """
+        return util.SquarePoseDistribution(False, self.device)
+
+    @property
+    def heart_pose_dist(self):
+        """p_H(z_H)
+
+        Returns distribution with batch_shape [] and event_shape ([2], [])
+        """
+        # Position distribution
+        raw_position_dist = torch.distributions.Independent(
+            torch.distributions.Normal(
+                torch.zeros((2,), device=self.device), torch.ones((2,), device=self.device)
+            ),
+            reinterpreted_batch_ndims=1,
+        )
+
+        return raw_position_dist
+
+    @property
+    def program_id_dist(self):
+        """p_I(I)"""
+        return torch.distributions.Categorical(
+            logits=torch.ones((self.num_programs,), device=self.device)
+        )
+
+    def sample(self, sample_shape=[]):
+        """
+        Args:
+            sample_shape: list-like object (default [])
+
+        Returns:
+            latent
+                program_id [*sample_shape]
+                heart_poses
+                    raw_positions [*sample_shape, max_num_shapes, 2]
+                    raw_scales [*sample_shape, max_num_shapes]
+                rectangle_poses [*sample_shape, max_num_shapes, 4]
+            obs [*sample_shape, im_size, im_size]
+        """
+        # Sample LATENT
+        program_id = self.program_id_dist.sample(sample_shape)
+        heart_poses = self.heart_pose_dist.sample([*sample_shape, self.max_num_shapes])
+        rectangle_poses = self.rectangle_pose_dist.sample([*sample_shape, self.max_num_shapes])
+
+        # Sample OBS
+        # [*sample_shape, max_num_shapes, im_size, im_size]
+        hearts_obs = self.get_heart_obs_dist(heart_poses, self.im_size, self.im_size).sample()
+        rectangles_obs = self.get_rectangle_obs_dist(
+            rectangle_poses, self.im_size, self.im_size
+        ).sample()
+
+        # Select OBS
+        # [*sample_shape, im_size, im_size]
+        obs = evaluate_obs(program_id, hearts_obs, rectangles_obs)
+
+        return (program_id, heart_poses, rectangle_poses), obs
+
+    def get_obs_probs(self, latent):
+        """
+        Args:
+            latent
+                program_id [*shape]
+                heart_poses
+                    raw_positions [*shape, max_num_shapes, 2]
+                    raw_scales [*shape, max_num_shapes]
+                rectangle_poses [*shape, max_num_shapes, 4]
+
+        Returns:
+            obs_probs [*shape, im_size, im_size]
+        """
+        program_id, heart_poses, rectangle_poses = latent
+
+        # Sample OBS
+        # [*shape, max_num_shapes, im_size, im_size]
+        hearts_obs_probs = self.get_heart_obs_dist(
+            heart_poses, self.im_size, self.im_size
+        ).base_dist.probs
+        rectangles_obs_probs = self.get_rectangle_obs_dist(
+            rectangle_poses, self.im_size, self.im_size
+        ).base_dist.probs
+
+        # Select OBS
+        # [*shape, im_size, im_size]
+        obs_probs = evaluate_obs(program_id, hearts_obs_probs, rectangles_obs_probs)
+
+        return obs_probs

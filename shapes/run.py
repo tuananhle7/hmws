@@ -51,6 +51,7 @@ def get_args_parser():
             "ldif_representation_pyro",
             "neural_boundary",
             "neural_boundary_pyro",
+            "shape_program_pyro",
         ],
         help=" ",
     )

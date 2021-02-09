@@ -15,6 +15,7 @@ from models import hearts_pyro
 from models import ldif_representation_pyro
 from models import neural_boundary
 from models import neural_boundary_pyro
+from models import shape_program_pyro
 import os
 import random
 import numpy as np
@@ -129,7 +130,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"{args.num_primitives}_{args.model_has_shape_scale}"
+    return f"{args.num_primitives}"
 
 
 def get_save_job_name_from_args(args):
@@ -228,6 +229,14 @@ def init(run_args, device):
         guide = neural_boundary_pyro.Guide(
             num_primitives=run_args.num_primitives, has_shape_scale=run_args.model_has_shape_scale
         ).to(device)
+    elif run_args.model_type == "shape_program_pyro":
+        # Generative model
+        generative_model = shape_program_pyro.GenerativeModel(
+            num_primitives=run_args.num_primitives
+        ).to(device)
+
+        # Guide
+        guide = shape_program_pyro.Guide(num_primitives=run_args.num_primitives).to(device)
 
     # Model tuple
     model = (generative_model, guide)
@@ -471,7 +480,7 @@ class SquarePoseDistribution:
         return torch.zeros(shape, device=xy_lims.device)
 
 
-def heart_pose_to_str(heart_pose):
+def heart_pose_to_str(heart_pose, fixed_scale=False):
     """
     Args
         heart_pose
@@ -480,10 +489,15 @@ def heart_pose_to_str(heart_pose):
 
     Returns (str)
     """
-    raw_position, raw_scale = heart_pose
-    position = raw_position.sigmoid() - 0.5
-    scale = raw_scale.sigmoid() * 0.8 + 0.1
-    return f"H(x={position[0].item():.1f},y={position[0].item():.1f},s={scale.item():.1f})"
+    if fixed_scale:
+        raw_position = heart_pose
+        position = raw_position.sigmoid() - 0.5
+        return f"H(x={position[0].item():.1f},y={position[0].item():.1f})"
+    else:
+        raw_position, raw_scale = heart_pose
+        position = raw_position.sigmoid() - 0.5
+        scale = raw_scale.sigmoid() * 0.8 + 0.1
+        return f"H(x={position[0].item():.1f},y={position[0].item():.1f},s={scale.item():.1f})"
 
 
 def rectangle_pose_to_str(rectangle_pose):
