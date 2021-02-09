@@ -3,6 +3,7 @@ cp_from_om.sh
 .vscode
 save/
 save*/
+tmp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
