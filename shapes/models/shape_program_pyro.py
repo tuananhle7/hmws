@@ -516,6 +516,6 @@ def trace_to_str(trace):
         position_1 = raw_position_1.sigmoid() - 0.5
         return (
             f"$S_{shape_id_0}$({position_0[0]:.2f}, {position_0[1]:.2f})"
-            f"{operation}"
+            f"{operation}\n"
             f"$S_{shape_id_1}$({position_1[0]:.2f}, {position_1[1]:.2f})"
         )
