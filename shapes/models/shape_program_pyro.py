@@ -311,7 +311,6 @@ class Guide(nn.Module):
         if isinstance(observations, dict):
             batch_size = len(observations)
             obs = torch.stack([observations[f"obs_{i}"] for i in range(batch_size)])
-            print("HA")
         batch_size, num_rows, num_cols = obs.shape
 
         # Get obs embedding
