@@ -98,7 +98,7 @@ def main(args):
                 f"--time={time_option} "
                 + "--ntasks=1 "
                 + f"--gres=gpu{gpu_option}:1 "
-                + "--constraint=22GB "
+                + "--constraint=high-capacity "
                 + f"--mem={cpu_memory_gb}G "
                 + partition_option
                 + f'-J "{job_name}" '
