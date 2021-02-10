@@ -464,7 +464,7 @@ class SquarePoseDistribution:
                 torch.zeros_like(min_x), self.lim - torch.max(min_x, min_y)
             ).sample()
         else:
-            side = 1.0
+            side = 0.5
         max_x = min_x + side
         max_y = min_y + side
         return torch.stack([min_x, min_y, max_x, max_y], dim=-1)
