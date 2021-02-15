@@ -1,9 +1,10 @@
 import pyro
 import render
 import torch
+import torch.nn as nn
 
 
-def sample_stacking_program(num_primitives, device):
+def sample_stacking_program(num_primitives, device, address_suffix=""):
     # Init
     stacking_program = []
     num_sampled_primitives = 0
@@ -12,7 +13,7 @@ def sample_stacking_program(num_primitives, device):
     # Sample first primitive
     raw_primitive_id_logits = torch.ones((len(available_primitive_ids),), device=device)
     raw_primitive_id = pyro.sample(
-        f"raw_primitive_id_{num_sampled_primitives}",
+        f"raw_primitive_id_{num_sampled_primitives}{address_suffix}",
         pyro.distributions.Categorical(logits=raw_primitive_id_logits),
     )
     primitive_id = available_primitive_ids.pop(raw_primitive_id)
@@ -28,7 +29,7 @@ def sample_stacking_program(num_primitives, device):
         num_actions = 2
         action_id_logits = torch.ones((num_actions,), device=device)
         action_id = pyro.sample(
-            f"action_id_{num_sampled_primitives}",
+            f"action_id_{num_sampled_primitives}{address_suffix}",
             pyro.distributions.Categorical(logits=action_id_logits),
         )
 
@@ -40,7 +41,7 @@ def sample_stacking_program(num_primitives, device):
             # Sample primitive
             raw_primitive_id_logits = torch.ones((len(available_primitive_ids),), device=device)
             raw_primitive_id = pyro.sample(
-                f"raw_primitive_id_{num_sampled_primitives}",
+                f"raw_primitive_id_{num_sampled_primitives}{address_suffix}",
                 pyro.distributions.Categorical(logits=raw_primitive_id_logits),
             )
             primitive_id = available_primitive_ids.pop(raw_primitive_id)
@@ -56,12 +57,12 @@ def stacking_program_to_str(stacking_program, primitives):
     return [primitives[primitive_id].name for primitive_id in stacking_program]
 
 
-def sample_raw_locations(stacking_program):
+def sample_raw_locations(stacking_program, address_suffix=""):
     device = stacking_program[0].device
     dist = pyro.distributions.Normal(torch.tensor(0.0, device=device), 1)
     raw_locations = []
     for primitive_id, stack in enumerate(stacking_program):
-        raw_locations.append(pyro.sample(f"primitive_{primitive_id}_raw_loc", dist))
+        raw_locations.append(pyro.sample(f"primitive_{primitive_id}_raw_loc{address_suffix}", dist))
     return raw_locations
 
 
@@ -90,3 +91,98 @@ def generate_from_true_generative_model(device, num_channels=3, num_rows=256, nu
     )
 
     return img
+
+
+class GenerativeModel(nn.Module):
+    """First samples the stacking program (discrete), then their raw positions (continuous),
+    then renders them onto an image.
+    """
+
+    def __init__(self, im_size=64, num_primitives=3):
+        super().__init__()
+
+        # Init
+        self.num_channels = 3
+        self.num_rows = im_size
+        self.num_cols = im_size
+        self.num_primitives = num_primitives
+
+        # Primitive parameters (parameters of symbols)
+        self.primitives = nn.ModuleList(
+            [render.LearnableSquare(f"{i}") for i in range(self.num_primitives)]
+        )
+
+        # Rendering parameters
+        self.raw_color_sharpness = nn.Parameter(torch.rand(()))
+        self.raw_blur = nn.Parameter(torch.rand(()))
+
+    @property
+    def device(self):
+        return self.primitives[0].device
+
+    def forward(self, obs, observations=None):
+        """
+        Args:
+            obs [batch_size, num_channels, num_rows, num_cols]
+        """
+        pyro.module("generative_model", self)
+
+        # Extract
+        if isinstance(observations, dict):
+            batch_size = len(observations)
+            obs = torch.stack([observations[f"obs_{i}"] for i in range(batch_size)])
+        batch_size, num_channels, num_rows, num_cols = obs.shape
+        assert num_channels == self.num_channels
+        assert num_rows == self.num_rows
+        assert num_cols == self.num_cols
+
+        traces = []
+        for batch_id in pyro.plate("batch", batch_size):
+            # p(stacking_program)
+            stacking_program = sample_stacking_program(
+                self.num_primitives, self.device, address_suffix=f"{batch_id}"
+            )
+
+            # p(raw_locations | stacking_program)
+            raw_locations = sample_raw_locations(stacking_program, address_suffix=f"{batch_id}")
+
+            # p(obs | raw_locations, stacking_program)
+            loc = render.soft_render(
+                self.primitives,
+                stacking_program,
+                raw_locations,
+                self.raw_color_sharpness,
+                self.raw_blur,
+                num_channels=self.num_channels,
+                num_rows=self.num_rows,
+                num_cols=self.num_cols,
+            )
+            sampled_obs = pyro.sample(
+                f"obs_{batch_id}",
+                pyro.distributions.Independent(
+                    pyro.distributions.Normal(loc=loc, scale=1.0), reinterpreted_batch_ndims=3,
+                ),
+                obs=obs[batch_id],
+            )
+            traces.append((stacking_program, raw_locations, sampled_obs))
+        return traces
+
+
+if __name__ == "__main__":
+    # Init
+    device = "cuda"
+    batch_size = 3
+    im_size = 64
+
+    # Create obs
+    obs = torch.stack(
+        [
+            generate_from_true_generative_model(device, num_rows=im_size, num_cols=im_size)
+            for _ in range(batch_size)
+        ]
+    )
+
+    # Run through learnable generative model
+    generative_model = GenerativeModel().to(device)
+
+    print(generative_model.forward(obs))
