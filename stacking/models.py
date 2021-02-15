@@ -5,50 +5,42 @@ import torch.nn as nn
 
 
 def sample_stacking_program(num_primitives, device, address_suffix=""):
+    """Samples blocks to stack from a set [0, ..., num_primitives - 1]
+    *without* replacement. The number of blocks is stochastic and
+    can be < num_primitives.
+
+    Args
+        num_primitives (int)
+        device
+        address_suffix
+
+    Returns [num_blocks] (where num_blocks is stochastic and between 1 and num_primitives (inclusive))
+    """
+
     # Init
     stacking_program = []
-    num_sampled_primitives = 0
     available_primitive_ids = list(range(num_primitives))
 
-    # Sample first primitive
-    raw_primitive_id_logits = torch.ones((len(available_primitive_ids),), device=device)
-    raw_primitive_id = pyro.sample(
-        f"raw_primitive_id_{num_sampled_primitives}{address_suffix}",
-        pyro.distributions.Categorical(logits=raw_primitive_id_logits),
+    # Sample num_blocks uniformly from [1, ..., num_primitives] (inclusive)
+    raw_num_blocks_logits = torch.ones((num_primitives,), device=device)
+    raw_num_blocks = pyro.sample(
+        f"raw_num_blocks{address_suffix}",
+        pyro.distributions.Categorical(logits=raw_num_blocks_logits),
     )
-    primitive_id = available_primitive_ids.pop(raw_primitive_id)
-    num_sampled_primitives += 1
-    stacking_program.append(primitive_id)
+    num_blocks = raw_num_blocks + 1
 
-    # Sample the rest
-    end_program = False
-    while (not end_program) and (len(available_primitive_ids) > 0):
-        # Sample an action for the next primitive
-        # Action 0: put to the left of existing stack
-        # Action 1: end program
-        num_actions = 2
-        action_id_logits = torch.ones((num_actions,), device=device)
-        action_id = pyro.sample(
-            f"action_id_{num_sampled_primitives}{address_suffix}",
-            pyro.distributions.Categorical(logits=action_id_logits),
+    # Sample primitive ids
+    for block_id in range(num_blocks):
+        # Sample primitive
+        raw_primitive_id_logits = torch.ones((len(available_primitive_ids),), device=device)
+        raw_primitive_id = pyro.sample(
+            f"raw_primitive_id_{block_id}{address_suffix}",
+            pyro.distributions.Categorical(logits=raw_primitive_id_logits),
         )
+        primitive_id = available_primitive_ids.pop(raw_primitive_id)
 
-        if action_id == 1:
-            # End program
-            end_program = True
-            break
-        else:
-            # Sample primitive
-            raw_primitive_id_logits = torch.ones((len(available_primitive_ids),), device=device)
-            raw_primitive_id = pyro.sample(
-                f"raw_primitive_id_{num_sampled_primitives}{address_suffix}",
-                pyro.distributions.Categorical(logits=raw_primitive_id_logits),
-            )
-            primitive_id = available_primitive_ids.pop(raw_primitive_id)
-            num_sampled_primitives += 1
-
-            # Add to the stacking program based on previous action
-            stacking_program.append(primitive_id)
+        # Add to the stacking program based on previous action
+        stacking_program.append(primitive_id)
 
     return torch.tensor(stacking_program, device=device)
 
