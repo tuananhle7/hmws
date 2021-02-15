@@ -58,12 +58,21 @@ def stacking_program_to_str(stacking_program, primitives):
 
 
 def sample_raw_locations(stacking_program, address_suffix=""):
+    """
+    Samples the (raw) horizontal location of blocks in the stacking program.
+    p(raw_locations | stacking_program)
+
+    Args
+        stacking_program [num_blocks]
+
+    Returns [num_blocks]
+    """
     device = stacking_program[0].device
-    dist = pyro.distributions.Normal(torch.tensor(0.0, device=device), 1)
-    raw_locations = []
-    for primitive_id, stack in enumerate(stacking_program):
-        raw_locations.append(pyro.sample(f"primitive_{primitive_id}_raw_loc{address_suffix}", dist))
-    return raw_locations
+    dist = pyro.distributions.Independent(
+        pyro.distributions.Normal(torch.zeros((len(stacking_program),), device=device), 1),
+        reinterpreted_batch_ndims=1,
+    )
+    return pyro.sample(f"raw_loc{address_suffix}", dist)
 
 
 def generate_from_true_generative_model(device, num_channels=3, num_rows=256, num_cols=256):
