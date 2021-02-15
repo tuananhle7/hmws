@@ -1,4 +1,3 @@
-import util
 import pyro
 import render
 import torch
@@ -144,11 +143,11 @@ class GenerativeModel(nn.Module):
         for batch_id in pyro.plate("batch", batch_size):
             # p(stacking_program)
             stacking_program = sample_stacking_program(
-                self.num_primitives, self.device, address_suffix=f"{batch_id}"
+                self.num_primitives, self.device, address_suffix=f"_{batch_id}"
             )
 
             # p(raw_locations | stacking_program)
-            raw_locations = sample_raw_locations(stacking_program, address_suffix=f"{batch_id}")
+            raw_locations = sample_raw_locations(stacking_program, address_suffix=f"_{batch_id}")
 
             # p(obs | raw_locations, stacking_program)
             loc = render.soft_render(
@@ -283,185 +282,93 @@ class Guide(nn.Module):
 
         traces = []
         for batch_id in pyro.plate("batch", batch_size):
-            # TODO CONTINUE HERE !!!
-            # trace = []
-
             # Extract obs embedding
             obs_embedding_b = obs_embedding[batch_id]
 
-            # Sample program id
+            # Sample raw num blocks
             # --LSTM Input
             prev_sample_embedding = torch.zeros((self.sample_embedding_dim,), device=self.device)
-            address_embedding = self.get_address_embedding("program_id")
-            lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
+            address_embedding = self.get_address_embedding("raw_num_blocks")
+            instance_embedding = self.instance_embeddings[0]
+            lstm_input = torch.cat(
+                [obs_embedding_b, prev_sample_embedding, address_embedding, instance_embedding]
+            )
 
             # --Run LSTM
             h, c = self.lstm_cell(lstm_input[None])
             hc = h, c
 
             # --Extract params
-            program_id_logits = self.program_id_param_extractor(h)[0]
+            raw_num_blocks_logits = self.raw_num_blocks_param_extractor(h)[0]
 
-            # --Sample program_id
-            program_id = pyro.sample(
-                f"program_id_{batch_id}", pyro.distributions.Categorical(logits=program_id_logits),
+            # --Sample raw_num_blocks
+            raw_num_blocks = pyro.sample(
+                f"raw_num_blocks_{batch_id}",
+                pyro.distributions.Categorical(logits=raw_num_blocks_logits),
             ).long()
-            # trace.append(program_id)
+            num_blocks = raw_num_blocks + 1
 
-            if program_id == 0:
-                # Sample shape id
+            # Sample primitive ids
+            raw_primitive_ids = []
+            for block_id in range(num_blocks):
                 # --LSTM Input
-                prev_sample_embedding = self.program_id_embeddings[program_id]
-                address_embedding = self.get_address_embedding("shape_id")
-                lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
+                if block_id == 0:
+                    prev_sample_embedding = self.raw_num_blocks_embeddings[raw_num_blocks]
+                else:
+                    prev_sample_embedding = self.raw_primitive_id_embeddings[raw_primitive_id]
+                address_embedding = self.get_address_embedding("raw_primitive_id")
+                instance_embedding = self.instance_embeddings[block_id]
+                lstm_input = torch.cat(
+                    [obs_embedding_b, prev_sample_embedding, address_embedding, instance_embedding]
+                )
 
                 # --Run LSTM
                 h, c = self.lstm_cell(lstm_input[None], hc)
                 hc = h, c
 
                 # --Extract params
-                shape_id_logits = self.shape_id_param_extractor(h)[0]
+                raw_primitive_id_logits = self.raw_primitive_id_param_extractor(h)[0][
+                    : (self.num_primitives - block_id)
+                ]
 
-                # --Sample shape id
-                shape_id = pyro.sample(
-                    f"shape_id_{batch_id}", pyro.distributions.Categorical(logits=shape_id_logits),
+                # --Sample raw_primitive_id
+                raw_primitive_id = pyro.sample(
+                    f"raw_primitive_id_{batch_id}",
+                    pyro.distributions.Categorical(logits=raw_primitive_id_logits),
                 ).long()
+                raw_primitive_ids.append(raw_primitive_id)
+            raw_primitive_ids = torch.stack(raw_primitive_ids)
 
-                # # --Update trace
-                # trace.append(("shape_id", shape_id))
+            # Sample raw locations
+            # --LSTM Input
+            prev_sample_embedding = self.raw_primitive_id_embeddings[raw_primitive_id]
+            address_embedding = self.get_address_embedding("raw_locations")
+            instance_embedding = self.instance_embeddings[0]
+            lstm_input = torch.cat(
+                [obs_embedding_b, prev_sample_embedding, address_embedding, instance_embedding]
+            )
 
-                # Sample raw position
-                # --LSTM Input
-                prev_sample_embedding = self.shape_id_embeddings[shape_id]
-                address_embedding = self.get_address_embedding("raw_position")
-                lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
+            # --Run LSTM
+            h, c = self.lstm_cell(lstm_input[None], hc)
+            hc = h, c
 
-                # --Run LSTM
-                h, c = self.lstm_cell(lstm_input[None], hc)
-                hc = h, c
+            # --Extract params
+            raw_locations_param = self.raw_locations_param_extractor(h)[0]
+            raw_locations_loc = raw_locations_param[:num_blocks]
+            raw_locations_scale = raw_locations_param[
+                self.num_primitives : self.num_primitives + num_blocks
+            ].exp()
 
-                # --Extract params
-                raw_position_param = self.raw_position_param_extractor(h)[0]
-                raw_position_loc = raw_position_param[:2]
-                raw_position_scale = raw_position_param[2:].exp()
+            # --Sample raw_locations
+            raw_locations = pyro.sample(
+                f"raw_locations_{batch_id}",
+                pyro.distributions.Independent(
+                    pyro.distributions.Normal(raw_locations_loc, raw_locations_scale),
+                    reinterpreted_batch_ndims=1,
+                ),
+            )
 
-                # --Sample raw_position
-                raw_position = pyro.sample(
-                    f"raw_position_{batch_id}",
-                    pyro.distributions.Independent(
-                        pyro.distributions.Normal(raw_position_loc, raw_position_scale),
-                        reinterpreted_batch_ndims=1,
-                    ),
-                )
-
-                # # --Update trace
-                # trace.append(("raw_position", raw_position))
-
-                traces.append(((program_id, (shape_id,)), (raw_position,)))
-            else:
-                # Sample shape id 0
-                # --LSTM Input
-                prev_sample_embedding = self.program_id_embeddings[program_id]
-                address_embedding = self.get_address_embedding("shape_id_0")
-                lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
-
-                # --Run LSTM
-                h, c = self.lstm_cell(lstm_input[None], hc)
-                hc = h, c
-
-                # --Extract params
-                shape_id_0_logits = self.shape_id_param_extractor(h)[0]
-
-                # --Sample shape id
-                shape_id_0 = pyro.sample(
-                    f"shape_id_0_{batch_id}",
-                    pyro.distributions.Categorical(logits=shape_id_0_logits),
-                ).long()
-
-                # # --Update trace
-                # trace.append(("shape_id_0", shape_id_0))
-
-                # Sample shape id 1
-                # --LSTM Input
-                prev_sample_embedding = self.shape_id_embeddings[shape_id_0]
-                address_embedding = self.get_address_embedding("shape_id_1")
-                lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
-
-                # --Run LSTM
-                h, c = self.lstm_cell(lstm_input[None], hc)
-                hc = h, c
-
-                # --Extract params
-                shape_id_1_logits = self.shape_id_param_extractor(h)[0]
-
-                # --Sample shape id
-                shape_id_1 = pyro.sample(
-                    f"shape_id_1_{batch_id}",
-                    pyro.distributions.Categorical(logits=shape_id_1_logits),
-                ).long()
-
-                # # --Update trace
-                # trace.append(("shape_id_1", shape_id_1))
-
-                # Sample raw position 0
-                # --LSTM Input
-                prev_sample_embedding = self.shape_id_embeddings[shape_id_1]
-                address_embedding = self.get_address_embedding("raw_position_0")
-                lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
-
-                # --Run LSTM
-                h, c = self.lstm_cell(lstm_input[None], hc)
-                hc = h, c
-
-                # --Extract params
-                raw_position_param = self.raw_position_param_extractor(h)[0]
-                raw_position_loc = raw_position_param[:2]
-                raw_position_scale = raw_position_param[2:].exp()
-
-                # --Sample raw_position
-                raw_position_0 = pyro.sample(
-                    f"raw_position_0_{batch_id}",
-                    pyro.distributions.Independent(
-                        pyro.distributions.Normal(raw_position_loc, raw_position_scale),
-                        reinterpreted_batch_ndims=1,
-                    ),
-                )
-
-                # # --Update trace
-                # trace.append(("raw_position_0", raw_position_0))
-
-                # Sample raw position 1
-                # --LSTM Input
-                prev_sample_embedding = self.raw_position_embedder(raw_position_0[None])[0]
-                address_embedding = self.get_address_embedding("raw_position_1")
-                lstm_input = torch.cat([obs_embedding_b, prev_sample_embedding, address_embedding])
-
-                # --Run LSTM
-                h, c = self.lstm_cell(lstm_input[None], hc)
-                hc = h, c
-
-                # --Extract params
-                raw_position_param = self.raw_position_param_extractor(h)[0]
-                raw_position_loc = raw_position_param[:2]
-                raw_position_scale = raw_position_param[2:].exp()
-
-                # --Sample raw_position
-                raw_position_1 = pyro.sample(
-                    f"raw_position_1_{batch_id}",
-                    pyro.distributions.Independent(
-                        pyro.distributions.Normal(raw_position_loc, raw_position_scale),
-                        reinterpreted_batch_ndims=1,
-                    ),
-                )
-
-                # # --Update trace
-                # trace.append(("raw_position_1", raw_position_1))
-
-                traces.append(
-                    ((program_id, (shape_id_0, shape_id_1)), (raw_position_0, raw_position_1))
-                )
-
-            # traces.append(trace)
+            traces.append((raw_num_blocks, raw_primitive_ids, raw_locations))
 
         return traces
 
@@ -487,4 +394,4 @@ if __name__ == "__main__":
 
     # Run through guide
     guide = Guide().to(device)
-    guide.forward(obs)
+    print(guide.forward(obs))
