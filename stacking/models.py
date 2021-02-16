@@ -69,7 +69,11 @@ def sample_raw_locations(stacking_program, address_suffix=""):
     return pyro.sample(f"raw_locations{address_suffix}", dist)
 
 
-def generate_from_true_generative_model(device, num_channels=3, num_rows=256, num_cols=256):
+def generate_from_true_generative_model_single(device, num_channels=3, num_rows=64, num_cols=64):
+    """Generate a synthetic observation
+
+    Returns [num_channels, num_rows, num_cols]
+    """
     # Define params
     primitives = [
         render.Square(
@@ -94,6 +98,21 @@ def generate_from_true_generative_model(device, num_channels=3, num_rows=256, nu
     )
 
     return img
+
+
+def generate_from_true_generative_model(
+    batch_size, device, num_channels=3, num_rows=64, num_cols=64
+):
+    """Generate a batch of synthetic observations
+
+    Returns [batch_size, num_channels, num_rows, num_cols]
+    """
+    return torch.stack(
+        [
+            generate_from_true_generative_model_single(device, num_rows=num_rows, num_cols=num_cols)
+            for _ in range(batch_size)
+        ]
+    )
 
 
 class GenerativeModel(nn.Module):
@@ -333,7 +352,7 @@ class Guide(nn.Module):
 
                 # --Sample raw_primitive_id
                 raw_primitive_id = pyro.sample(
-                    f"raw_primitive_id_{batch_id}",
+                    f"raw_primitive_id_{block_id}_{batch_id}",
                     pyro.distributions.Categorical(logits=raw_primitive_id_logits),
                 ).long()
                 raw_primitive_ids.append(raw_primitive_id)
@@ -380,11 +399,8 @@ if __name__ == "__main__":
     im_size = 64
 
     # Create obs
-    obs = torch.stack(
-        [
-            generate_from_true_generative_model(device, num_rows=im_size, num_cols=im_size)
-            for _ in range(batch_size)
-        ]
+    obs = generate_from_true_generative_model(
+        batch_size, device, num_rows=im_size, num_cols=im_size
     )
 
     # Run through learnable generative model
