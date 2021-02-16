@@ -328,7 +328,8 @@ class Guide(nn.Module):
             num_blocks = raw_num_blocks + 1
 
             # Sample primitive ids
-            raw_primitive_ids = []
+            stacking_program = []
+            available_primitive_ids = list(range(self.num_primitives))
             for block_id in range(num_blocks):
                 # --LSTM Input
                 if block_id == 0:
@@ -347,7 +348,7 @@ class Guide(nn.Module):
 
                 # --Extract params
                 raw_primitive_id_logits = self.raw_primitive_id_param_extractor(h)[0][
-                    : (self.num_primitives - block_id)
+                    : len(available_primitive_ids)
                 ]
 
                 # --Sample raw_primitive_id
@@ -355,8 +356,10 @@ class Guide(nn.Module):
                     f"raw_primitive_id_{block_id}_{batch_id}",
                     pyro.distributions.Categorical(logits=raw_primitive_id_logits),
                 ).long()
-                raw_primitive_ids.append(raw_primitive_id)
-            raw_primitive_ids = torch.stack(raw_primitive_ids)
+                primitive_id = available_primitive_ids.pop(raw_primitive_id)
+
+                # Add to the stacking program based on previous action
+                stacking_program.append(primitive_id)
 
             # Sample raw locations
             # --LSTM Input
@@ -387,7 +390,7 @@ class Guide(nn.Module):
                 ),
             )
 
-            traces.append((raw_num_blocks, raw_primitive_ids, raw_locations))
+            traces.append({"stacking_program": stacking_program, "raw_locations": raw_locations})
 
         return traces
 
