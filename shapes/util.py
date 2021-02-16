@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import pyro
 import subprocess
 import getpass
@@ -317,7 +318,7 @@ def plot_normal2d(ax, mean, cov, num_points=100, confidence=0.95, **kwargs):
 
 def make_gif(img_paths, gif_path, fps):
     images = []
-    for img_path in img_paths:
+    for img_path in tqdm(img_paths):
         images.append(imageio.imread(img_path))
     imageio.mimsave(gif_path, images, duration=1 / fps)
     logging.info(f"Saved to {gif_path}")
