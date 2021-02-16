@@ -147,7 +147,7 @@ def get_canvas_xy(num_rows, num_cols, device):
     return canvas_x, canvas_y
 
 
-def init_canvas(device, num_channels=3, num_rows=256, num_cols=256):
+def init_canvas(device, num_channels=3, num_rows=64, num_cols=64):
     return torch.ones((num_channels, num_rows, num_cols), device=device)
 
 
@@ -236,7 +236,7 @@ def soft_render_square(
     return square_weight[None] * square.color[:, None, None] + background_weight[None] * background
 
 
-def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows=256, num_cols=256):
+def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows=64, num_cols=64):
     # Init
     device = primitives[0].device
 
@@ -259,8 +259,8 @@ def soft_render(
     raw_color_sharpness,
     raw_blur,
     num_channels=3,
-    num_rows=256,
-    num_cols=256,
+    num_rows=64,
+    num_cols=64,
 ):
     # Init
     device = primitives[0].device
