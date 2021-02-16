@@ -55,7 +55,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"{args.num_primitives}_{args.insomnia}"
+    return f"st_{args.num_primitives}"
 
 
 def get_save_job_name_from_args(args):
