@@ -179,6 +179,18 @@ class GenerativeModel(nn.Module):
                 num_rows=self.num_rows,
                 num_cols=self.num_cols,
             )
+
+            # ABC likelihood
+            # sampling_scale = 0.01
+            # log_prob_scale = 1.0
+            # abc_log_prob = torch.distributions.Independent(
+            #     torch.distributions.Normal(loc=loc, scale=log_prob_scale),
+            #     reinterpreted_batch_ndims=3,
+            # ).log_prob(obs[batch_id])
+            # sampled_obs_log_prob = torch.distributions.Independent(
+            #     torch.distributions.Normal(loc=loc, scale=sampling_scale),
+            #     reinterpreted_batch_ndims=3,
+            # ).log_prob(obs[batch_id])
             sampled_obs = pyro.sample(
                 f"obs_{batch_id}",
                 pyro.distributions.Independent(
@@ -186,6 +198,7 @@ class GenerativeModel(nn.Module):
                 ),
                 obs=obs[batch_id],
             )
+            # pyro.factor(f"L2_{batch_id}", abc_log_prob - sampled_obs_log_prob)
             traces.append((stacking_program, raw_locations, sampled_obs))
         return traces
 
