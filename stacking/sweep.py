@@ -8,7 +8,7 @@ import run
 
 
 def get_sweep_argss():
-    for num_primitives in [2, 3, 10, 20, 50]:
+    for num_primitives in [3, 5, 10]:
         args = run.get_args_parser().parse_args([])
         args.num_primitives = num_primitives
         args.continue_training = True
