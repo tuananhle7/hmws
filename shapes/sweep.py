@@ -8,8 +8,8 @@ import run
 
 
 def get_sweep_argss():
-    for num_primitives in [2, 10]:
-        for insomnia in [0.0, 0.5, 1.0]:
+    for num_primitives in [10, 20, 50]:
+        for insomnia in [0.25, 0.5, 0.75]:
             args = run.get_args_parser().parse_args([])
             args.model_type = "shape_program_pyro"
             args.algorithm = "rws"

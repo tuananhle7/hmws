@@ -71,7 +71,7 @@ def get_args_parser():
 
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
-    parser.add_argument("--num-iterations", default=10000, type=int, help=" ")
+    parser.add_argument("--num-iterations", default=100000, type=int, help=" ")
     parser.add_argument("--lr", default=1e-3, type=float, help=" ")
     parser.add_argument(
         "--insomnia",
