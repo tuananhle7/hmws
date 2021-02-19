@@ -1,6 +1,7 @@
 import util
 import models
 import pyro
+import torch
 
 
 def train(model, optimizer, stats, args):
@@ -31,6 +32,20 @@ def train(model, optimizer, stats, args):
 
         # Step gradient
         loss = svi.step(obs)
+
+        # Check nan
+        for name, param in generative_model.named_parameters():
+            if torch.isnan(param).any():
+                util.logging.info(f"Param {name} is nan: {param}")
+                import pdb
+
+                pdb.set_trace()
+        for name, param in guide.named_parameters():
+            if torch.isnan(param).any():
+                util.logging.info(f"Param {name} is nan: {param}")
+                import pdb
+
+                pdb.set_trace()
 
         # Turn loss into a scalar
         if isinstance(loss, tuple):
