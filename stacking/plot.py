@@ -123,7 +123,12 @@ def plot_primitives(path, generative_model):
     # Plot
     num_rows, num_cols = 2, generative_model.num_primitives
     fig, axss = plt.subplots(
-        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+        num_rows,
+        num_cols,
+        figsize=(2 * num_cols, 2 * num_rows),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
     )
     for ax in axss.flat:
         ax.set_xlim(0, im_size)
@@ -132,6 +137,7 @@ def plot_primitives(path, generative_model):
         ax.set_yticks([])
 
     for i in range(generative_model.num_primitives):
+        util.logging.info(f"Primitive {i} = {generative_model.primitives[i]}")
         obs_soft = render.soft_render_square(
             generative_model.primitives[i],
             location,
