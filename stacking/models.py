@@ -2,7 +2,7 @@ import pyro
 import render
 import torch
 import torch.nn as nn
-import torchvision.models
+import util
 
 
 def sample_stacking_program(num_primitives, device, address_suffix=""):
@@ -226,10 +226,22 @@ class Guide(nn.Module):
         self.num_primitives = num_primitives
 
         # Obs embedder
-        self.obs_embedding_dim = 100
-        self.obs_embedder = torchvision.models.alexnet(
-            pretrained=False, num_classes=self.obs_embedding_dim
-        )
+        self.obs_embedder = util.init_cnn(16)
+        self.obs_embedding_dim = 400  # determined by running the network forward
+        # https://github.com/iffsid/mmvae/blob/public/src/models/vae_svhn.py
+        # fBase = 32  # base size of filter channels
+        # self.obs_embedder = nn.Sequential(
+        #     # input size: 3 x 32 x 32
+        #     nn.Conv2d(imgChans, fBase, 4, 2, 1, bias=True),
+        #     nn.ReLU(True),
+        #     # size: (fBase) x 16 x 16
+        #     nn.Conv2d(fBase, fBase * 2, 4, 2, 1, bias=True),
+        #     nn.ReLU(True),
+        #     # size: (fBase * 2) x 8 x 8
+        #     nn.Conv2d(fBase * 2, fBase * 4, 4, 2, 1, bias=True),
+        #     nn.ReLU(True),
+        #     # size: (fBase * 4) x 4 x 4
+        # )
 
         # LSTM
         self.sample_embedding_dim = 16
