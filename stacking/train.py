@@ -26,7 +26,7 @@ def train(model, optimizer, stats, args):
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Generate data
         obs = models.generate_from_true_generative_model(
-            args.batch_size, device=generative_model.device
+            args.batch_size, num_primitives=args.data_num_primitives, device=generative_model.device
         )
 
         # Step gradient

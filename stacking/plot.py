@@ -177,7 +177,9 @@ def main(args):
             # Plot reconstructions and other things
             num_test_obs = 10
             # Test data
-            obs = models.generate_from_true_generative_model(num_test_obs, device=device)
+            obs = models.generate_from_true_generative_model(
+                num_test_obs, num_primitives=run_args.data_num_primitives, device=device
+            )
 
             # Plot
             plot_reconstructions(
