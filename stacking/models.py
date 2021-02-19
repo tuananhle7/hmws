@@ -69,24 +69,27 @@ def sample_raw_locations(stacking_program, address_suffix=""):
     return pyro.sample(f"raw_locations{address_suffix}", dist)
 
 
-def generate_from_true_generative_model_single(device, num_channels=3, num_rows=64, num_cols=64):
+def generate_from_true_generative_model_single(
+    device, num_primitives, num_channels=3, num_rows=64, num_cols=64
+):
     """Generate a synthetic observation
 
     Returns [num_channels, num_rows, num_cols]
     """
+    assert num_primitives <= 3
     # Define params
     primitives = [
         render.Square(
-            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.1, device=device)
+            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.2, device=device)
         ),
         render.Square(
-            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.2, device=device)
+            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.3, device=device)
         ),
         render.Square(
-            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.3, device=device)
+            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.4, device=device)
         ),
-    ]
-    num_primitives = len(primitives)
+    ][:num_primitives]
+    # num_primitives = len(primitives)
 
     # Sample
     stacking_program = sample_stacking_program(num_primitives, device)
@@ -101,7 +104,7 @@ def generate_from_true_generative_model_single(device, num_channels=3, num_rows=
 
 
 def generate_from_true_generative_model(
-    batch_size, device, num_channels=3, num_rows=64, num_cols=64
+    batch_size, num_primitives, device, num_channels=3, num_rows=64, num_cols=64
 ):
     """Generate a batch of synthetic observations
 
@@ -109,7 +112,9 @@ def generate_from_true_generative_model(
     """
     return torch.stack(
         [
-            generate_from_true_generative_model_single(device, num_rows=num_rows, num_cols=num_cols)
+            generate_from_true_generative_model_single(
+                device, num_primitives, num_rows=num_rows, num_cols=num_cols
+            )
             for _ in range(batch_size)
         ]
     )
@@ -412,11 +417,12 @@ if __name__ == "__main__":
     # Init
     device = "cuda"
     batch_size = 3
+    num_primitives = 2
     im_size = 64
 
     # Create obs
     obs = generate_from_true_generative_model(
-        batch_size, device, num_rows=im_size, num_cols=im_size
+        batch_size, num_primitives, device, num_rows=im_size, num_cols=im_size
     )
 
     # Run through learnable generative model
