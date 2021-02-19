@@ -1,3 +1,4 @@
+import time
 import torch
 import imageio
 import logging
@@ -10,6 +11,7 @@ import models
 import pyro
 import collections
 import os
+import torch.nn as nn
 
 logging.basicConfig(
     level=logging.INFO,
@@ -148,3 +150,20 @@ def load_checkpoint(path, device, num_tries=3):
 
 
 Stats = collections.namedtuple("Stats", ["losses"])
+
+
+def init_cnn(output_dim, hidden_dim=128):
+    layers = []
+    layers.append(nn.Conv2d(3, int(hidden_dim / 2), kernel_size=3, padding=2))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=3, stride=2))
+    layers.append(nn.Conv2d(int(hidden_dim / 2), hidden_dim, kernel_size=3, padding=1))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=3, stride=2))
+    layers.append(nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=0))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.Conv2d(hidden_dim, output_dim, kernel_size=3, padding=0))
+    layers.append(nn.ReLU(inplace=True))
+    layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+    layers.append(nn.Flatten())
+    return nn.Sequential(*layers)
