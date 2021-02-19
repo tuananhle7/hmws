@@ -33,6 +33,9 @@ def get_args_parser():
     # Model
     parser.add_argument("--num-primitives", default=3, type=int, help=" ")
 
+    # Data
+    parser.add_argument("--data-num-primitives", default=3, type=int, help=" ")
+
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
     parser.add_argument("--num-iterations", default=100000, type=int, help=" ")
