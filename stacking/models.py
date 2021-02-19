@@ -125,7 +125,7 @@ class GenerativeModel(nn.Module):
     then renders them onto an image.
     """
 
-    def __init__(self, im_size=64, num_primitives=3):
+    def __init__(self, im_size=64, num_primitives=3, obs_scale=1.0, obs_dist_type="normal"):
         super().__init__()
 
         # Init
@@ -133,6 +133,11 @@ class GenerativeModel(nn.Module):
         self.num_rows = im_size
         self.num_cols = im_size
         self.num_primitives = num_primitives
+        self.obs_scale = obs_scale
+        if obs_dist_type == "normal":
+            self.obs_dist = pyro.distributions.Normal
+        elif obs_dist_type == "laplace":
+            self.obs_dist = pyro.distributions.Laplace
 
         # Primitive parameters (parameters of symbols)
         self.primitives = nn.ModuleList(
@@ -199,7 +204,7 @@ class GenerativeModel(nn.Module):
             sampled_obs = pyro.sample(
                 f"obs_{batch_id}",
                 pyro.distributions.Independent(
-                    pyro.distributions.Normal(loc=loc, scale=1.0), reinterpreted_batch_ndims=3,
+                    self.obs_dist(loc=loc, scale=self.obs_scale), reinterpreted_batch_ndims=3,
                 ),
                 obs=obs[batch_id],
             )
