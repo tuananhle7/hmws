@@ -124,8 +124,16 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
     logging.info(f"Saved checkpoint to {path}")
 
 
-def load_checkpoint(path, device):
-    checkpoint = torch.load(path, map_location=device)
+def load_checkpoint(path, device, num_tries=3):
+    for i in range(num_tries):
+        try:
+            checkpoint = torch.load(path, map_location=device)
+            break
+        except Exception as e:
+            logging.info(f"Error {e}")
+            wait_time = 2 ** i
+            logging.info(f"Waiting for {wait_time} seconds")
+            time.sleep(wait_time)
     run_args = checkpoint["run_args"]
     model, optimizer, stats = init(run_args, device)
 
