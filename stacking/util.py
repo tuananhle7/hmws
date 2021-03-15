@@ -187,3 +187,11 @@ def init_cnn(output_dim, hidden_dim=128):
     layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
     layers.append(nn.Flatten())
     return nn.Sequential(*layers)
+
+
+def sqrt(x):
+    """Safe sqrt"""
+    if torch.any(x <= 0):
+        logging.warn("Input to sqrt is <= 0")
+
+    return torch.sqrt(torch.clamp(x, min=1e-8))

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import util
 
 
 class Square:
@@ -103,10 +104,10 @@ def get_min_edge_distance(square, location, point):
     min_edge_distance = torch.zeros((num_locations, num_points), device=device)
 
     # --Compute distances for points in the corners (areas 1, 3, 7, 9)
-    min_edge_distance[area_1] = torch.sqrt((x - min_x) ** 2 + (y - max_y) ** 2)[area_1]
-    min_edge_distance[area_3] = torch.sqrt((x - max_x) ** 2 + (y - max_y) ** 2)[area_3]
-    min_edge_distance[area_7] = torch.sqrt((x - min_x) ** 2 + (y - min_y) ** 2)[area_7]
-    min_edge_distance[area_9] = torch.sqrt((x - max_x) ** 2 + (y - min_y) ** 2)[area_9]
+    min_edge_distance[area_1] = util.sqrt((x - min_x) ** 2 + (y - max_y) ** 2)[area_1]
+    min_edge_distance[area_3] = util.sqrt((x - max_x) ** 2 + (y - max_y) ** 2)[area_3]
+    min_edge_distance[area_7] = util.sqrt((x - min_x) ** 2 + (y - min_y) ** 2)[area_7]
+    min_edge_distance[area_9] = util.sqrt((x - max_x) ** 2 + (y - min_y) ** 2)[area_9]
 
     # --Compute distances for points in the outside strips (areas 2, 4, 6, 8)
     min_edge_distance[area_2] = (y - max_y)[area_2]
