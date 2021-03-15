@@ -51,22 +51,26 @@ class GenerativeModel(nn.Module):
         """
         # Extract stuff
         raw_location = latent
-        shape = latent.shape
-        num_samples = int(torch.tensor(shape).prod().item())
+
+        # Compute location
+        min_x, max_x = -0.8, 0.8
+        location_x = raw_location.sigmoid() * (max_x - min_x) + min_x
+        location_y = -torch.ones_like(location_x)
+        location = torch.stack([location_x, location_y], dim=-1)
+
+        # Compute background
+        background = render.init_canvas(
+            self.device, self.num_channels, self.num_rows, self.num_cols
+        )
 
         # Compute stuff
-        loc = []
-        for sample_id in range(num_samples):
-            loc.append(
-                render.soft_render(
-                    [self.primitive],
-                    torch.zeros((1,), device=self.device).long(),
-                    raw_location.view(-1)[sample_id][None],
-                    self.raw_color_sharpness,
-                    self.raw_blur,
-                )
-            )
-        return torch.stack(loc).view(*[*shape, self.num_channels, self.num_rows, self.num_cols])
+        return render.soft_render_square(
+            self.primitive,
+            location,
+            background,
+            render.get_color_sharpness(self.raw_color_sharpness),
+            render.get_blur(self.raw_blur),
+        )
 
     def get_obs_loc_hard(self, latent):
         """Location parameter of p(x | z)
