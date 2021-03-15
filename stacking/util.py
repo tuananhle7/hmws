@@ -7,11 +7,13 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-from models import stacking
+from models import stacking_pyro
+from models import one_primitive
 import pyro
 import collections
 import os
 import torch.nn as nn
+import itertools
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,7 +59,7 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"st_{args.num_primitives}"
+    return f"{args.model_type}_{args.algorithm}"
 
 
 def get_save_job_name_from_args(args):
@@ -92,17 +94,30 @@ def get_checkpoint_paths(checkpoint_iteration=-1):
 
 # Init, saving, etc
 def init(run_args, device):
-    # Generative model
-    generative_model = stacking.GenerativeModel(num_primitives=run_args.num_primitives).to(device)
+    if run_args.model_type == "stacking_pyro":
+        # Generative model
+        generative_model = stacking_pyro.GenerativeModel(num_primitives=run_args.num_primitives).to(
+            device
+        )
 
-    # Guide
-    guide = stacking.Guide(num_primitives=run_args.num_primitives).to(device)
+        # Guide
+        guide = stacking_pyro.Guide(num_primitives=run_args.num_primitives).to(device)
+    elif run_args.model_type == "one_primitive":
+        # Generative model
+        generative_model = one_primitive.GenerativeModel().to(device)
+
+        # Guide
+        guide = one_primitive.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)
 
     # Optimizer
-    optimizer = pyro.optim.pytorch_optimizers.Adam({"lr": run_args.lr})
+    if "_pyro" in run_args.model_type:
+        optimizer = pyro.optim.pytorch_optimizers.Adam({"lr": run_args.lr})
+    else:
+        parameters = itertools.chain(generative_model.parameters(), guide.parameters())
+        optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
     stats = Stats([])
@@ -117,7 +132,9 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
         {
             "generative_model_state_dict": generative_model.state_dict(),
             "guide_state_dict": guide.state_dict(),
-            "optimizer_state_dict": optimizer.get_state(),
+            "optimizer_state_dict": optimizer.get_state()
+            if "_pyro" in run_args.model_type
+            else optimizer.state_dict(),
             "stats": stats,
             "run_args": run_args,
         },
@@ -144,7 +161,10 @@ def load_checkpoint(path, device, num_tries=3):
     generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
 
     model = (generative_model, guide)
-    optimizer.set_state(checkpoint["optimizer_state_dict"])
+    if "_pyro" in run_args.model_type:
+        optimizer.set_state(checkpoint["optimizer_state_dict"])
+    else:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     stats = checkpoint["stats"]
     return model, optimizer, stats, run_args
 

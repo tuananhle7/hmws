@@ -1,7 +1,8 @@
 import util
-from models import stacking
+from models import stacking_pyro
 import pyro
 import torch
+import losses
 
 
 def train(model, optimizer, stats, args):
@@ -11,48 +12,85 @@ def train(model, optimizer, stats, args):
     generative_model, guide = model
 
     # Initialize optimizer for pyro models
-    svi = pyro.infer.SVI(
-        model=generative_model,
-        guide=guide,
-        optim=optimizer,
-        loss=pyro.infer.ReweightedWakeSleep(
-            num_particles=args.num_particles,
-            vectorize_particles=False,
-            model_has_params=True,
-            insomnia=args.insomnia,
-        ),
-    )
-    util.logging.info(f"Using pyro version {pyro.__version__}")
+    if "_pyro" in args.model_type:
+        svi = pyro.infer.SVI(
+            model=generative_model,
+            guide=guide,
+            optim=optimizer,
+            loss=pyro.infer.ReweightedWakeSleep(
+                num_particles=args.num_particles,
+                vectorize_particles=False,
+                model_has_params=True,
+                insomnia=args.insomnia,
+            ),
+        )
+        util.logging.info(f"Using pyro version {pyro.__version__}")
 
     for iteration in range(num_iterations_so_far, args.num_iterations):
-        # Generate data
-        obs = stacking.generate_from_true_generative_model(
-            args.batch_size, num_primitives=args.data_num_primitives, device=generative_model.device
-        )
+        if "_pyro" in args.model_type:
+            # Generate data
+            obs = stacking_pyro.generate_from_true_generative_model(
+                args.batch_size,
+                num_primitives=args.data_num_primitives,
+                device=generative_model.device,
+            )
 
-        # Step gradient
-        loss = svi.step(obs)
+            # Step gradient
+            loss = svi.step(obs)
 
-        # Check nan
-        for name, param in generative_model.named_parameters():
-            if torch.isnan(param).any():
-                util.logging.info(f"Param {name} is nan: {param}")
-                import pdb
+            # Check nan
+            for name, param in generative_model.named_parameters():
+                if torch.isnan(param).any():
+                    util.logging.info(f"Param {name} is nan: {param}")
+                    import pdb
 
-                pdb.set_trace()
-        for name, param in guide.named_parameters():
-            if torch.isnan(param).any():
-                util.logging.info(f"Param {name} is nan: {param}")
-                import pdb
+                    pdb.set_trace()
+            for name, param in guide.named_parameters():
+                if torch.isnan(param).any():
+                    util.logging.info(f"Param {name} is nan: {param}")
+                    import pdb
 
-                pdb.set_trace()
+                    pdb.set_trace()
 
-        # Turn loss into a scalar
-        if isinstance(loss, tuple):
-            loss = sum(loss)
+            # Turn loss into a scalar
+            if isinstance(loss, tuple):
+                loss = sum(loss)
 
-        # Record stats
-        stats.losses.append(loss)
+            # Record stats
+            stats.losses.append(loss)
+        else:
+            # Zero grad
+            optimizer.zero_grad()
+
+            # Evaluate loss
+            if args.model_type == "one_primitive":
+                obs = stacking_pyro.generate_from_true_generative_model(
+                    args.batch_size, num_primitives=1, device=generative_model.device,
+                )
+
+                if args.algorithm == "rws":
+                    loss = losses.get_rws_loss(
+                        generative_model, guide, obs, args.num_particles
+                    ).mean()
+                elif "elbo" in args.algorithm:
+                    loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
+                # elif "iwae" in args.algorithm:
+                #     loss = losses.get_iwae_loss(
+                #         generative_model, guide, obs, args.num_particles
+                #     ).mean()
+
+                # if "sleep" in args.algorithm:
+                #     loss += losses.get_sleep_loss(
+                #         generative_model, guide, args.batch_size * args.num_particles
+                #     ).mean()
+
+            loss.backward()
+
+            # Step gradient
+            optimizer.step()
+
+            # Record stats
+            stats.losses.append(loss.item())
 
         # Log
         if iteration % args.log_interval == 0:

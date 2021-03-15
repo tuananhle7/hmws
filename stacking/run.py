@@ -26,12 +26,18 @@ def get_args_parser():
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        "--algorithm", default="rws", choices=["rws", "elbo"], help=" ",
+    )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=5, type=int, help=" ")
     parser.add_argument("--num-particles", default=50, type=int, help=" ")
 
     # Model
     parser.add_argument("--num-primitives", default=3, type=int, help=" ")
+    parser.add_argument(
+        "--model-type", default="stacking", choices=["stacking", "one_primitive",], help=" ",
+    )
 
     # Data
     parser.add_argument("--data-num-primitives", default=3, type=int, help=" ")
