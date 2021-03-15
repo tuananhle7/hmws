@@ -7,7 +7,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-import models
+from models import stacking
 import pyro
 import collections
 import os
@@ -93,10 +93,10 @@ def get_checkpoint_paths(checkpoint_iteration=-1):
 # Init, saving, etc
 def init(run_args, device):
     # Generative model
-    generative_model = models.GenerativeModel(num_primitives=run_args.num_primitives).to(device)
+    generative_model = stacking.GenerativeModel(num_primitives=run_args.num_primitives).to(device)
 
     # Guide
-    guide = models.Guide(num_primitives=run_args.num_primitives).to(device)
+    guide = stacking.Guide(num_primitives=run_args.num_primitives).to(device)
 
     # Model tuple
     model = (generative_model, guide)

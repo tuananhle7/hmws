@@ -1,5 +1,5 @@
 import util
-import models
+from models import stacking
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -183,7 +183,7 @@ def main(args):
             # Plot reconstructions and other things
             num_test_obs = 10
             # Test data
-            obs = models.generate_from_true_generative_model(
+            obs = stacking.generate_from_true_generative_model(
                 num_test_obs, num_primitives=run_args.data_num_primitives, device=device
             )
 
