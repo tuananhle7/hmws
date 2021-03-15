@@ -46,27 +46,38 @@ class LearnableSquare(nn.Module):
 
 
 def get_min_edge_distance(square, location, point):
-    """Computes shortest distance from a point to the square edge.
+    """Computes shortest distance from a point to the square edge. (batched)
     Negative if it's inside the square.
     Positive if it's outside the square.
 
     Args
         square
-        location [2]
-        point [*shape, 2]
+        location [*location_shape, 2]
+        point [*point_shape, 2]
 
-    Returns [*shape]
+    Returns [*location_shape, *point_shape]
     """
     # Extract
-    # []
-    min_x, min_y = location
+    device = location.device
+    # [*location_shape]
+    min_x, min_y = location[..., 0], location[..., 1]
     max_x = min_x + square.size
     max_y = min_y + square.size
-    # [*shape]
+    location_shape = min_x.shape
+    num_locations = int(torch.tensor(location_shape).prod().long().item())
+    # [*point_shape]
     x, y = point[..., 0], point[..., 1]
+    point_shape = x.shape
+    num_points = int(torch.tensor(point_shape).prod().long().item())
+
+    # Flatten
+    # [num_locations, 1]
+    min_x, min_y, max_x, max_y = [tmp.view(-1)[:, None] for tmp in [min_x, min_y, max_x, max_y]]
+    # [1, num_points]
+    x, y = [tmp.view(-1)[None] for tmp in [x, y]]
 
     # Determine which area the point is in
-    # [*shape]
+    # [num_locations, num_points]
     # --High level areas
     up = y >= max_y
     middle = (y >= min_y) & (y < max_y)
@@ -88,8 +99,8 @@ def get_min_edge_distance(square, location, point):
 
     # Compute min distances
     # --Init the results
-    # [*shape]
-    min_edge_distance = torch.zeros_like(x)
+    # [num_locations, num_points]
+    min_edge_distance = torch.zeros((num_locations, num_points), device=device)
 
     # --Compute distances for points in the corners (areas 1, 3, 7, 9)
     min_edge_distance[area_1] = torch.sqrt((x - min_x) ** 2 + (y - max_y) ** 2)[area_1]
@@ -108,7 +119,7 @@ def get_min_edge_distance(square, location, point):
         torch.stack([y - min_y, max_y - y, x - min_x, max_x - x]), dim=0
     )[0][area_5]
 
-    return min_edge_distance
+    return min_edge_distance.view(*[*location_shape, *point_shape])
 
 
 def get_render_log_prob(min_edge_distance, blur=1e-4):
@@ -199,7 +210,7 @@ def soft_render_square(
 
     Args
         square
-        location [2]
+        location [*shape, 2]
         background [num_channels, num_rows, num_cols] -- this is the background color C_b in
             equation (2)
         background_weight [] (default 1.): ϵ in equation (3)
@@ -207,8 +218,11 @@ def soft_render_square(
         blur [] (default 1e-4): this is the σ in equation (1)
 
     Returns
-        new_canvas [num_channels, num_rows, num_cols]
+        new_canvas [*shape, num_channels, num_rows, num_cols]
     """
+    # Extract
+    shape = location.shape[:-1]
+
     # Init
     device = location.device
     num_channels, num_rows, num_cols = background.shape
@@ -219,24 +233,32 @@ def soft_render_square(
     canvas_xy = torch.stack([canvas_x, canvas_y], dim=-1)
 
     # Get render log prob
-    # --Foreground object (treat depth z = -1) [num_rows, num_cols]
+    # --Foreground object (treat depth z = -1) [*shape, num_rows, num_cols]
     depth = 0
     square_render_log_prob = (
         get_render_log_prob(get_min_edge_distance(square, location, canvas_xy), blur=blur)
         + depth / color_sharpness
     )
-    # --Background [num_rows, num_cols]
+    # --Background [*shape, num_rows, num_cols]
     background_render_log_prob = (
         torch.ones_like(square_render_log_prob) * background_depth / color_sharpness
     )
 
     # Compute color weight (equation (3))
-    # [num_rows, num_cols]
+    # [*shape, num_rows, num_cols]
     square_weight, background_weight = F.softmax(
         torch.stack([square_render_log_prob, background_render_log_prob]), dim=0
     )
 
-    return square_weight[None] * square.color[:, None, None] + background_weight[None] * background
+    # Flatten
+    # [num_samples, num_rows, num_cols]
+    square_weight_flattened = square_weight.view(-1, num_rows, num_cols)
+    background_weight_flattened = background_weight.view(-1, num_rows, num_cols)
+
+    return (
+        square_weight_flattened[:, None] * square.color[None, :, None, None]
+        + background_weight_flattened[:, None] * background[None]
+    ).view(*[*shape, num_channels, num_rows, num_cols])
 
 
 def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows=64, num_cols=64):
