@@ -18,9 +18,12 @@ class Square:
 
 
 class LearnableSquare(nn.Module):
-    def __init__(self, name):
+    def __init__(self, name=None):
         super().__init__()
-        self.name = name
+        if name is None:
+            self.name = "LearnableSquare"
+        else:
+            self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)))
         self.raw_size = nn.Parameter(torch.randn(()))
 
@@ -262,6 +265,16 @@ def soft_render(
     num_rows=64,
     num_cols=64,
 ):
+    """
+    Args
+        primitives (list [num_primitives])
+        stacking_program (tensor [num_blocks])
+        raw_locations (tensor [num_blocks])
+        raw_color_sharpness []
+        raw_blur []
+
+    Returns [num_channels, num_rows, num_cols]
+    """
     # Init
     device = primitives[0].device
 
@@ -284,6 +297,15 @@ def soft_render(
 
 
 def convert_raw_locations(raw_locations, stacking_program, primitives):
+    """
+    Args
+        raw_locations (tensor [num_blocks])
+        stacking_program (tensor [num_blocks])
+        primitives (list [num_primitives])
+
+    Returns
+        list of length num_blocks, each element is a tensor [2]
+    """
     # Extract
     device = primitives[0].device
 
