@@ -5,7 +5,7 @@ import torch.nn as nn
 import util
 
 
-def sample_stacking_program(num_primitives, device, address_suffix=""):
+def sample_stacking_program(num_primitives, device, address_suffix="", fixed_num_blocks=False):
     """Samples blocks to stack from a set [0, ..., num_primitives - 1]
     *without* replacement. The number of blocks is stochastic and
     can be < num_primitives.
@@ -23,13 +23,16 @@ def sample_stacking_program(num_primitives, device, address_suffix=""):
     stacking_program = []
     available_primitive_ids = list(range(num_primitives))
 
-    # Sample num_blocks uniformly from [1, ..., num_primitives] (inclusive)
-    raw_num_blocks_logits = torch.ones((num_primitives,), device=device)
-    raw_num_blocks = pyro.sample(
-        f"raw_num_blocks{address_suffix}",
-        pyro.distributions.Categorical(logits=raw_num_blocks_logits),
-    )
-    num_blocks = raw_num_blocks + 1
+    if fixed_num_blocks:
+        num_blocks = num_primitives
+    else:
+        # Sample num_blocks uniformly from [1, ..., num_primitives] (inclusive)
+        raw_num_blocks_logits = torch.ones((num_primitives,), device=device)
+        raw_num_blocks = pyro.sample(
+            f"raw_num_blocks{address_suffix}",
+            pyro.distributions.Categorical(logits=raw_num_blocks_logits),
+        )
+        num_blocks = raw_num_blocks + 1
 
     # Sample primitive ids
     for block_id in range(num_blocks):
@@ -70,7 +73,7 @@ def sample_raw_locations(stacking_program, address_suffix=""):
 
 
 def generate_from_true_generative_model_single(
-    device, num_primitives, num_channels=3, num_rows=64, num_cols=64
+    device, num_primitives, num_channels=3, num_rows=64, num_cols=64, fixed_num_blocks=False
 ):
     """Generate a synthetic observation
 
@@ -92,7 +95,9 @@ def generate_from_true_generative_model_single(
     # num_primitives = len(primitives)
 
     # Sample
-    stacking_program = sample_stacking_program(num_primitives, device)
+    stacking_program = sample_stacking_program(
+        num_primitives, device, fixed_num_blocks=fixed_num_blocks
+    )
     raw_locations = sample_raw_locations(stacking_program)
 
     # Render
@@ -104,7 +109,13 @@ def generate_from_true_generative_model_single(
 
 
 def generate_from_true_generative_model(
-    batch_size, num_primitives, device, num_channels=3, num_rows=64, num_cols=64
+    batch_size,
+    num_primitives,
+    device,
+    num_channels=3,
+    num_rows=64,
+    num_cols=64,
+    fixed_num_blocks=False,
 ):
     """Generate a batch of synthetic observations
 
@@ -113,7 +124,11 @@ def generate_from_true_generative_model(
     return torch.stack(
         [
             generate_from_true_generative_model_single(
-                device, num_primitives, num_rows=num_rows, num_cols=num_cols
+                device,
+                num_primitives,
+                num_rows=num_rows,
+                num_cols=num_cols,
+                fixed_num_blocks=fixed_num_blocks,
             )
             for _ in range(batch_size)
         ]
