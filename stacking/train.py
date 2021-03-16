@@ -45,31 +45,38 @@ def train(model, optimizer, stats, args):
             # Record stats
             stats.losses.append(loss)
         else:
-            # Zero grad
-            optimizer.zero_grad()
-
-            # Evaluate loss
+            # Generate data
             if args.model_type == "one_primitive":
                 obs = stacking_pyro.generate_from_true_generative_model(
                     args.batch_size, num_primitives=1, device=generative_model.device,
                 )
+            elif args.model_type == "two_primitives":
+                obs = stacking_pyro.generate_from_true_generative_model(
+                    args.batch_size,
+                    num_primitives=2,
+                    device=generative_model.device,
+                    fixed_num_blocks=True,
+                )
 
-                if args.algorithm == "rws":
-                    loss = losses.get_rws_loss(
-                        generative_model, guide, obs, args.num_particles
-                    ).mean()
-                elif "elbo" in args.algorithm:
-                    loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
-                # elif "iwae" in args.algorithm:
-                #     loss = losses.get_iwae_loss(
-                #         generative_model, guide, obs, args.num_particles
-                #     ).mean()
+            # Zero grad
+            optimizer.zero_grad()
 
-                # if "sleep" in args.algorithm:
-                #     loss += losses.get_sleep_loss(
-                #         generative_model, guide, args.batch_size * args.num_particles
-                #     ).mean()
+            # Evaluate loss
+            if args.algorithm == "rws":
+                loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
+            elif "elbo" in args.algorithm:
+                loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
+            # elif "iwae" in args.algorithm:
+            #     loss = losses.get_iwae_loss(
+            #         generative_model, guide, obs, args.num_particles
+            #     ).mean()
 
+            # if "sleep" in args.algorithm:
+            #     loss += losses.get_sleep_loss(
+            #         generative_model, guide, args.batch_size * args.num_particles
+            #     ).mean()
+
+            # Compute gradient
             loss.backward()
 
             # Step gradient

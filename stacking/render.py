@@ -46,13 +46,13 @@ class LearnableSquare(nn.Module):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"
 
 
-def get_min_edge_distance(square, location, point):
+def get_min_edge_distance(square_size, location, point):
     """Computes shortest distance from a point to the square edge. (batched)
     Negative if it's inside the square.
     Positive if it's outside the square.
 
     Args
-        square
+        square_size [] or [*location_shape]
         location [*location_shape, 2]
         point [*point_shape, 2]
 
@@ -62,8 +62,8 @@ def get_min_edge_distance(square, location, point):
     device = location.device
     # [*location_shape]
     min_x, min_y = location[..., 0], location[..., 1]
-    max_x = min_x + square.size
-    max_y = min_y + square.size
+    max_x = min_x + square_size
+    max_y = min_y + square_size
     location_shape = min_x.shape
     num_locations = int(torch.tensor(location_shape).prod().long().item())
     # [*point_shape]
@@ -162,8 +162,9 @@ def get_canvas_xy(num_rows, num_cols, device):
     return canvas_x, canvas_y
 
 
-def init_canvas(device, num_channels=3, num_rows=64, num_cols=64):
-    return torch.ones((num_channels, num_rows, num_cols), device=device)
+def init_canvas(device, num_channels=3, num_rows=64, num_cols=64, shape=[]):
+    """Return a white canvas of shape [*shape, num_channels, num_rows, num_cols]"""
+    return torch.ones(*[*shape, num_channels, num_rows, num_cols], device=device)
 
 
 def render_square(square, location, canvas):
@@ -212,8 +213,8 @@ def soft_render_square(
     Args
         square
         location [*shape, 2]
-        background [num_channels, num_rows, num_cols] -- this is the background color C_b in
-            equation (2)
+        background [num_channels, num_rows, num_cols] or [*shape, num_channels, num_rows, num_cols]
+            this is the background color C_b in equation (2)
         background_weight [] (default 1.): ϵ in equation (3)
         color_sharpness [] (default 1e-4): γ in equation (3)
         blur [] (default 1e-4): this is the σ in equation (1)
@@ -226,7 +227,13 @@ def soft_render_square(
 
     # Init
     device = location.device
-    num_channels, num_rows, num_cols = background.shape
+    if background.ndim > 3:
+        num_channels, num_rows, num_cols = background.shape[-3:]
+        expanded_background = True
+        assert background.shape[:-3] == shape
+    else:
+        num_channels, num_rows, num_cols = background.shape
+        expanded_background = False
 
     # Canvas xy
     # [num_rows, num_cols]
@@ -237,7 +244,7 @@ def soft_render_square(
     # --Foreground object (treat depth z = -1) [*shape, num_rows, num_cols]
     depth = 0
     square_render_log_prob = (
-        get_render_log_prob(get_min_edge_distance(square, location, canvas_xy), blur=blur)
+        get_render_log_prob(get_min_edge_distance(square.size, location, canvas_xy), blur=blur)
         + depth / color_sharpness
     )
     # --Background [*shape, num_rows, num_cols]
@@ -255,10 +262,96 @@ def soft_render_square(
     # [num_samples, num_rows, num_cols]
     square_weight_flattened = square_weight.view(-1, num_rows, num_cols)
     background_weight_flattened = background_weight.view(-1, num_rows, num_cols)
+    if expanded_background:
+        background_flattened = background.view(-1, num_channels, num_rows, num_cols)
+    else:
+        background_flattened = background[None]
 
     return (
         square_weight_flattened[:, None] * square.color[None, :, None, None]
-        + background_weight_flattened[:, None] * background[None]
+        + background_weight_flattened[:, None] * background_flattened
+    ).view(*[*shape, num_channels, num_rows, num_cols])
+
+
+def soft_render_square_batched(
+    square_size,
+    square_color,
+    location,
+    background,
+    background_depth=-1e-3,
+    color_sharpness=1e-4,
+    blur=1e-4,
+):
+    """Draws a square on a canvas whose xy limits are [-1, 1].
+
+    Follows equations (2) and (3) in
+    https://openaccess.thecvf.com/content_ICCV_2019/papers/Liu_Soft_Rasterizer_A_Differentiable_Renderer_for_Image-Based_3D_Reasoning_ICCV_2019_paper.pdf
+
+    Args
+        square_size [*shape] or []
+        square_color [*shape, 3] or [3]
+        location [*shape, 2]
+        background [num_channels, num_rows, num_cols] or [*shape, num_channels, num_rows, num_cols]
+            this is the background color C_b in equation (2)
+        background_weight [] (default 1.): ϵ in equation (3)
+        color_sharpness [] (default 1e-4): γ in equation (3)
+        blur [] (default 1e-4): this is the σ in equation (1)
+
+    Returns
+        new_canvas [*shape, num_channels, num_rows, num_cols]
+    """
+    # Extract
+    shape = location.shape[:-1]
+
+    # Init
+    device = location.device
+    if background.ndim > 3:
+        num_channels, num_rows, num_cols = background.shape[-3:]
+        expanded_background = True
+        assert background.shape[:-3] == shape
+    else:
+        num_channels, num_rows, num_cols = background.shape
+        expanded_background = False
+
+    # Canvas xy
+    # [num_rows, num_cols]
+    canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
+    canvas_xy = torch.stack([canvas_x, canvas_y], dim=-1)
+
+    # Get render log prob
+    # --Foreground object (treat depth z = -1) [*shape, num_rows, num_cols]
+    depth = 0
+    square_render_log_prob = (
+        get_render_log_prob(get_min_edge_distance(square_size, location, canvas_xy), blur=blur)
+        + depth / color_sharpness
+    )
+    # --Background [*shape, num_rows, num_cols]
+    background_render_log_prob = (
+        torch.ones_like(square_render_log_prob) * background_depth / color_sharpness
+    )
+
+    # Compute color weight (equation (3))
+    # [*shape, num_rows, num_cols]
+    square_weight, background_weight = F.softmax(
+        torch.stack([square_render_log_prob, background_render_log_prob]), dim=0
+    )
+
+    # Flatten
+    # [num_samples, num_rows, num_cols]
+    square_weight_flattened = square_weight.view(-1, num_rows, num_cols)
+    background_weight_flattened = background_weight.view(-1, num_rows, num_cols)
+    if expanded_background:
+        background_flattened = background.view(-1, num_channels, num_rows, num_cols)
+    else:
+        background_flattened = background[None]
+    if square_color.ndim == 1:
+        square_color_expanded = square_color[None, :, None, None]
+    else:
+        square_color_expanded = square_color.view(-1, 3)[:, :, None, None]
+
+    return (
+        square_weight_flattened[:, None] * square_color_expanded
+        + background_weight_flattened[:, None] * background_flattened
     ).view(*[*shape, num_channels, num_rows, num_cols])
 
 
@@ -319,6 +412,53 @@ def soft_render(
     return canvas
 
 
+def soft_render_batched(
+    primitives,
+    stacking_program,
+    raw_locations,
+    raw_color_sharpness,
+    raw_blur,
+    num_channels=3,
+    num_rows=64,
+    num_cols=64,
+):
+    """
+    Args
+        primitives (list [num_primitives])
+        stacking_program (tensor [*shape, num_blocks])
+        raw_locations (tensor [*shape, num_blocks])
+        raw_color_sharpness []
+        raw_blur []
+
+    Returns [num_channels, num_rows, num_cols]
+    """
+    # Extract
+    device = primitives[0].device
+    shape = stacking_program.shape[:-1]
+    num_blocks = stacking_program.shape[-1]
+    # [num_primitives]
+    square_size = torch.stack([primitive.size for primitive in primitives])
+    # [num_primitives, 3]
+    square_color = torch.stack([primitive.color for primitive in primitives])
+
+    # Convert
+    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
+
+    # Render
+    canvas = init_canvas(device, num_channels, num_rows, num_cols, shape)
+    for block_id in range(num_blocks):
+        canvas = soft_render_square_batched(
+            square_size[stacking_program[..., block_id]],
+            square_color[stacking_program[..., block_id]],
+            locations[..., block_id, :],
+            canvas,
+            color_sharpness=get_color_sharpness(raw_color_sharpness),
+            blur=get_blur(raw_blur),
+        )
+
+    return canvas
+
+
 def convert_raw_locations(raw_locations, stacking_program, primitives):
     """
     Args
@@ -326,8 +466,7 @@ def convert_raw_locations(raw_locations, stacking_program, primitives):
         stacking_program (tensor [num_blocks])
         primitives (list [num_primitives])
 
-    Returns
-        list of length num_blocks, each element is a tensor [2]
+    Returns [num_blocks, 2]
     """
     # Extract
     device = primitives[0].device
@@ -347,7 +486,38 @@ def convert_raw_locations(raw_locations, stacking_program, primitives):
         y = y + size
         min_x = x
         max_x = min_x + size
-    return locations
+    return torch.stack(locations)
+
+
+def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
+    """
+    Args
+        raw_locations (tensor [*shape, num_blocks])
+        stacking_program (tensor [*shape, num_blocks])
+        primitives (list [num_primitives])
+
+    Returns [*shape, num_blocks, 2]
+    """
+    # Extract
+    shape = raw_locations.shape[:-1]
+    num_samples = int(torch.tensor(shape).prod().long().item())
+    num_blocks = raw_locations.shape[-1]
+
+    # Flatten
+    # [num_samples, num_blocks]
+    raw_locations_flattened = raw_locations.view(num_samples, num_blocks)
+    stacking_program_flattened = stacking_program.view(num_samples, num_blocks)
+
+    locations_batched = []
+    for sample_id in range(num_samples):
+        locations_batched.append(
+            convert_raw_locations(
+                raw_locations_flattened[sample_id],
+                stacking_program_flattened[sample_id],
+                primitives,
+            )
+        )
+    return torch.stack(locations_batched).view(*[*shape, num_blocks, 2])
 
 
 def get_color_sharpness(raw_color_sharpness):

@@ -9,6 +9,7 @@ import numpy as np
 import random
 from models import stacking_pyro
 from models import one_primitive
+from models import two_primitives
 import pyro
 import collections
 import os
@@ -108,6 +109,12 @@ def init(run_args, device):
 
         # Guide
         guide = one_primitive.Guide().to(device)
+    elif run_args.model_type == "two_primitives":
+        # Generative model
+        generative_model = two_primitives.GenerativeModel().to(device)
+
+        # Guide
+        guide = two_primitives.Guide().to(device)
 
     # Model tuple
     model = (generative_model, guide)
@@ -195,3 +202,22 @@ def sqrt(x):
         logging.warn("Input to sqrt is <= 0")
 
     return torch.sqrt(torch.clamp(x, min=1e-8))
+
+
+class JointDistribution:
+    """p(x_{1:N}) = ∏_n p(x_n)
+    Args:
+        dists: list of distributions p(x_n)
+    """
+
+    def __init__(self, dists):
+        self.dists = dists
+
+    def sample(self, sample_shape=[]):
+        return tuple([dist.sample(sample_shape) for dist in self.dists])
+
+    def rsample(self, sample_shape=[]):
+        return tuple([dist.rsample(sample_shape) for dist in self.dists])
+
+    def log_prob(self, values):
+        return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])

@@ -208,53 +208,19 @@ def plot_reconstructions_one_primitive(path, generative_model, guide, obs):
     util.save_fig(fig, path)
 
 
-def plot_primitives_one_primitive(path, generative_model):
-    device = generative_model.device
-    im_size = generative_model.num_rows
+def plot_reconstructions_two_primitives(path, generative_model, guide, obs):
+    """
+    Args:
+        path (str)
+        generative_model
+        guide
+        obs: [num_test_obs, num_channels, im_size, im_size]
+    """
+    plot_reconstructions_one_primitive(path, generative_model, guide, obs)
 
-    # Init
-    location = torch.zeros((2,), device=device)
-    blank_canvas = render.init_canvas(
-        device,
-        num_channels=generative_model.num_channels,
-        num_rows=generative_model.num_rows,
-        num_cols=generative_model.num_cols,
-    )
 
-    # Plot
-    num_rows, num_cols = 2, generative_model.num_primitives
-    fig, axss = plt.subplots(
-        num_rows,
-        num_cols,
-        figsize=(2 * num_cols, 2 * num_rows),
-        sharex=True,
-        sharey=True,
-        squeeze=False,
-    )
-    for ax in axss.flat:
-        ax.set_xlim(0, im_size)
-        ax.set_ylim(im_size, 0)
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    for i in range(generative_model.num_primitives):
-        util.logging.info(f"Primitive {i} = {generative_model.primitives[i]}")
-        obs_soft = render.soft_render_square(
-            generative_model.primitives[i],
-            location,
-            blank_canvas,
-            color_sharpness=render.get_color_sharpness(generative_model.raw_color_sharpness),
-            blur=render.get_blur(generative_model.raw_blur),
-        )
-        obs_hard = render.render_square(generative_model.primitives[i], location, blank_canvas,)
-        axss[0, i].imshow(obs_soft.cpu().permute(1, 2, 0))
-        axss[1, i].imshow(obs_hard.cpu().permute(1, 2, 0))
-
-    # Labels
-    axss[0, 0].set_ylabel("Soft render")
-    axss[1, 0].set_ylabel("Hard render")
-
-    util.save_fig(fig, path)
+def plot_primitives_two_primitives(path, generative_model):
+    plot_primitives_stacking_pyro(path, generative_model)
 
 
 def main(args):
@@ -292,6 +258,10 @@ def main(args):
                 obs = stacking_pyro.generate_from_true_generative_model(
                     num_test_obs, num_primitives=1, device=device
                 )
+            elif run_args.model_type == "two_primitives":
+                obs = stacking_pyro.generate_from_true_generative_model(
+                    num_test_obs, num_primitives=2, device=device, fixed_num_blocks=True
+                )
 
             # Plot
             if run_args.model_type == "stacking_pyro":
@@ -312,6 +282,18 @@ def main(args):
                     guide,
                     obs,
                 )
+            elif run_args.model_type == "two_primitives":
+                plot_reconstructions_two_primitives(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                )
+                plot_primitives_two_primitives(
+                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
+                    generative_model,
+                )
+
         else:
             # Checkpoint doesn't exist
             util.logging.info(f"No checkpoint in {checkpoint_path}")
