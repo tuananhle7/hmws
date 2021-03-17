@@ -15,6 +15,7 @@ import collections
 import os
 import torch.nn as nn
 import itertools
+from tqdm import tqdm
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +36,7 @@ def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
 
 def make_gif(img_paths, gif_path, fps):
     images = []
-    for img_path in img_paths:
+    for img_path in tqdm(img_paths):
         images.append(imageio.imread(img_path))
     imageio.mimsave(gif_path, images, duration=1 / fps)
     logging.info(f"Saved to {gif_path}")
