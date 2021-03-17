@@ -57,6 +57,12 @@ def train(model, optimizer, stats, args):
                     device=generative_model.device,
                     fixed_num_blocks=True,
                 )
+            elif args.model_type == "stacking":
+                obs = stacking_pyro.generate_from_true_generative_model(
+                    args.batch_size,
+                    num_primitives=args.num_primitives,
+                    device=generative_model.device,
+                )
 
             # Zero grad
             optimizer.zero_grad()

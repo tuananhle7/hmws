@@ -10,6 +10,7 @@ import random
 from models import stacking_pyro
 from models import one_primitive
 from models import two_primitives
+from models import stacking
 import pyro
 import collections
 import os
@@ -116,6 +117,16 @@ def init(run_args, device):
 
         # Guide
         guide = two_primitives.Guide().to(device)
+    elif run_args.model_type == "stacking":
+        # Generative model
+        generative_model = stacking.GenerativeModel(
+            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+        ).to(device)
+
+        # Guide
+        guide = stacking.Guide(
+            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+        ).to(device)
 
     # Model tuple
     model = (generative_model, guide)

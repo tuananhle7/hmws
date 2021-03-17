@@ -347,7 +347,7 @@ def soft_render_square_batched(
     if square_color.ndim == 1:
         square_color_expanded = square_color[None, :, None, None]
     else:
-        square_color_expanded = square_color.view(-1, 3)[:, :, None, None]
+        square_color_expanded = square_color.reshape(-1, 3)[:, :, None, None]
 
     return (
         square_weight_flattened[:, None] * square_color_expanded
@@ -430,7 +430,7 @@ def soft_render_batched(
         raw_color_sharpness []
         raw_blur []
 
-    Returns [num_channels, num_rows, num_cols]
+    Returns [*shape, num_channels, num_rows, num_cols]
     """
     # Extract
     device = primitives[0].device
@@ -455,6 +455,61 @@ def soft_render_batched(
             color_sharpness=get_color_sharpness(raw_color_sharpness),
             blur=get_blur(raw_blur),
         )
+
+    return canvas
+
+
+def soft_render_variable_num_blocks(
+    primitives,
+    num_blocks,
+    stacking_program,
+    raw_locations,
+    raw_color_sharpness,
+    raw_blur,
+    num_channels=3,
+    num_rows=64,
+    num_cols=64,
+):
+    """
+    Args
+        primitives (list [num_primitives])
+        num_blocks [*shape]
+        stacking_program (tensor [*shape, max_num_blocks])
+        raw_locations (tensor [*shape, max_num_blocks])
+        raw_color_sharpness []
+        raw_blur []
+
+    Returns [*shape, num_channels, num_rows, num_cols]
+    """
+    # Extract
+    device = primitives[0].device
+    shape = stacking_program.shape[:-1]
+    max_num_blocks = stacking_program.shape[-1]
+
+    # [num_primitives]
+    square_size = torch.stack([primitive.size for primitive in primitives])
+    # [num_primitives, 3]
+    square_color = torch.stack([primitive.color for primitive in primitives])
+
+    # Convert [*shape, max_num_blocks, 2]
+    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
+
+    # Render
+    canvas = init_canvas(device, num_channels, num_rows, num_cols, shape)
+    for block_id in range(max_num_blocks):
+        # Determine whether this block is drawn
+        # [*shape, 1, 1, 1]
+        is_drawn = (block_id < num_blocks).float()[..., None, None, None]
+
+        # Draw the block
+        canvas = soft_render_square_batched(
+            square_size[stacking_program[..., block_id]],
+            square_color[stacking_program[..., block_id]],
+            locations[..., block_id, :],
+            canvas,
+            color_sharpness=get_color_sharpness(raw_color_sharpness),
+            blur=get_blur(raw_blur),
+        ) * is_drawn + canvas * (1 - is_drawn)
 
     return canvas
 
@@ -500,13 +555,13 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
     """
     # Extract
     shape = raw_locations.shape[:-1]
-    num_samples = int(torch.tensor(shape).prod().long().item())
+    num_samples = util.get_num_elements(shape)
     num_blocks = raw_locations.shape[-1]
 
     # Flatten
     # [num_samples, num_blocks]
     raw_locations_flattened = raw_locations.view(num_samples, num_blocks)
-    stacking_program_flattened = stacking_program.view(num_samples, num_blocks)
+    stacking_program_flattened = stacking_program.reshape(num_samples, num_blocks)
 
     locations_batched = []
     for sample_id in range(num_samples):

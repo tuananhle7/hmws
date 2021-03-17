@@ -223,6 +223,21 @@ def plot_primitives_two_primitives(path, generative_model):
     plot_primitives_stacking_pyro(path, generative_model)
 
 
+def plot_reconstructions_stacking(path, generative_model, guide, obs):
+    """
+    Args:
+        path (str)
+        generative_model
+        guide
+        obs: [num_test_obs, num_channels, im_size, im_size]
+    """
+    plot_reconstructions_one_primitive(path, generative_model, guide, obs)
+
+
+def plot_primitives_stacking(path, generative_model):
+    plot_primitives_stacking_pyro(path, generative_model)
+
+
 def main(args):
     # Cuda
     device = util.get_device()
@@ -262,6 +277,10 @@ def main(args):
                 obs = stacking_pyro.generate_from_true_generative_model(
                     num_test_obs, num_primitives=2, device=device, fixed_num_blocks=True
                 )
+            elif run_args.model_type == "stacking":
+                obs = stacking_pyro.generate_from_true_generative_model(
+                    num_test_obs, num_primitives=run_args.num_primitives, device=device
+                )
 
             # Plot
             if run_args.model_type == "stacking_pyro":
@@ -290,6 +309,17 @@ def main(args):
                     obs,
                 )
                 plot_primitives_two_primitives(
+                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
+                    generative_model,
+                )
+            elif run_args.model_type == "stacking":
+                plot_reconstructions_stacking(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                )
+                plot_primitives_stacking(
                     f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
                     generative_model,
                 )
