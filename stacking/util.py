@@ -222,3 +222,66 @@ class JointDistribution:
 
     def log_prob(self, values):
         return sum([dist.log_prob(value) for dist, value in zip(self.dists, values)])
+
+
+def get_num_elements(shape):
+    return int(torch.tensor(shape).prod().long().item())
+
+
+def pad_tensor(x, length, value):
+    """Pads a tensor with a prespecified value
+
+    Args
+        x [*shape, max_length]
+        length [*shape]
+        value []
+
+    Returns [*shape, max_length]
+    """
+    # Extract
+    shape = length.shape
+    max_length = x.shape[-1]
+    device = x.device
+    num_elements = get_num_elements(shape)
+
+    # Index tensor [*shape, max_length]
+    # [0, 1, 2, 3, 4, 5, 6, 7]
+    index = (
+        torch.arange(max_length, device=device)[None]
+        .expand(num_elements, max_length)
+        .view(*[*shape, max_length])
+    )
+
+    # Compute mask
+    # --length       2
+    # --index [0, 1, 2, 3, 4, 5, 6, 7]
+    # --mask  [0, 0, 1, 1, 1, 1, 1, 1]
+    mask = index >= length.unsqueeze(-1)
+
+    # Compute result
+    result = x.clone()
+    result[mask] = value
+
+    return result
+
+
+class CategoricalPlusOne(torch.distributions.Categorical):
+    # TODO: override other attributes
+    def __init__(self, probs=None, logits=None, validate_args=None):
+        super().__init__(probs=probs, logits=logits, validate_args=validate_args)
+
+    def sample(self, sample_shape=torch.Size()):
+        return super().sample(sample_shape=sample_shape) + 1
+
+    def log_prob(self, value):
+        return super().log_prob(value - 1)
+
+
+if __name__ == "__main__":
+    # Test pad_tensor
+    x = torch.rand(4)
+    length = torch.randint(0, 4, ())
+    value = -1
+    print(f"x = {x}")
+    print(f"length = {length}")
+    print(f"pad_tensor(x, length, value) = {pad_tensor(x, length, value)}")
