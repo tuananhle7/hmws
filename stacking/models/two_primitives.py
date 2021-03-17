@@ -75,8 +75,8 @@ class GenerativeModel(nn.Module):
             self.primitives,
             stacking_program,
             raw_locations,
-            render.get_color_sharpness(self.raw_color_sharpness),
-            render.get_blur(self.raw_blur),
+            self.raw_color_sharpness,
+            self.raw_blur,
         )
 
     def get_obs_loc_hard(self, latent):
