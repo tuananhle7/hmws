@@ -63,7 +63,7 @@ class GenerativeModel(nn.Module):
         num_blocks_log_prob = self.num_blocks_dist.log_prob(num_blocks)
 
         # Log prob of stacking_program
-        logits = torch.ones((self.max_num_blocks,), device=self.device)
+        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
         stacking_program_log_prob = util.pad_tensor(
             torch.distributions.Categorical(logits=logits).log_prob(stacking_program), num_blocks, 0
         ).sum(-1)
@@ -78,6 +78,34 @@ class GenerativeModel(nn.Module):
         ).sum(-1)
 
         return num_blocks_log_prob + stacking_program_log_prob + raw_locations_log_prob
+
+    def latent_sample(self, sample_shape=[]):
+        """Sample from p(z)
+
+        Args
+            sample_shape
+
+        Returns
+            latent:
+                num_blocks [*sample_shape]
+                stacking_program [*sample_shape, max_num_blocks]
+                raw_locations [*sample_shape, max_num_blocks]
+        """
+        # Sample num_blocks
+        num_blocks = self.num_blocks_dist.sample(sample_shape)
+
+        # Sample stacking_program
+        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
+        stacking_program = torch.distributions.Categorical(logits=logits).sample(sample_shape)
+
+        # Sample raw_locations
+        # --Compute dist params
+        loc = torch.zeros(self.max_num_blocks, device=self.device)
+        scale = torch.ones(self.max_num_blocks, device=self.device)
+        # --Compute log prob [*shape]
+        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+
+        return num_blocks, stacking_program, raw_locations
 
     def get_obs_loc(self, latent):
         """Location parameter of p(x | z)
@@ -155,6 +183,27 @@ class GenerativeModel(nn.Module):
         ).log_prob(obs)
 
         return latent_log_prob + obs_log_prob
+
+    def sample(self, sample_shape=[]):
+        """Sample from p(z, x)
+
+        Args
+            sample_shape
+
+        Returns
+            latent:
+                num_blocks [*sample_shape]
+                stacking_program [*sample_shape, max_num_blocks]
+                raw_locations [*sample_shape, max_num_blocks]
+            obs [*sample_shape, num_channels, num_rows, num_cols]
+        """
+        # p(z)
+        latent = self.latent_sample(sample_shape)
+
+        # p(x | z)
+        obs = self.get_obs_loc_hard(latent)
+
+        return latent, obs
 
 
 class Guide(nn.Module):
