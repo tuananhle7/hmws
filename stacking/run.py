@@ -39,7 +39,7 @@ def get_args_parser():
     parser.add_argument(
         "--model-type",
         default="stacking",
-        choices=["stacking", "one_primitive", "two_primitives", "stacking"],
+        choices=["stacking", "one_primitive", "two_primitives", "stacking_pyro"],
         help=" ",
     )
 
