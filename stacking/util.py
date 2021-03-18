@@ -141,7 +141,7 @@ def init(run_args, device):
         optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
-    stats = Stats([])
+    stats = Stats([], [])
 
     return model, optimizer, stats
 
@@ -190,7 +190,7 @@ def load_checkpoint(path, device, num_tries=3):
     return model, optimizer, stats, run_args
 
 
-Stats = collections.namedtuple("Stats", ["losses"])
+Stats = collections.namedtuple("Stats", ["losses", "sleep_pretraining_losses"])
 
 
 def init_cnn(output_dim, hidden_dim=128):

@@ -8,8 +8,18 @@ import render
 
 
 def plot_stats(path, stats):
-    fig, ax_losses = plt.subplots(1, 1)
+    if len(stats.sleep_pretraining_losses) > 0:
+        fig, (ax_sleep_pretraining_losses, ax_losses) = plt.subplots(1, 2, figsize=(12, 4))
 
+        # Sleep pretraining Loss
+        ax_sleep_pretraining_losses.plot(stats.sleep_pretraining_losses)
+        ax_sleep_pretraining_losses.set_xlabel("Iteration")
+        ax_sleep_pretraining_losses.set_ylabel("Sleep Pretraining Loss")
+        sns.despine(ax=ax_sleep_pretraining_losses, trim=True)
+    else:
+        fig, ax_losses = plt.subplots(1, 1)
+
+    # Loss
     ax_losses.plot(stats.losses)
     ax_losses.set_xlabel("Iteration")
     ax_losses.set_ylabel("Loss")

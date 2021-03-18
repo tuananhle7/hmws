@@ -8,6 +8,7 @@ import losses
 def train(model, optimizer, stats, args):
     checkpoint_path = util.get_checkpoint_path(args)
     num_iterations_so_far = len(stats.losses)
+    num_sleep_pretraining_iterations_so_far = len(stats.sleep_pretraining_losses)
 
     generative_model, guide = model
 
@@ -26,6 +27,48 @@ def train(model, optimizer, stats, args):
         )
         util.logging.info(f"Using pyro version {pyro.__version__}")
 
+    # Sleep pretraining
+    for iteration in range(
+        num_sleep_pretraining_iterations_so_far, args.num_sleep_pretraining_iterations
+    ):
+        if "_pyro" in args.model_type:
+            raise NotImplementedError
+        else:
+            # Zero grad
+            optimizer.zero_grad()
+
+            # Evaluate loss
+            loss = losses.get_sleep_loss(
+                generative_model, guide, args.num_particles * args.batch_size
+            ).mean()
+
+            # Compute gradient
+            loss.backward()
+
+            # Step gradient
+            optimizer.step()
+
+            # Record stats
+            stats.sleep_pretraining_losses.append(loss.item())
+
+        # Log
+        if iteration % args.log_interval == 0:
+            util.logging.info(
+                f"Sleep Pretraining Iteration {iteration} | "
+                f"Loss = {stats.sleep_pretraining_losses[-1]:.0f}"
+            )
+
+        # Make a model tuple
+        model = generative_model, guide
+
+        # Save checkpoint
+        if (
+            iteration % args.save_interval == 0
+            or iteration == args.num_sleep_pretraining_iterations - 1
+        ):
+            util.save_checkpoint(checkpoint_path, model, optimizer, stats, run_args=args)
+
+    # Normal training
     for iteration in range(num_iterations_so_far, args.num_iterations):
         if "_pyro" in args.model_type:
             # Generate data
