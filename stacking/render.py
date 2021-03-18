@@ -389,7 +389,7 @@ def render_square_batched(
     canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
     # --Flatten
     # [1, num_points]
-    x, y = [tmp.view(-1)[None] for tmp in [canvas_x, canvas_y]]
+    x, y = [tmp.reshape(-1)[None] for tmp in [canvas_x, canvas_y]]
 
     # Compute boundaries
     # --Compute
