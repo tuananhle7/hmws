@@ -167,8 +167,3 @@ def train(model, optimizer, stats, args):
                 stats,
                 run_args=args,
             )
-
-        # End training based on `iteration`
-        iteration += 1
-        if iteration == args.num_iterations:
-            break
