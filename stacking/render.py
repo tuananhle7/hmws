@@ -355,6 +355,86 @@ def soft_render_square_batched(
     ).view(*[*shape, num_channels, num_rows, num_cols])
 
 
+def render_square_batched(
+    square_size, square_color, location, background,
+):
+    """Draws a square on a canvas whose xy limits are [-1, 1].
+
+    Follows equations (2) and (3) in
+    https://openaccess.thecvf.com/content_ICCV_2019/papers/Liu_Soft_Rasterizer_A_Differentiable_Renderer_for_Image-Based_3D_Reasoning_ICCV_2019_paper.pdf
+
+    Args
+        square_size [*shape] or []
+        square_color [*shape, 3] or [3]
+        location [*shape, 2]
+        background [num_channels, num_rows, num_cols] or [*shape, num_channels, num_rows, num_cols]
+            this is the background color C_b in equation (2)
+        background_weight [] (default 1.): ϵ in equation (3)
+        color_sharpness [] (default 1e-4): γ in equation (3)
+        blur [] (default 1e-4): this is the σ in equation (1)
+
+    Returns
+        new_canvas [*shape, num_channels, num_rows, num_cols]
+    """
+    # Extract
+    shape = location.shape[:-1]
+    device = location.device
+    num_elements = int(torch.tensor(shape).prod().long().item())
+    num_channels, num_rows, num_cols = background.shape[-3:]
+    num_points = num_rows * num_cols
+
+    # Canvas xy
+    # --Compute
+    # [num_rows, num_cols]
+    canvas_x, canvas_y = get_canvas_xy(num_rows, num_cols, device)
+    # --Flatten
+    # [1, num_points]
+    x, y = [tmp.view(-1)[None] for tmp in [canvas_x, canvas_y]]
+
+    # Compute boundaries
+    # --Compute
+    # [*shape]
+    min_x, min_y = location[..., 0], location[..., 1]
+    max_x = min_x + square_size
+    max_y = min_y + square_size
+    # --Flatten
+    # [num_elements, 1]
+    min_x, min_y, max_x, max_y = [tmp.view(-1)[:, None] for tmp in [min_x, min_y, max_x, max_y]]
+
+    # Draw on canvas
+    # --Expand background
+    if background.ndim > 3:
+        canvas = background.clone().view(num_elements, num_channels, num_points)
+        assert background.shape[:-3] == shape
+    else:
+        canvas = (
+            background.clone()
+            .view(1, num_channels, num_points)
+            .expand(num_elements, num_channels, num_points)
+        )
+
+    # --Expand square_color
+    if square_color.ndim == 1:
+        square_color_expanded = square_color[None, :, None].expand(
+            num_elements, num_channels, num_points
+        )
+    else:
+        square_color_expanded = square_color.view(-1, 3, 1).expand(
+            num_elements, num_channels, num_points
+        )
+
+    # --Compute a mask that indicates whether a point is inside a square
+    # [num_elements, num_channels, num_points]
+    inside_square = ((x >= min_x) & (x <= max_x) & (y >= min_y) & (y <= max_y))[:, None, :].expand(
+        num_elements, num_channels, num_points
+    )
+
+    # --Draw inside the square
+    canvas[inside_square] = square_color_expanded[inside_square]
+
+    return canvas.view(*[*shape, num_channels, num_rows, num_cols])
+
+
 def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows=64, num_cols=64):
     # Init
     device = primitives[0].device
@@ -367,6 +447,57 @@ def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows
     for primitive_id, location in zip(stacking_program, locations):
         primitive = primitives[primitive_id]
         canvas = render_square(primitive, location, canvas)
+
+    return canvas
+
+
+def render_batched(
+    primitives,
+    num_blocks,
+    stacking_program,
+    raw_locations,
+    raw_color_sharpness,
+    raw_blur,
+    num_channels=3,
+    num_rows=64,
+    num_cols=64,
+):
+    """
+    Args
+        primitives (list [num_primitives])
+        num_blocks [*shape]
+        stacking_program (tensor [*shape, max_num_blocks])
+        raw_locations (tensor [*shape, max_num_blocks])
+
+    Returns [*shape, num_channels, num_rows, num_cols]
+    """
+    # Extract
+    device = primitives[0].device
+    shape = stacking_program.shape[:-1]
+    max_num_blocks = stacking_program.shape[-1]
+
+    # [num_primitives]
+    square_size = torch.stack([primitive.size for primitive in primitives])
+    # [num_primitives, 3]
+    square_color = torch.stack([primitive.color for primitive in primitives])
+
+    # Convert [*shape, max_num_blocks, 2]
+    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
+
+    # Render
+    canvas = init_canvas(device, num_channels, num_rows, num_cols, shape)
+    for block_id in range(max_num_blocks):
+        # Determine whether this block is drawn
+        # [*shape, 1, 1, 1]
+        is_drawn = (block_id < num_blocks).float()[..., None, None, None]
+
+        # Draw the block
+        canvas = render_square_batched(
+            square_size[stacking_program[..., block_id]],
+            square_color[stacking_program[..., block_id]],
+            locations[..., block_id, :],
+            canvas,
+        ) * is_drawn + canvas * (1 - is_drawn)
 
     return canvas
 
