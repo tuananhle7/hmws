@@ -279,7 +279,7 @@ def main(args):
                 )
             elif run_args.model_type == "stacking":
                 obs = stacking_pyro.generate_from_true_generative_model(
-                    num_test_obs, num_primitives=run_args.num_primitives, device=device
+                    num_test_obs, num_primitives=3, device=device
                 )
 
             # Plot
