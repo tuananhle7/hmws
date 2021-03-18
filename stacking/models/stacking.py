@@ -126,8 +126,8 @@ class GenerativeModel(nn.Module):
             loc.append(
                 render.render(
                     self.primitives,
-                    stacking_program.view(-1, 2)[element_id][:num_blocks_single],
-                    raw_locations.view(-1, 2)[element_id][:num_blocks_single],
+                    stacking_program.view(-1, self.max_num_blocks)[element_id][:num_blocks_single],
+                    raw_locations.view(-1, self.max_num_blocks)[element_id][:num_blocks_single],
                 )
             )
         return torch.stack(loc).view(*[*shape, self.num_channels, self.num_rows, self.num_cols])
