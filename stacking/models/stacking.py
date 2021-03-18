@@ -144,21 +144,16 @@ class GenerativeModel(nn.Module):
         """
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
-        shape = num_blocks.shape
-        num_elements = util.get_num_elements(shape)
 
         # Compute stuff
-        loc = []
-        for element_id in range(num_elements):
-            num_blocks_single = num_blocks.view(-1)[element_id]
-            loc.append(
-                render.render(
-                    self.primitives,
-                    stacking_program.view(-1, self.max_num_blocks)[element_id][:num_blocks_single],
-                    raw_locations.view(-1, self.max_num_blocks)[element_id][:num_blocks_single],
-                )
-            )
-        return torch.stack(loc).view(*[*shape, self.num_channels, self.num_rows, self.num_cols])
+        return render.render_batched(
+            self.primitives,
+            num_blocks,
+            stacking_program,
+            raw_locations,
+            self.raw_color_sharpness,
+            self.raw_blur,
+        )
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
