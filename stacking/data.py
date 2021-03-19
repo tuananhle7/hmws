@@ -1,7 +1,9 @@
 from models import stacking_pyro
 import util
+import torch
 
 
+@torch.no_grad()
 def generate_obs(run_args, num_obs, device, seed=None):
     if seed is not None:
         # Fix seed
@@ -27,5 +29,6 @@ def generate_obs(run_args, num_obs, device, seed=None):
     return obs
 
 
+@torch.no_grad()
 def generate_test_obs(run_args, device):
     return generate_obs(run_args, 10, device, seed=1)
