@@ -456,8 +456,6 @@ def render_batched(
     num_blocks,
     stacking_program,
     raw_locations,
-    raw_color_sharpness,
-    raw_blur,
     num_channels=3,
     num_rows=64,
     num_cols=64,

@@ -146,14 +146,7 @@ class GenerativeModel(nn.Module):
         num_blocks, stacking_program, raw_locations = latent
 
         # Compute stuff
-        return render.render_batched(
-            self.primitives,
-            num_blocks,
-            stacking_program,
-            raw_locations,
-            self.raw_color_sharpness,
-            self.raw_blur,
-        )
+        return render.render_batched(self.primitives, num_blocks, stacking_program, raw_locations,)
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
