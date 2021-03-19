@@ -12,9 +12,6 @@ def train(model, optimizer, stats, args):
     generative_model, guide = model
     device = generative_model.device
 
-    # Generate test data
-    test_obs = data.generate_test_obs(args, device)
-
     # Initialize optimizer for pyro models
     if "_pyro" in args.model_type:
         svi = pyro.infer.SVI(
@@ -71,6 +68,11 @@ def train(model, optimizer, stats, args):
             or iteration == args.num_sleep_pretraining_iterations - 1
         ):
             util.save_checkpoint(checkpoint_path, model, optimizer, stats, run_args=args)
+
+    # Generate test data
+    # NOTE: super weird but when this is put before sleep pretraining, sleep pretraining doesn't
+    # work
+    test_obs = data.generate_test_obs(args, device)
 
     # Normal training
     for iteration in range(num_iterations_so_far, args.num_iterations):
