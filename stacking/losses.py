@@ -47,7 +47,7 @@ def get_iwae_loss(generative_model, guide, obs, num_particles):
     """
     # Sample from guide
     # [num_particles, batch_size, ...]
-    latent = guide.sample(obs, (num_particles,))
+    latent = guide.rsample(obs, (num_particles,))
 
     # Expand obs to [num_particles, batch_size, *obs_dims]
     batch_size = obs.shape[0]
@@ -63,19 +63,12 @@ def get_iwae_loss(generative_model, guide, obs, num_particles):
     # Compute log weight
     # [num_particles, batch_size]
     log_weight = generative_model_log_prob - guide_log_prob
-    # [num_particles, batch_size]
-    normalized_weight = torch.softmax(log_weight, dim=0).detach()
 
-    # Compute losses
+    # Estimate log marginal likelihood
     # [batch_size]
-    generative_model_loss = -torch.sum(normalized_weight * generative_model_log_prob, dim=0)
+    log_p = torch.logsumexp(log_weight, dim=0) - math.log(num_particles)
 
-    loss = generative_model_loss
-
-    if torch.isnan(loss).any():
-        raise RuntimeError("nan")
-
-    return loss
+    return log_p
 
 
 def get_rws_loss(generative_model, guide, obs, num_particles):
