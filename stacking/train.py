@@ -110,7 +110,9 @@ def train(model, optimizer, stats, args):
 
             # Evaluate loss
             if args.algorithm == "rws":
-                loss = losses.get_rws_loss(generative_model, guide, obs, args.num_particles).mean()
+                loss = losses.get_rws_loss(
+                    generative_model, guide, obs, args.num_particles, insomnia=args.insomnia
+                ).mean()
             elif "elbo" in args.algorithm:
                 loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
             # elif "iwae" in args.algorithm:
