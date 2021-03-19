@@ -115,15 +115,10 @@ def train(model, optimizer, stats, args):
                 ).mean()
             elif "elbo" in args.algorithm:
                 loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
-            # elif "iwae" in args.algorithm:
-            #     loss = losses.get_iwae_loss(
-            #         generative_model, guide, obs, args.num_particles
-            #     ).mean()
-
-            # if "sleep" in args.algorithm:
-            #     loss += losses.get_sleep_loss(
-            #         generative_model, guide, args.batch_size * args.num_particles
-            #     ).mean()
+            elif args.algorithm == "vimco":
+                loss = losses.get_vimco_loss(
+                    generative_model, guide, obs, args.num_particles
+                ).mean()
 
             # Compute gradient
             loss.backward()
