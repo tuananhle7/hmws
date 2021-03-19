@@ -1,5 +1,5 @@
 import util
-from models import stacking_pyro
+import data
 import os
 import matplotlib.pyplot as plt
 import torch
@@ -273,24 +273,8 @@ def main(args):
             plot_stats(f"{util.get_save_dir(run_args)}/stats.png", stats)
 
             # Plot reconstructions and other things
-            num_test_obs = 10
             # Test data
-            if run_args.model_type == "stacking_pyro":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    num_test_obs, num_primitives=run_args.data_num_primitives, device=device
-                )
-            elif run_args.model_type == "one_primitive":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    num_test_obs, num_primitives=1, device=device
-                )
-            elif run_args.model_type == "two_primitives":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    num_test_obs, num_primitives=2, device=device, fixed_num_blocks=True
-                )
-            elif run_args.model_type == "stacking":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    num_test_obs, num_primitives=3, device=device
-                )
+            obs = data.generate_test_obs(run_args, device)
 
             # Plot
             if run_args.model_type == "stacking_pyro":

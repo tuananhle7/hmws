@@ -1,16 +1,19 @@
 import util
-from models import stacking_pyro
 import pyro
 import torch
 import losses
+import data
 
 
 def train(model, optimizer, stats, args):
     checkpoint_path = util.get_checkpoint_path(args)
     num_iterations_so_far = len(stats.losses)
     num_sleep_pretraining_iterations_so_far = len(stats.sleep_pretraining_losses)
-
     generative_model, guide = model
+    device = generative_model.device
+
+    # Generate test data
+    test_obs = data.generate_test_obs(args, device)
 
     # Initialize optimizer for pyro models
     if "_pyro" in args.model_type:
@@ -70,14 +73,10 @@ def train(model, optimizer, stats, args):
 
     # Normal training
     for iteration in range(num_iterations_so_far, args.num_iterations):
-        if "_pyro" in args.model_type:
-            # Generate data
-            obs = stacking_pyro.generate_from_true_generative_model(
-                args.batch_size,
-                num_primitives=args.data_num_primitives,
-                device=generative_model.device,
-            )
+        # Generate data
+        obs = data.generate_obs(args, args.batch_size, device)
 
+        if "_pyro" in args.model_type:
             # Step gradient
             loss = svi.step(obs)
 
@@ -88,23 +87,6 @@ def train(model, optimizer, stats, args):
             # Record stats
             stats.losses.append(loss)
         else:
-            # Generate data
-            if args.model_type == "one_primitive":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    args.batch_size, num_primitives=1, device=generative_model.device,
-                )
-            elif args.model_type == "two_primitives":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    args.batch_size,
-                    num_primitives=2,
-                    device=generative_model.device,
-                    fixed_num_blocks=True,
-                )
-            elif args.model_type == "stacking":
-                obs = stacking_pyro.generate_from_true_generative_model(
-                    args.batch_size, num_primitives=3, device=generative_model.device,
-                )
-
             # Zero grad
             optimizer.zero_grad()
 
