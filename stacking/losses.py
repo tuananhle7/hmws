@@ -71,13 +71,15 @@ def get_iwae_loss(generative_model, guide, obs, num_particles):
     return log_p
 
 
-def get_rws_loss(generative_model, guide, obs, num_particles):
+def get_rws_loss(generative_model, guide, obs, num_particles, insomnia=1.0):
     """
     Args:
         generative_model
         guide
         obs [batch_size, *obs_dims]
         num_particles
+        insomnia (float) 1.0 means Wake-Wake, 0.0 means Wake-Sleep,
+            otherwise it's inbetween
 
     Returns: [batch_size]
     """
@@ -102,13 +104,37 @@ def get_rws_loss(generative_model, guide, obs, num_particles):
     # [num_particles, batch_size]
     normalized_weight = torch.softmax(log_weight, dim=0).detach()
 
-    # Compute losses
+    # Compute loss
+    # --Compute generative model loss
     # [batch_size]
     generative_model_loss = -torch.sum(normalized_weight * generative_model_log_prob, dim=0)
-    guide_loss = -torch.sum(normalized_weight * guide_log_prob, dim=0)
 
+    # --Compute guide loss
+    # ----Compute guide wake loss
+    if insomnia < 1.0:
+        # [batch_size]
+        guide_loss_sleep = (
+            get_sleep_loss(generative_model, guide, num_particles * batch_size)
+            .view(batch_size, num_particles)
+            .mean(-1)
+        )
+    # ----Compute guide wake loss
+    if insomnia > 0.0:
+        # [batch_size]
+        guide_loss_wake = -torch.sum(normalized_weight * guide_log_prob, dim=0)
+
+    # ----Combine guide sleep and wake losses
+    if insomnia == 0.0:
+        guide_loss = guide_loss_sleep
+    elif insomnia == 1.0:
+        guide_loss = guide_loss_wake
+    else:
+        guide_loss = insomnia * guide_loss_wake + (1 - insomnia) * guide_loss_sleep
+
+    # --Compute loss
     loss = generative_model_loss + guide_loss
 
+    # Check nan
     if torch.isnan(loss).any():
         raise RuntimeError("nan")
 
