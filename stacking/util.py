@@ -141,7 +141,7 @@ def init(run_args, device):
         optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
-    stats = Stats([], [])
+    stats = Stats([], [], [], [])
 
     return model, optimizer, stats
 
@@ -190,7 +190,7 @@ def load_checkpoint(path, device, num_tries=3):
     return model, optimizer, stats, run_args
 
 
-Stats = collections.namedtuple("Stats", ["losses", "sleep_pretraining_losses"])
+Stats = collections.namedtuple("Stats", ["losses", "sleep_pretraining_losses", "log_ps", "kls"])
 
 
 def init_cnn(output_dim, hidden_dim=128):
@@ -307,6 +307,10 @@ def cancel_all_my_non_bash_jobs():
         logging.info(subprocess.check_output(cmd, shell=True).decode())
     else:
         logging.info("No non-bash jobs to cancel.")
+
+
+def get_max_gpu_memory_allocated_MB(device):
+    return torch.cuda.max_memory_allocated(device=device) / 1e6 if device.type == "cuda" else 0
 
 
 if __name__ == "__main__":

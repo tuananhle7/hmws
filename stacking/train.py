@@ -58,7 +58,8 @@ def train(model, optimizer, stats, args):
         if iteration % args.log_interval == 0:
             util.logging.info(
                 f"Sleep Pretraining Iteration {iteration} | "
-                f"Loss = {stats.sleep_pretraining_losses[-1]:.0f}"
+                f"Loss = {stats.sleep_pretraining_losses[-1]:.0f} | "
+                f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
             )
 
         # Make a model tuple
@@ -125,9 +126,22 @@ def train(model, optimizer, stats, args):
 
                 pdb.set_trace()
 
+        # Test
+        if iteration % args.test_interval == 0 or iteration == args.num_iterations - 1:
+            util.logging.info("Computing logp and KL")
+            log_p, kl = losses.get_log_p_and_kl(
+                generative_model, guide, test_obs, args.test_num_particles
+            )
+            stats.log_ps.append([iteration, log_p.mean().item()])
+            stats.kls.append([iteration, kl.mean().item()])
+
         # Log
         if iteration % args.log_interval == 0:
-            util.logging.info(f"Iteration {iteration} | Loss = {stats.losses[-1]:.0f}")
+            util.logging.info(
+                f"Iteration {iteration} | Loss = {stats.losses[-1]:.0f} | "
+                f"Log p = {stats.log_ps[-1][1]:.0f} | KL = {stats.kls[-1][1]:.0f} | "
+                f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
+            )
 
         # Make a model tuple
         model = generative_model, guide
