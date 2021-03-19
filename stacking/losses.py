@@ -173,3 +173,49 @@ def get_vimco_loss(generative_model, guide, obs, num_particles):
     )
 
     return loss
+
+
+@torch.no_grad()
+def get_log_p_and_kl(generative_model, guide, obs, num_particles):
+    """Estimates log marginal likelihood and KL using importance sampling
+
+    Args:
+        generative_model
+        guide
+        obs [batch_size, *obs_dims]
+        num_particles
+
+    Returns: [batch_size]
+    """
+    # Sample from guide
+    # [num_particles, batch_size, ...]
+    latent = guide.sample(obs, (num_particles,))
+
+    # Expand obs to [num_particles, batch_size, *obs_dims]
+    batch_size = obs.shape[0]
+    obs_dims = obs.shape[1:]
+    obs_expanded = obs[None].expand(*[num_particles, batch_size, *obs_dims])
+
+    # Evaluate log probs
+    # [num_particles, batch_size]
+    guide_log_prob = guide.log_prob(obs_expanded, latent)
+    # [num_particles, batch_size]
+    generative_model_log_prob = generative_model.log_prob(latent, obs_expanded)
+
+    # Compute log weight
+    # [num_particles, batch_size]
+    log_weight = generative_model_log_prob - guide_log_prob
+
+    # Estimate log marginal likelihood
+    # [batch_size]
+    log_p = torch.logsumexp(log_weight, dim=0) - math.log(num_particles)
+
+    # Estimate ELBO
+    # [batch_size]
+    elbo = torch.mean(log_weight, dim=0)
+
+    # Estimate KL
+    # [batch_size]
+    kl = log_p - elbo
+
+    return log_p, kl
