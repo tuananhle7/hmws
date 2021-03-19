@@ -9,21 +9,39 @@ import render
 
 def plot_stats(path, stats):
     if len(stats.sleep_pretraining_losses) > 0:
-        fig, (ax_sleep_pretraining_losses, ax_losses) = plt.subplots(1, 2, figsize=(12, 4))
+        fig, (ax_sleep_pretraining_losses, ax_losses, ax_logp, ax_kl) = plt.subplots(
+            1, 4, figsize=(24, 4)
+        )
 
         # Sleep pretraining Loss
-        ax_sleep_pretraining_losses.plot(stats.sleep_pretraining_losses)
-        ax_sleep_pretraining_losses.set_xlabel("Iteration")
-        ax_sleep_pretraining_losses.set_ylabel("Sleep Pretraining Loss")
-        sns.despine(ax=ax_sleep_pretraining_losses, trim=True)
+        ax = ax_sleep_pretraining_losses
+        ax.plot(stats.sleep_pretraining_losses)
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Sleep Pretraining Loss")
+        sns.despine(ax=ax, trim=True)
     else:
-        fig, ax_losses = plt.subplots(1, 1)
+        fig, (ax_losses, ax_logp, ax_kl) = plt.subplots(1, 3, figsize=(18, 4))
 
     # Loss
-    ax_losses.plot(stats.losses)
-    ax_losses.set_xlabel("Iteration")
-    ax_losses.set_ylabel("Loss")
-    sns.despine(ax=ax_losses, trim=True)
+    ax = ax_losses
+    ax.plot(stats.losses)
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Loss")
+    sns.despine(ax=ax, trim=True)
+
+    # Logp
+    ax = ax_logp
+    ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps])
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Log p")
+    sns.despine(ax=ax, trim=True)
+
+    # KL
+    ax = ax_kl
+    ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls])
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("KL")
+    sns.despine(ax=ax, trim=True)
 
     util.save_fig(fig, path)
 
