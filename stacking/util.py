@@ -38,6 +38,7 @@ def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
 
 
 def make_gif(img_paths, gif_path, fps):
+    Path(gif_path).parent.mkdir(parents=True, exist_ok=True)
     images = []
     for img_path in tqdm(img_paths):
         images.append(imageio.imread(img_path))
