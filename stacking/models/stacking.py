@@ -31,8 +31,8 @@ class GenerativeModel(nn.Module):
         )
 
         # Rendering parameters
-        self.raw_color_sharpness = nn.Parameter(torch.rand(()))
-        self.raw_blur = nn.Parameter(torch.rand(()))
+        self.raw_color_sharpness = nn.Parameter(torch.randn(()))
+        self.raw_blur = nn.Parameter(torch.randn(()))
 
     @property
     def device(self):
