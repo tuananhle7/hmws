@@ -8,7 +8,7 @@ class GenerativeModel(nn.Module):
     """Samples raw position (continuous) and renders image.
     """
 
-    def __init__(self, im_size=64, obs_scale=1.0, obs_dist_type="normal"):
+    def __init__(self, im_size=32, obs_scale=1.0, obs_dist_type="normal"):
         super().__init__()
 
         # Init
@@ -123,7 +123,7 @@ class Guide(nn.Module):
     """CNN going from image to location
     """
 
-    def __init__(self, im_size=64):
+    def __init__(self, im_size=32):
         super().__init__()
 
         # Init

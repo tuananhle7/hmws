@@ -9,7 +9,7 @@ class GenerativeModel(nn.Module):
     """
 
     def __init__(
-        self, num_primitives=3, max_num_blocks=3, im_size=64, obs_scale=1.0, obs_dist_type="normal"
+        self, num_primitives=3, max_num_blocks=3, im_size=32, obs_scale=1.0, obs_dist_type="normal"
     ):
         super().__init__()
 
@@ -198,7 +198,7 @@ class Guide(nn.Module):
     """CNN going from image to order and locations
     """
 
-    def __init__(self, num_primitives=3, max_num_blocks=3, im_size=64):
+    def __init__(self, num_primitives=3, max_num_blocks=3, im_size=32):
         super().__init__()
 
         # Init
@@ -210,7 +210,8 @@ class Guide(nn.Module):
 
         # Obs embedder
         self.obs_embedder = util.init_cnn(16)
-        self.obs_embedding_dim = 400  # determined by running the network forward
+        self.obs_embedding_dim = 16  # determined by running the network forward
+        # self.obs_embedding_dim = 400  # determined by running the network forward
 
         # Mapping from obs embedding to num_blocks params
         self.num_blocks_params_extractor = nn.Linear(self.obs_embedding_dim, self.max_num_blocks)

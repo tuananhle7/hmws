@@ -73,7 +73,7 @@ def sample_raw_locations(stacking_program, address_suffix=""):
 
 
 def generate_from_true_generative_model_single(
-    device, num_primitives, num_channels=3, num_rows=64, num_cols=64, fixed_num_blocks=False
+    device, num_primitives, num_channels=3, num_rows=32, num_cols=32, fixed_num_blocks=False
 ):
     """Generate a synthetic observation
 
@@ -83,13 +83,13 @@ def generate_from_true_generative_model_single(
     # Define params
     primitives = [
         render.Square(
-            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.2, device=device)
+            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.3, device=device)
         ),
         render.Square(
-            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.3, device=device)
+            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.4, device=device)
         ),
         render.Square(
-            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.4, device=device)
+            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.5, device=device)
         ),
     ][:num_primitives]
     # num_primitives = len(primitives)
@@ -113,8 +113,8 @@ def generate_from_true_generative_model(
     num_primitives,
     device,
     num_channels=3,
-    num_rows=64,
-    num_cols=64,
+    num_rows=32,
+    num_cols=32,
     fixed_num_blocks=False,
 ):
     """Generate a batch of synthetic observations
@@ -140,7 +140,7 @@ class GenerativeModel(nn.Module):
     then renders them onto an image.
     """
 
-    def __init__(self, im_size=64, num_primitives=3, obs_scale=1.0, obs_dist_type="normal"):
+    def __init__(self, im_size=32, num_primitives=3, obs_scale=1.0, obs_dist_type="normal"):
         super().__init__()
 
         # Init
@@ -236,7 +236,7 @@ class Guide(nn.Module):
     LSTM output --> distribution params
     """
 
-    def __init__(self, im_size=64, num_primitives=3):
+    def __init__(self, im_size=32, num_primitives=3):
         super().__init__()
 
         # Init

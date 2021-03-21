@@ -162,7 +162,7 @@ def get_canvas_xy(num_rows, num_cols, device):
     return canvas_x, canvas_y
 
 
-def init_canvas(device, num_channels=3, num_rows=64, num_cols=64, shape=[]):
+def init_canvas(device, num_channels=3, num_rows=32, num_cols=32, shape=[]):
     """Return a white canvas of shape [*shape, num_channels, num_rows, num_cols]"""
     return torch.ones(*[*shape, num_channels, num_rows, num_cols], device=device)
 
@@ -435,7 +435,7 @@ def render_square_batched(
     return canvas.view(*[*shape, num_channels, num_rows, num_cols])
 
 
-def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows=64, num_cols=64):
+def render(primitives, stacking_program, raw_locations, num_channels=3, num_rows=32, num_cols=32):
     # Init
     device = primitives[0].device
 
@@ -457,8 +457,8 @@ def render_batched(
     stacking_program,
     raw_locations,
     num_channels=3,
-    num_rows=64,
-    num_cols=64,
+    num_rows=32,
+    num_cols=32,
 ):
     """
     Args
@@ -507,8 +507,8 @@ def soft_render(
     raw_color_sharpness,
     raw_blur,
     num_channels=3,
-    num_rows=64,
-    num_cols=64,
+    num_rows=32,
+    num_cols=32,
 ):
     """
     Args
@@ -548,8 +548,8 @@ def soft_render_batched(
     raw_color_sharpness,
     raw_blur,
     num_channels=3,
-    num_rows=64,
-    num_cols=64,
+    num_rows=32,
+    num_cols=32,
 ):
     """
     Args
@@ -596,8 +596,8 @@ def soft_render_variable_num_blocks(
     raw_color_sharpness,
     raw_blur,
     num_channels=3,
-    num_rows=64,
-    num_cols=64,
+    num_rows=32,
+    num_cols=32,
 ):
     """
     Args
