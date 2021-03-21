@@ -35,7 +35,7 @@ def get_args_parser():
     parser.add_argument("--test-num-particles", default=500, type=int, help=" ")
 
     # Model
-    parser.add_argument("--num-primitives", default=3, type=int, help=" ")
+    parser.add_argument("--num-primitives", default=5, type=int, help=" ")
     parser.add_argument("--max-num-blocks", default=3, type=int, help=" ")
     parser.add_argument(
         "--model-type",
