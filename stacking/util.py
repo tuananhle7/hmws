@@ -64,7 +64,11 @@ def set_seed(seed):
 
 # Paths
 def get_path_base_from_args(args):
-    return f"{args.model_type}_{args.algorithm}"
+    if args.num_sleep_pretraining_iterations > 0:
+        pretraining_suffix = "_pretraining"
+    else:
+        pretraining_suffix = ""
+    return f"{args.insomnia}{pretraining_suffix}"
 
 
 def get_save_job_name_from_args(args):

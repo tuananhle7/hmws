@@ -8,11 +8,16 @@ import run
 
 
 def get_sweep_argss():
-    for num_primitives in [3, 5, 10]:
-        args = run.get_args_parser().parse_args([])
-        args.num_primitives = num_primitives
-        args.continue_training = True
-        yield args
+    for num_sleep_pretraining_iterations in [0, 10000]:
+        for insomnia in [0.0, 0.25, 0.5, 0.75, 1.0]:
+            args = run.get_args_parser().parse_args([])
+            args.model_type = "stacking"
+            args.num_sleep_pretraining_iterations = num_sleep_pretraining_iterations
+            args.insomnia = insomnia
+            args.num_primitives = 5
+            args.max_num_blocks = 3
+            args.continue_training = True
+            yield args
 
 
 def args_to_str(args):
@@ -81,7 +86,8 @@ def main(args):
                 f"--time={time_option} "
                 + "--ntasks=1 "
                 + f"--gres=gpu:1 "
-                + "--constraint=high-capacity "
+                # + "--constraint=high-capacity "
+                + "--constraint=15GB "
                 + f'-J "{job_name}" '
                 + f'-o "{logs_dir}/%j.out" '
                 + f'-e "{logs_dir}/%j.err" '
