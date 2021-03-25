@@ -2,22 +2,71 @@ import pyredner
 import torch
 import util
 import matplotlib.pyplot as plt
-import trimesh
 
 
-def get_transform(translation):
-    """Computes transformation matrix from a translation vector
+# Adapted from https://github.com/mikedh/trimesh/blob/master/trimesh/creation.py#L566
+def create_box(position, size):
+    # Extract
+    device = position.device
 
-    Args [3]
+    # vertices of the cube
+    centered_vertices = (
+        torch.tensor(
+            [0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+            dtype=torch.float,
+            device=device,
+        ).view(-1, 3)
+        - 0.5
+    )
+    translation = position.clone()
+    translation[-1] += size / 2
+    vertices = centered_vertices * size + translation[None]
 
-    Returns [4, 4]
-    """
+    # hardcoded face indices
+    faces = torch.tensor(
+        [
+            1,
+            3,
+            0,
+            4,
+            1,
+            0,
+            0,
+            3,
+            2,
+            2,
+            4,
+            0,
+            1,
+            7,
+            3,
+            5,
+            1,
+            4,
+            5,
+            7,
+            1,
+            3,
+            7,
+            2,
+            6,
+            4,
+            2,
+            2,
+            7,
+            6,
+            6,
+            5,
+            4,
+            7,
+            5,
+            6,
+        ],
+        dtype=torch.int32,
+        device=device,
+    ).view(-1, 3)
 
-    device = translation.device
-    transform = torch.eye(4, device=device)
-    transform[:3, -1] = translation
-
-    return transform
+    return vertices, faces
 
 
 def render_cube(render_seed, size, color, position):
@@ -42,19 +91,10 @@ def render_cube(render_seed, size, color, position):
     materials = [white_material, object_material]
 
     # Shape
-    translation = position.clone()
-    translation[-1] += size / 2
-    transform = get_transform(translation=translation)
-    box = trimesh.creation.box(extents=[size, size, size], transform=transform)
-    box.fix_normals()
-    # box.invert()
-    box_vertices = torch.tensor(box.vertices, device=device, dtype=torch.float32)
-    box_faces = torch.tensor(box.faces, device=device, dtype=torch.int32)
-
+    box_vertices, box_faces = create_box(position, size)
     shape_object = pyredner.Shape(
         vertices=box_vertices, indices=box_faces, uvs=None, normals=None, material_id=1
     )
-
     shape_light_top = pyredner.Shape(
         vertices=torch.tensor(
             [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=device
@@ -94,9 +134,9 @@ def render_cube(render_seed, size, color, position):
 
 def plot(target_img, img, losses, iteration, path):
     fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-    axs[0].imshow(target_img.detach())
+    axs[0].imshow(target_img.cpu().detach())
     axs[0].set_title("Target")
-    axs[1].imshow(img.detach())
+    axs[1].imshow(img.cpu().detach())
     axs[1].set_title(f"Rendered (iter {iteration})")
     axs[2].plot(losses)
     axs[2].set_xlabel("Iteration")
@@ -107,25 +147,40 @@ def plot(target_img, img, losses, iteration, path):
     util.save_fig(fig, path)
 
 
+def get_position(raw_xy_position):
+    position = torch.zeros(3, device=raw_xy_position.device)
+    position[:2] = raw_xy_position.sigmoid() * 0.8 + 0.1
+    return position
+
+
 if __name__ == "__main__":
-    pyredner.set_use_gpu(False)
-    device = "cpu"
-    # pyredner.set_use_gpu(torch.cuda.is_available())
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    # pyredner.set_use_gpu(False)
+    # device = "cpu"
+    pyredner.set_use_gpu(torch.cuda.is_available())
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    true_size = torch.tensor(0.1)
-    true_position = torch.tensor([0.5, 0.8, 0.0])
-    true_color = torch.tensor([1.0, 0, 0])
+    true_size = torch.tensor(0.1, device=device)
+    true_position = torch.tensor([0.5, 0.8, 0.0], device=device)
+    true_color = torch.tensor([1.0, 0, 0], device=device)
     target_img = render_cube(0, true_size, true_color, true_position)
-    raw_color = torch.randn(3, requires_grad=True)
 
-    optimizer = torch.optim.Adam([raw_color], lr=5e-2)
+    raw_size = torch.tensor(-1.0, device=device, requires_grad=True)
+    raw_color = torch.randn(3, device=device, requires_grad=True)
+    raw_xy_position = torch.zeros(2, device=device, requires_grad=True)
+
+    optimizer = torch.optim.Adam([raw_size, raw_xy_position, raw_color], lr=5e-2)
     num_iterations = 100
     losses = []
 
     for i in range(num_iterations):
         optimizer.zero_grad()
-        img = render_cube(i + 1, true_size, torch.softmax(raw_color, 0), true_position)
+        img = render_cube(
+            # i + 1, raw_size.exp(), torch.softmax(raw_color, 0), get_position(raw_xy_position)
+            i + 1,
+            raw_size.exp(),
+            torch.softmax(raw_color, 0),
+            true_position,
+        )
         loss = (img - target_img).pow(2).sum()
         loss.backward()
         optimizer.step()
