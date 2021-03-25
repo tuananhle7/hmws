@@ -120,7 +120,7 @@ if __name__ == "__main__":
     raw_color = torch.randn(3, requires_grad=True)
 
     optimizer = torch.optim.Adam([raw_color], lr=5e-2)
-    num_iterations = 1000
+    num_iterations = 100
     losses = []
 
     for i in range(num_iterations):
