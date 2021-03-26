@@ -147,9 +147,9 @@ def plot(target_img, img, losses, iteration, path):
     util.save_fig(fig, path)
 
 
-def get_position(raw_xy_position):
-    position = torch.zeros(3, device=raw_xy_position.device)
-    position[:2] = raw_xy_position.sigmoid() * 0.8 + 0.1
+def get_position(raw_x_position, true_position):
+    position = true_position.clone().detach()
+    position[0] = raw_x_position.sigmoid() * 0.8 + 0.1
     return position
 
 
@@ -166,20 +166,23 @@ if __name__ == "__main__":
 
     raw_size = torch.tensor(-1.0, device=device, requires_grad=True)
     raw_color = torch.randn(3, device=device, requires_grad=True)
-    raw_xy_position = torch.zeros(2, device=device, requires_grad=True)
+    raw_x_position = torch.zeros((), device=device, requires_grad=True)
 
-    optimizer = torch.optim.Adam([raw_size, raw_xy_position, raw_color], lr=5e-2)
+    optimizer = torch.optim.Adam([raw_size, raw_x_position, raw_color], lr=5e-2)
     num_iterations = 100
     losses = []
 
     for i in range(num_iterations):
         optimizer.zero_grad()
         img = render_cube(
-            # i + 1, raw_size.exp(), torch.softmax(raw_color, 0), get_position(raw_xy_position)
             i + 1,
             raw_size.exp(),
             torch.softmax(raw_color, 0),
-            true_position,
+            get_position(raw_x_position, true_position)
+            # i + 1,
+            # raw_size.exp(),
+            # torch.softmax(raw_color, 0),
+            # true_position,
         )
         loss = (img - target_img).pow(2).sum()
         loss.backward()
