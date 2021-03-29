@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     im_size = 32
     true_size = torch.tensor(0.2, device=device)
-    true_position = torch.tensor([0.0, 0.6, -1.0], device=device)
+    true_position = torch.tensor([0.0, 0.0, -1.0], device=device)
     true_color = torch.tensor([1.0, 0, 0], device=device)
     target_img = render.render_cube(true_size, true_color, true_position, im_size)
 
