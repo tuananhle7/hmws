@@ -59,9 +59,9 @@ def get_args_parser():
         help="only applicable for RWS for pyro models - 1.0 means Wake-Wake, 0.0 means Wake-Sleep,"
         "otherwise it's inbetween",
     )
-    parser.add_argument("--log-interval", default=10, type=int, help=" ")
-    parser.add_argument("--save-interval", default=100, type=int, help=" ")
-    parser.add_argument("--test-interval", default=1000, type=int, help=" ")
+    parser.add_argument("--log-interval", default=1, type=int, help=" ")
+    parser.add_argument("--save-interval", default=10, type=int, help=" ")
+    parser.add_argument("--test-interval", default=100, type=int, help=" ")
     parser.add_argument("--checkpoint-interval", default=10001, type=int, help=" ")
 
     return parser
