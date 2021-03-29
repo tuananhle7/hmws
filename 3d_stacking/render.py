@@ -78,19 +78,36 @@ def get_cube_mesh(position, size):
     return vertices, faces
 
 
-def render_cube(size, color, position, render_seed=None):
+def render_cube(size, color, position, im_size=32, render_seed=None):
     """Renders a cube given cube specs
 
     Args
         size []
         color [3]
         position [3]
+        im_size (int)
         render_seed (int) -- to be passed into the redner renderer
 
-    Returns rgb image [256, 256, 3]
+    Returns rgb image [im_size, im_size, 3]
+    """
+    return render_cubes(size[None], color[None], position[None], im_size, render_seed)
+
+
+def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
+    """Renders cubes given cube specs
+
+    Args
+        sizes [num_cubes]
+        colors [num_cubes, 3]
+        positions [num_cubes, 3]
+        im_size (int)
+        render_seed (int) -- to be passed into the redner renderer
+
+    Returns rgb image [im_size, im_size, 3]
     """
     # Extract
-    device = size.device
+    device = sizes.device
+    num_objects = len(sizes)
     if render_seed is None:
         render_seed = random.randrange(1000000)
 
@@ -101,22 +118,30 @@ def render_cube(size, color, position, render_seed=None):
         up=torch.tensor([0.0, 1.0, 0.0]),
         fov=torch.tensor([45.0]),  # in degree
         clip_near=1e-2,  # needs to > 0
-        resolution=(256, 256),
+        resolution=(im_size, im_size),
         fisheye=False,
     )
 
     # Material
-    object_material = pyredner.Material(diffuse_reflectance=color)
+    object_materials = [pyredner.Material(diffuse_reflectance=color) for color in colors]
     white_material = pyredner.Material(
         diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0], device=device)
     )
-    materials = [white_material, object_material]
+    materials = [white_material] + object_materials
 
     # Shape
-    box_vertices, box_faces = get_cube_mesh(position, size)
-    shape_object = pyredner.Shape(
-        vertices=box_vertices, indices=box_faces, uvs=None, normals=None, material_id=1
-    )
+    shape_objects = []
+    for i, (position, size) in enumerate(zip(positions, sizes)):
+        cube_vertices, cube_faces = get_cube_mesh(position, size)
+        shape_objects.append(
+            pyredner.Shape(
+                vertices=cube_vertices,
+                indices=cube_faces,
+                uvs=None,
+                normals=None,
+                material_id=1 + i,
+            )
+        )
     shape_light_top = pyredner.Shape(
         vertices=torch.tensor(
             [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=device
@@ -136,11 +161,11 @@ def render_cube(size, color, position, render_seed=None):
         material_id=0,
     )
 
-    shapes = [shape_object, shape_light_top, shape_light_front]
+    shapes = shape_objects + [shape_light_top, shape_light_front]
 
     # Light
-    light_top = pyredner.AreaLight(shape_id=1, intensity=torch.ones(3) * 2)
-    light_front = pyredner.AreaLight(shape_id=2, intensity=torch.ones(3) * 2)
+    light_top = pyredner.AreaLight(shape_id=num_objects, intensity=torch.ones(3) * 2)
+    light_front = pyredner.AreaLight(shape_id=num_objects + 1, intensity=torch.ones(3) * 2)
     area_lights = [light_top, light_front]
 
     # Scene
