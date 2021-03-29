@@ -23,7 +23,7 @@ def plot(target_img, img, losses, iteration, path):
 def get_position(raw_position, true_position):
     if raw_position.ndim == 0:
         position = true_position.clone().detach()
-        position[0] = raw_position.sigmoid() * 0.8 + 0.1
+        position[0] = raw_position.sigmoid() * 1.6 - 0.8
         return position
     else:
         pass
@@ -33,12 +33,13 @@ if __name__ == "__main__":
     pyredner.set_use_gpu(torch.cuda.is_available())
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    true_size = torch.tensor(0.1, device=device)
-    true_position = torch.tensor([0.5, 0.8, 0.0], device=device)
+    im_size = 32
+    true_size = torch.tensor(0.2, device=device)
+    true_position = torch.tensor([0.0, 0.6, -1.0], device=device)
     true_color = torch.tensor([1.0, 0, 0], device=device)
-    target_img = render.render_cube(true_size, true_color, true_position)
+    target_img = render.render_cube(true_size, true_color, true_position, im_size)
 
-    raw_size = torch.tensor(-1.0, device=device, requires_grad=True)
+    raw_size = torch.tensor(0.0, device=device, requires_grad=True)
     raw_color = torch.randn(3, device=device, requires_grad=True)
     raw_x_position = torch.zeros((), device=device, requires_grad=True)
 
@@ -51,7 +52,8 @@ if __name__ == "__main__":
         img = render.render_cube(
             raw_size.exp(),
             torch.softmax(raw_color, 0),
-            get_position(raw_x_position, true_position)
+            get_position(raw_x_position, true_position),
+            im_size
         )
         loss = (img - target_img).pow(2).sum()
         loss.backward()

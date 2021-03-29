@@ -113,8 +113,8 @@ def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
 
     # Camera
     cam = pyredner.Camera(
-        position=torch.tensor([0.5, 0.0, 0.4]),
-        look_at=torch.tensor([0.5, 1.0, 0.2]),
+        position=torch.tensor([0.0, -1.0, -0.2]),
+        look_at=torch.tensor([0.0, 1.0, -0.6]),
         up=torch.tensor([0.0, 1.0, 0.0]),
         fov=torch.tensor([45.0]),  # in degree
         clip_near=1e-2,  # needs to > 0
@@ -144,7 +144,7 @@ def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
         )
     shape_light_top = pyredner.Shape(
         vertices=torch.tensor(
-            [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=device
+            [[-1.0, -1.0, 1.0], [1.0, -1.0, 1.0], [-1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=device
         ),
         indices=torch.tensor([[0, 2, 1], [1, 2, 3]], dtype=torch.int32, device=device),
         uvs=None,
@@ -153,7 +153,7 @@ def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
     )
     shape_light_front = pyredner.Shape(
         vertices=torch.tensor(
-            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 1.0]], device=device
+            [[-1.0, -1.0, -1.0], [1.0, -1.0, -1.0], [-1.0, -1.0, 1.0], [1.0, -1.0, 1.0]], device=device
         ),
         indices=torch.tensor([[0, 2, 1], [1, 2, 3]], dtype=torch.int32, device=device),
         uvs=None,
