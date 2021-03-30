@@ -197,12 +197,18 @@ def render_square(square, location, canvas, draw_on_top=False):
         if draw_on_top:
             new_canvas[
                 channel_id,
-                (canvas_x >= min_x) & (canvas_x <= max_x) & (canvas_y >= min_y) & (canvas_y <= max_y),
+                (canvas_x >= min_x)
+                & (canvas_x <= max_x)
+                & (canvas_y >= min_y)
+                & (canvas_y <= max_y),
             ] = square.color[channel_id]
         else:
             new_canvas[
                 channel_id,
-                (canvas_x >= min_x) & (canvas_x <= max_x) & (canvas_y >= min_y) & (canvas_y <= max_y),
+                (canvas_x >= min_x)
+                & (canvas_x <= max_x)
+                & (canvas_y >= min_y)
+                & (canvas_y <= max_y),
             ] -= (1 - square.color[channel_id])
     new_canvas = new_canvas.clamp(0, 1)
 
@@ -426,7 +432,7 @@ def render_square_batched(
             num_elements, num_channels, num_points
         )
     else:
-        square_color_expanded = square_color.view(-1, 3, 1).expand(
+        square_color_expanded = square_color.reshape(-1, 3, 1).expand(
             num_elements, num_channels, num_points
         )
 
@@ -737,7 +743,7 @@ def convert_raw_locations_top_down(raw_locations, stacking_program, primitives):
 
         min_x = min_x - size
         x = raw_location.sigmoid() * (max_x - min_x) + min_x
-        y = -size / 2
+        y = -size / 2.
         locations.append(torch.stack([x, y]))
 
         min_x = x
