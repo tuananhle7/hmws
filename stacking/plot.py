@@ -275,20 +275,21 @@ def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
         obs: [num_test_obs, num_channels, im_size, im_size]
     """
     num_test_obs, num_channels, im_size, _ = obs.shape
+    num_reconstructions = 5
 
     # Sample latent
-    latent = guide.sample(obs)
+    latent = guide.sample(obs, (num_reconstructions,))
 
     # Sample reconstructions
     # --Soft renders
     reconstructed_obs_soft = generative_model.get_obs_loc(latent)
 
     # --Hard renders
-    reconstructed_obs_hard = generative_model.get_obs_loc_hard(latent)
+    # reconstructed_obs_hard = generative_model.get_obs_loc_hard(latent)
     reconstructed_obs_hard_front = generative_model.get_obs_loc_hard_front(latent)
 
     # Plot
-    num_rows = 4
+    num_rows = 1 + 2 * num_reconstructions
     num_cols = num_test_obs
     fig, axss = plt.subplots(
         num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
@@ -303,22 +304,31 @@ def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
         # Plot obs
         ax = axss[0, sample_id]
         ax.imshow(obs[sample_id].cpu().permute(1, 2, 0))
+        ax.patch.set_facecolor("lightgray")
 
-        # Plot probs
-        ax = axss[1, sample_id]
-        ax.imshow(reconstructed_obs_soft[sample_id].cpu().permute(1, 2, 0))
+        for reconstruction_id in range(num_reconstructions):
+            # Plot probs
+            ax = axss[1 + reconstruction_id * 2, sample_id]
+            ax.imshow(reconstructed_obs_soft[reconstruction_id, sample_id].cpu().permute(1, 2, 0))
 
-        # Plot probs > 0.5
-        axss[2, sample_id].imshow(reconstructed_obs_hard[sample_id].cpu().permute(1, 2, 0))
+            # Plot probs > 0.5
+            axss[2 + reconstruction_id * 2, sample_id].imshow(
+                reconstructed_obs_hard_front[reconstruction_id, sample_id].cpu().permute(1, 2, 0)
+            )
 
-        # Plot probs > 0.5
-        axss[3, sample_id].imshow(reconstructed_obs_hard_front[sample_id].cpu().permute(1, 2, 0))
+            # Plot probs > 0.5
+            # axss[3, sample_id].imshow(reconstructed_obs_hard_front[sample_id].cpu().permute(1, 2, 0))
 
     # Set labels
     axss[0, 0].set_ylabel("Observed image")
-    axss[1, 0].set_ylabel("Soft reconstruction")
-    axss[2, 0].set_ylabel("Hard reconstruction")
-    axss[3, 0].set_ylabel("Front view")
+    for reconstruction_id in range(num_reconstructions):
+        axss[1 + reconstruction_id * 2, 0].set_ylabel(
+            f"FRONT VIEW {reconstruction_id}"
+        )
+        axss[2 + reconstruction_id * 2, 0].set_ylabel(
+            f"TOP VIEW {reconstruction_id}"
+        )
+    # axss[3, 0].set_ylabel("Front view")
 
     util.save_fig(fig, path)
 
