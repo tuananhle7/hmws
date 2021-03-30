@@ -288,6 +288,12 @@ def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
     # reconstructed_obs_hard = generative_model.get_obs_loc_hard(latent)
     reconstructed_obs_hard_front = generative_model.get_obs_loc_hard_front(latent)
 
+    # Log prob
+    generative_model_log_prob = generative_model.log_prob(
+        latent,
+        obs[None].expand(*[num_reconstructions, num_test_obs, num_channels, im_size, im_size]),
+    )
+
     # Plot
     num_rows = 1 + 2 * num_reconstructions
     num_cols = num_test_obs
@@ -310,6 +316,16 @@ def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
             # Plot probs
             ax = axss[1 + reconstruction_id * 2, sample_id]
             ax.imshow(reconstructed_obs_soft[reconstruction_id, sample_id].cpu().permute(1, 2, 0))
+            ax.text(
+                0.95,
+                0.95,
+                f"log p(z, x) = {generative_model_log_prob[reconstruction_id, sample_id]:.0f}",
+                transform=ax.transAxes,
+                fontsize=7,
+                va="top",
+                ha="right",
+                color="gray",
+            )
 
             # Plot probs > 0.5
             axss[2 + reconstruction_id * 2, sample_id].imshow(
@@ -322,12 +338,8 @@ def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
     # Set labels
     axss[0, 0].set_ylabel("Observed image")
     for reconstruction_id in range(num_reconstructions):
-        axss[1 + reconstruction_id * 2, 0].set_ylabel(
-            f"FRONT VIEW {reconstruction_id}"
-        )
-        axss[2 + reconstruction_id * 2, 0].set_ylabel(
-            f"TOP VIEW {reconstruction_id}"
-        )
+        axss[1 + reconstruction_id * 2, 0].set_ylabel(f"FRONT VIEW {reconstruction_id}")
+        axss[2 + reconstruction_id * 2, 0].set_ylabel(f"TOP VIEW {reconstruction_id}")
     # axss[3, 0].set_ylabel("Front view")
 
     util.save_fig(fig, path)
