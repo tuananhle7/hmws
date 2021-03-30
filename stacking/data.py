@@ -25,6 +25,10 @@ def generate_obs(run_args, num_obs, device, seed=None):
         obs = stacking_pyro.generate_from_true_generative_model(
             num_obs, num_primitives=3, device=device
         )
+    elif run_args.model_type == "stacking_top_down":
+        obs = stacking_pyro.generate_from_true_generative_model_top_down(
+            num_obs, num_primitives=3, device=device
+        )
 
     return obs
 

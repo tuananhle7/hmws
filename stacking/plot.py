@@ -266,6 +266,67 @@ def plot_primitives_stacking(path, generative_model):
     plot_primitives_stacking_pyro(path, generative_model)
 
 
+def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
+    """
+    Args:
+        path (str)
+        generative_model
+        guide
+        obs: [num_test_obs, num_channels, im_size, im_size]
+    """
+    num_test_obs, num_channels, im_size, _ = obs.shape
+
+    # Sample latent
+    latent = guide.sample(obs)
+
+    # Sample reconstructions
+    # --Soft renders
+    reconstructed_obs_soft = generative_model.get_obs_loc(latent)
+
+    # --Hard renders
+    reconstructed_obs_hard = generative_model.get_obs_loc_hard(latent)
+    reconstructed_obs_hard_front = generative_model.get_obs_loc_hard_front(latent)
+
+    # Plot
+    num_rows = 4
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        # Plot obs
+        ax = axss[0, sample_id]
+        ax.imshow(obs[sample_id].cpu().permute(1, 2, 0))
+
+        # Plot probs
+        ax = axss[1, sample_id]
+        ax.imshow(reconstructed_obs_soft[sample_id].cpu().permute(1, 2, 0))
+
+        # Plot probs > 0.5
+        axss[2, sample_id].imshow(reconstructed_obs_hard[sample_id].cpu().permute(1, 2, 0))
+
+        # Plot probs > 0.5
+        axss[3, sample_id].imshow(reconstructed_obs_hard_front[sample_id].cpu().permute(1, 2, 0))
+
+    # Set labels
+    axss[0, 0].set_ylabel("Observed image")
+    axss[1, 0].set_ylabel("Soft reconstruction")
+    axss[2, 0].set_ylabel("Hard reconstruction")
+    axss[3, 0].set_ylabel("Front view")
+
+    util.save_fig(fig, path)
+
+
+def plot_primitives_stacking_top_down(path, generative_model):
+    plot_primitives_stacking_pyro(path, generative_model)
+
+
 def main(args):
     # Cuda
     device = util.get_device()
@@ -275,6 +336,36 @@ def main(args):
         checkpoint_paths = list(util.get_checkpoint_paths())
     else:
         checkpoint_paths = [args.checkpoint_path]
+
+    # # Plot log p for all checkpoints
+    # fig, ax = plt.subplots(1, 1)
+
+    # colors = {0.0: "blue", 0.25: "C1", 0.5: "C2", 0.75: "C4", 1.0: "C5"}
+    # for checkpoint_path in checkpoint_paths:
+    #     # Fix seed
+    #     util.set_seed(1)
+
+    #     if os.path.exists(checkpoint_path):
+    #         # Load checkpoint
+    #         model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
+    #         generative_model, guide = model
+    #         num_iterations = len(stats.losses)
+
+    #         # Logp
+    #         ax.plot(
+    #             [x[0] for x in stats.log_ps],
+    #             [x[1] for x in stats.log_ps],
+    #             label=util.get_path_base_from_args(run_args),
+    #             linestyle="dashed" if run_args.num_sleep_pretraining_iterations > 0 else "solid",
+    #             color=colors[run_args.insomnia],
+    #         )
+    # ax.set_xlim(0, 50000)
+    # ax.legend()
+    # ax.set_xlabel("Iteration")
+    # ax.set_ylabel("Log p")
+    # sns.despine(ax=ax, trim=True)
+    # util.save_fig(fig, "losses.png", dpi=200)
+    # return
 
     # Plot for all checkpoints
     for checkpoint_path in checkpoint_paths:
@@ -332,6 +423,17 @@ def main(args):
                     obs,
                 )
                 plot_primitives_stacking(
+                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
+                    generative_model,
+                )
+            elif run_args.model_type == "stacking_top_down":
+                plot_reconstructions_stacking_top_down(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                )
+                plot_primitives_stacking_top_down(
                     f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
                     generative_model,
                 )

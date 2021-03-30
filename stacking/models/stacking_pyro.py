@@ -135,6 +135,69 @@ def generate_from_true_generative_model(
     )
 
 
+def generate_from_true_generative_model_single_top_down(
+    device, num_primitives, num_channels=3, num_rows=32, num_cols=32, fixed_num_blocks=False
+):
+    """Generate a synthetic observation
+
+    Returns [num_channels, num_rows, num_cols]
+    """
+    assert num_primitives <= 3
+    # Define params
+    primitives = [
+        render.Square(
+            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.3, device=device)
+        ),
+        render.Square(
+            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.4, device=device)
+        ),
+        render.Square(
+            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.5, device=device)
+        ),
+    ][:num_primitives]
+    # num_primitives = len(primitives)
+
+    # Sample
+    stacking_program = sample_stacking_program(
+        num_primitives, device, fixed_num_blocks=fixed_num_blocks
+    )
+    raw_locations = sample_raw_locations(stacking_program)
+
+    # Render
+    img = render.render_top_down(
+        primitives, stacking_program, raw_locations, num_channels, num_rows, num_cols
+    )
+
+    return img
+
+
+def generate_from_true_generative_model_top_down(
+    batch_size,
+    num_primitives,
+    device,
+    num_channels=3,
+    num_rows=32,
+    num_cols=32,
+    fixed_num_blocks=False,
+):
+    """Generate a batch of synthetic observations
+
+    Returns [batch_size, num_channels, num_rows, num_cols]
+    """
+    return torch.stack(
+        [
+            generate_from_true_generative_model_single_top_down(
+                device,
+                num_primitives,
+                num_rows=num_rows,
+                num_cols=num_cols,
+                fixed_num_blocks=fixed_num_blocks,
+            )
+            for _ in range(batch_size)
+        ]
+    )
+
+
 class GenerativeModel(nn.Module):
     """First samples the stacking program (discrete), then their raw positions (continuous),
     then renders them onto an image.

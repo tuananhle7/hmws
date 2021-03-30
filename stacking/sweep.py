@@ -11,7 +11,7 @@ def get_sweep_argss():
     for num_sleep_pretraining_iterations in [0, 10000]:
         for insomnia in [0.0, 0.25, 0.5, 0.75, 1.0]:
             args = run.get_args_parser().parse_args([])
-            args.model_type = "stacking"
+            args.model_type = "stacking_top_down"
             args.num_sleep_pretraining_iterations = num_sleep_pretraining_iterations
             args.insomnia = insomnia
             args.num_primitives = 5
@@ -87,7 +87,7 @@ def main(args):
                 + "--ntasks=1 "
                 + f"--gres=gpu:1 "
                 # + "--constraint=high-capacity "
-                + "--constraint=15GB "
+                + "--constraint=14GB "
                 + f'-J "{job_name}" '
                 + f'-o "{logs_dir}/%j.out" '
                 + f'-e "{logs_dir}/%j.err" '

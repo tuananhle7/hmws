@@ -13,6 +13,7 @@ from models import stacking_pyro
 from models import one_primitive
 from models import two_primitives
 from models import stacking
+from models import stacking_top_down
 import pyro
 import collections
 import os
@@ -69,7 +70,7 @@ def get_path_base_from_args(args):
         pretraining_suffix = "_pretraining"
     else:
         pretraining_suffix = ""
-    return f"{args.insomnia}{pretraining_suffix}"
+    return f"td{args.insomnia}{pretraining_suffix}"
 
 
 def get_save_job_name_from_args(args):
@@ -132,6 +133,17 @@ def init(run_args, device):
 
         # Guide
         guide = stacking.Guide(
+            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+        ).to(device)
+
+    elif run_args.model_type == "stacking_top_down":
+        # Generative model
+        generative_model = stacking_top_down.GenerativeModel(
+            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+        ).to(device)
+
+        # Guide
+        guide = stacking_top_down.Guide(
             num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
         ).to(device)
 

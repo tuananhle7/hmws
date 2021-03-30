@@ -167,13 +167,14 @@ def init_canvas(device, num_channels=3, num_rows=32, num_cols=32, shape=[]):
     return torch.ones(*[*shape, num_channels, num_rows, num_cols], device=device)
 
 
-def render_square(square, location, canvas):
+def render_square(square, location, canvas, draw_on_top=False):
     """Draws a square on a canvas whose xy limits are [-1, 1].
 
     Args
         square
         location [2]
         canvas [num_channels, num_rows, num_cols]
+        draw_on_top (bool): draw squares on top of the canvas, instead of adding it to the canvas
 
     Returns
         new_canvas [num_channels, num_rows, num_cols]
@@ -193,10 +194,16 @@ def render_square(square, location, canvas):
     # Draw on canvas
     new_canvas = canvas.clone()
     for channel_id in range(num_channels):
-        new_canvas[
-            channel_id,
-            (canvas_x >= min_x) & (canvas_x <= max_x) & (canvas_y >= min_y) & (canvas_y <= max_y),
-        ] -= (1 - square.color[channel_id])
+        if draw_on_top:
+            new_canvas[
+                channel_id,
+                (canvas_x >= min_x) & (canvas_x <= max_x) & (canvas_y >= min_y) & (canvas_y <= max_y),
+            ] = square.color[channel_id]
+        else:
+            new_canvas[
+                channel_id,
+                (canvas_x >= min_x) & (canvas_x <= max_x) & (canvas_y >= min_y) & (canvas_y <= max_y),
+            ] -= (1 - square.color[channel_id])
     new_canvas = new_canvas.clamp(0, 1)
 
     return new_canvas
@@ -710,3 +717,182 @@ def get_color_sharpness(raw_color_sharpness):
 
 def get_blur(raw_blur):
     return raw_blur.exp()
+
+
+def convert_raw_locations_top_down(raw_locations, stacking_program, primitives):
+    """
+    Args
+        raw_locations (tensor [num_blocks])
+        stacking_program (tensor [num_blocks])
+        primitives (list [num_primitives])
+
+    Returns [num_blocks, 2]
+    """
+    # Sample the bottom
+    min_x = -0.8
+    max_x = 0.8
+    locations = []
+    for primitive_id, raw_location in zip(stacking_program, raw_locations):
+        size = primitives[primitive_id].size
+
+        min_x = min_x - size
+        x = raw_location.sigmoid() * (max_x - min_x) + min_x
+        y = -size / 2
+        locations.append(torch.stack([x, y]))
+
+        min_x = x
+        max_x = min_x + size
+    return torch.stack(locations)
+
+
+def convert_raw_locations_batched_top_down(raw_locations, stacking_program, primitives):
+    """
+    Args
+        raw_locations (tensor [*shape, num_blocks])
+        stacking_program (tensor [*shape, num_blocks])
+        primitives (list [num_primitives])
+
+    Returns [*shape, num_blocks, 2]
+    """
+    # Extract
+    shape = raw_locations.shape[:-1]
+    num_samples = util.get_num_elements(shape)
+    num_blocks = raw_locations.shape[-1]
+
+    # Flatten
+    # [num_samples, num_blocks]
+    raw_locations_flattened = raw_locations.view(num_samples, num_blocks)
+    stacking_program_flattened = stacking_program.reshape(num_samples, num_blocks)
+
+    locations_batched = []
+    for sample_id in range(num_samples):
+        locations_batched.append(
+            convert_raw_locations_top_down(
+                raw_locations_flattened[sample_id],
+                stacking_program_flattened[sample_id],
+                primitives,
+            )
+        )
+    return torch.stack(locations_batched).view(*[*shape, num_blocks, 2])
+
+
+def soft_render_top_down(
+    primitives,
+    num_blocks,
+    stacking_program,
+    raw_locations,
+    raw_color_sharpness,
+    raw_blur,
+    num_channels=3,
+    num_rows=32,
+    num_cols=32,
+):
+    """
+    Args
+        primitives (list [num_primitives])
+        num_blocks [*shape]
+        stacking_program (tensor [*shape, max_num_blocks])
+        raw_locations (tensor [*shape, max_num_blocks])
+        raw_color_sharpness []
+        raw_blur []
+
+    Returns [*shape, num_channels, num_rows, num_cols]
+    """
+    # Extract
+    device = primitives[0].device
+    shape = stacking_program.shape[:-1]
+    max_num_blocks = stacking_program.shape[-1]
+
+    # [num_primitives]
+    square_size = torch.stack([primitive.size for primitive in primitives])
+    # [num_primitives, 3]
+    square_color = torch.stack([primitive.color for primitive in primitives])
+
+    # Convert [*shape, max_num_blocks, 2]
+    locations = convert_raw_locations_batched_top_down(raw_locations, stacking_program, primitives)
+
+    # Render
+    canvas = init_canvas(device, num_channels, num_rows, num_cols, shape)
+    for block_id in range(max_num_blocks):
+        # Determine whether this block is drawn
+        # [*shape, 1, 1, 1]
+        is_drawn = (block_id < num_blocks).float()[..., None, None, None]
+
+        # Draw the block
+        canvas = soft_render_square_batched(
+            square_size[stacking_program[..., block_id]],
+            square_color[stacking_program[..., block_id]],
+            locations[..., block_id, :],
+            canvas,
+            color_sharpness=get_color_sharpness(raw_color_sharpness),
+            blur=get_blur(raw_blur),
+        ) * is_drawn + canvas * (1 - is_drawn)
+
+    return canvas
+
+
+def render_batched_top_down(
+    primitives,
+    num_blocks,
+    stacking_program,
+    raw_locations,
+    num_channels=3,
+    num_rows=32,
+    num_cols=32,
+):
+    """
+    Args
+        primitives (list [num_primitives])
+        num_blocks [*shape]
+        stacking_program (tensor [*shape, max_num_blocks])
+        raw_locations (tensor [*shape, max_num_blocks])
+
+    Returns [*shape, num_channels, num_rows, num_cols]
+    """
+    # Extract
+    device = primitives[0].device
+    shape = stacking_program.shape[:-1]
+    max_num_blocks = stacking_program.shape[-1]
+
+    # [num_primitives]
+    square_size = torch.stack([primitive.size for primitive in primitives])
+    # [num_primitives, 3]
+    square_color = torch.stack([primitive.color for primitive in primitives])
+
+    # Convert [*shape, max_num_blocks, 2]
+    locations = convert_raw_locations_batched_top_down(raw_locations, stacking_program, primitives)
+
+    # Render
+    canvas = init_canvas(device, num_channels, num_rows, num_cols, shape)
+    for block_id in range(max_num_blocks):
+        # Determine whether this block is drawn
+        # [*shape, 1, 1, 1]
+        is_drawn = (block_id < num_blocks).float()[..., None, None, None]
+
+        # Draw the block
+        canvas = render_square_batched(
+            square_size[stacking_program[..., block_id]],
+            square_color[stacking_program[..., block_id]],
+            locations[..., block_id, :],
+            canvas,
+        ) * is_drawn + canvas * (1 - is_drawn)
+
+    return canvas
+
+
+def render_top_down(
+    primitives, stacking_program, raw_locations, num_channels=3, num_rows=32, num_cols=32
+):
+    # Init
+    device = primitives[0].device
+
+    # Convert
+    locations = convert_raw_locations_top_down(raw_locations, stacking_program, primitives)
+
+    # Render
+    canvas = init_canvas(device, num_channels, num_rows, num_cols)
+    for primitive_id, location in zip(stacking_program, locations):
+        primitive = primitives[primitive_id]
+        canvas = render_square(primitive, location, canvas, draw_on_top=True)
+
+    return canvas
