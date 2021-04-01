@@ -21,7 +21,7 @@ def get_stability(num_blocks, bottom_left, sizes, relationships, density=1.0):
         stability [*shape] (bool)
     """
     # Extract
-    x, y = bottom_left[..., 0], bottom_left[..., 1]
+    x = bottom_left[..., 0]
     max_num_blocks = bottom_left.shape[-2]
 
     # Compute per block quantities
