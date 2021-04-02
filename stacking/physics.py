@@ -5,6 +5,7 @@ https://arxiv.org/abs/1804.08018
 
 import util
 import torch
+import render
 
 
 def get_stability(num_blocks, bottom_left, sizes, relationships, density=1.0):
@@ -225,6 +226,32 @@ def plot_samples(path, latent, obs, stability):
     util.save_fig(fig, path)
 
 
+def get_stability_of_latent(latent):
+    """Computes stability of a latent variable sampled in a
+    `stacking_with_attachment.GenerativeModel` object
+
+    Args
+        latent:
+            num_blocks [*shape]
+            stacking_program
+                stacking_order [*shape, max_num_blocks]
+                attachment [*shape, max_num_blocks]
+            raw_locations [*shape, max_num_blocks]
+
+    Returns [*shape]
+    """
+    num_blocks, (stacking_order, attachment), raw_locations = latent
+    # [num_primitives]
+    square_sizes = torch.stack([primitive.size for primitive in generative_model.primitives])
+    # [*shape, max_num_blocks]
+    sizes = square_sizes[stacking_order]
+    bottom_left = render.convert_raw_locations_batched(
+        raw_locations, stacking_order, generative_model.primitives
+    )
+    relationships = attachment
+    return get_stability(num_blocks, bottom_left, sizes, relationships)
+
+
 if __name__ == "__main__":
     device = "cuda"
     shape = [100]
@@ -238,7 +265,6 @@ if __name__ == "__main__":
     print("Dims ok")
 
     from models import stacking_with_attachment
-    import render
 
     util.set_seed(1)
     num_samples = 100
@@ -246,25 +272,5 @@ if __name__ == "__main__":
         max_num_blocks=max_num_blocks, true_primitives=True
     )
     latent, obs = generative_model.sample((num_samples,))
-    num_blocks, (stacking_order, attachment), raw_locations = latent
-    # [num_primitives]
-    primitive_sizes = torch.stack([primitive.size for primitive in generative_model.primitives])
-    # [num_samples, max_num_blocks]
-    sizes = []
-    for sample_id in range(num_samples):
-        sizes.append(
-            torch.stack(
-                [
-                    primitive_sizes[stacking_order[sample_id, block_id]]
-                    for block_id in range(max_num_blocks)
-                ]
-            )
-        )
-    sizes = torch.stack(sizes)
-
-    bottom_left = render.convert_raw_locations_batched(
-        raw_locations, stacking_order, generative_model.primitives
-    )
-    relationships = attachment
-    stability = get_stability(num_blocks, bottom_left, sizes, relationships)
+    stability = get_stability_of_latent(latent)
     plot_samples("test/stacking_with_attachment_samples.png", latent, obs, stability)
