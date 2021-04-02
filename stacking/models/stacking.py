@@ -172,6 +172,7 @@ class GenerativeModel(nn.Module):
 
         return latent_log_prob + obs_log_prob
 
+    @torch.no_grad()
     def sample(self, sample_shape=[]):
         """Sample from p(z, x)
 
