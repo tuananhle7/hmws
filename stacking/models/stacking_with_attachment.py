@@ -449,24 +449,31 @@ class Guide(nn.Module):
 
         Returns
             num_blocks [*sample_shape, *shape]
-            TODO
             stacking_program
                 stacking_order [*sample_shape, *shape, max_num_blocks]
                 attachment [*sample_shape, *shape, max_num_blocks]
             raw_locations [*sample_shape, *shape, max_num_blocks]
         """
         # Compute params
-        num_blocks_params, stacking_program_params, (loc, scale) = self.get_dist_params(obs)
+        (
+            num_blocks_params,
+            stacking_order_params,
+            attachment_params,
+            (loc, scale),
+        ) = self.get_dist_params(obs)
 
         # Sample from q(Num blocks | x)
         num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
 
-        # Sample from q(Stacking program | x)
-        stacking_program = torch.distributions.Categorical(logits=stacking_program_params).sample(
+        # Sample from q(Stacking order | x)
+        stacking_order = torch.distributions.Categorical(logits=stacking_order_params).sample(
             sample_shape
         )
+
+        # Sample from q(Attachment | x)
+        attachment = torch.distributions.Categorical(logits=attachment_params).sample(sample_shape)
 
         # Sample from q(Raw locations | x)
         raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
 
-        return num_blocks, stacking_program, raw_locations
+        return num_blocks, (stacking_order, attachment), raw_locations
