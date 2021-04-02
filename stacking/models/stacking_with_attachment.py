@@ -322,9 +322,14 @@ class Guide(nn.Module):
         # Mapping from obs embedding to num_blocks params
         self.num_blocks_params_extractor = nn.Linear(self.obs_embedding_dim, self.max_num_blocks)
 
-        # Mapping from obs embedding to stacking_program params
-        self.stacking_program_params_extractor = nn.Linear(
+        # Mapping from obs embedding to stacking_order params
+        self.stacking_order_params_extractor = nn.Linear(
             self.obs_embedding_dim, self.max_num_blocks * self.num_primitives
+        )
+
+        # Mapping from obs embedding to attachment params
+        self.attachment_params_extractor = nn.Linear(
+            self.obs_embedding_dim, self.max_num_blocks * 2
         )
 
         # Mapping from obs embedding to location params
@@ -343,7 +348,8 @@ class Guide(nn.Module):
 
         Returns
             num_blocks_params [*shape, max_num_blocks]
-            stacking_program_params [*shape, max_num_blocks, num_primitives]
+            stacking_order_params [*shape, max_num_blocks, num_primitives]
+            attachment_params [*shape, max_num_blocks, 2]
             raw_locations_params
                 loc [*shape, max_num_blocks]
                 scale [*shape, max_num_blocks]
@@ -359,9 +365,14 @@ class Guide(nn.Module):
             *shape, self.max_num_blocks
         )
 
-        # Stacking program
-        stacking_program_params = self.stacking_program_params_extractor(obs_embedding).view(
+        # Stacking order
+        stacking_order_params = self.stacking_order_params_extractor(obs_embedding).view(
             *shape, self.max_num_blocks, self.num_primitives
+        )
+
+        # Attachment
+        attachment_params = self.attachment_params_extractor(obs_embedding).view(
+            *shape, self.max_num_blocks, 2
         )
 
         # Raw location
@@ -375,7 +386,7 @@ class Guide(nn.Module):
             .view(*shape, self.max_num_blocks)
         )
 
-        return num_blocks_params, stacking_program_params, (loc, scale)
+        return num_blocks_params, stacking_order_params, attachment_params, (loc, scale)
 
     def log_prob(self, obs, latent):
         """
@@ -383,7 +394,6 @@ class Guide(nn.Module):
             obs [*shape, num_channels, num_rows, num_cols]
             latent:
                 num_blocks [*shape]
-                TODO
                 stacking_program
                     stacking_order [*shape, max_num_blocks]
                     attachment [*shape, max_num_blocks]
@@ -392,19 +402,29 @@ class Guide(nn.Module):
         Returns [*shape]
         """
         # Extract
-        num_blocks, stacking_program, raw_locations = latent
+        num_blocks, (stacking_order, attachment), raw_locations = latent
 
         # Compute params
-        num_blocks_params, stacking_program_params, (loc, scale) = self.get_dist_params(obs)
+        (
+            num_blocks_params,
+            stacking_order_params,
+            attachment_params,
+            (loc, scale),
+        ) = self.get_dist_params(obs)
 
         # log q(Num blocks | x)
         num_blocks_log_prob = util.CategoricalPlusOne(logits=num_blocks_params).log_prob(num_blocks)
 
         # log q(Stacking program | x)
-        stacking_program_log_prob = util.pad_tensor(
-            torch.distributions.Categorical(logits=stacking_program_params).log_prob(
-                stacking_program
-            ),
+        stacking_order_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_order_params).log_prob(stacking_order),
+            num_blocks,
+            0,
+        ).sum(-1)
+
+        # log q(Attachment | x)
+        attachment_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(logits=attachment_params).log_prob(attachment),
             num_blocks,
             0,
         ).sum(-1)
@@ -414,7 +434,12 @@ class Guide(nn.Module):
             torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks, 0,
         ).sum(-1)
 
-        return num_blocks_log_prob + stacking_program_log_prob + raw_locations_log_prob
+        return (
+            num_blocks_log_prob
+            + stacking_order_log_prob
+            + attachment_log_prob
+            + raw_locations_log_prob
+        )
 
     def sample(self, obs, sample_shape=[]):
         """z ~ q(z | x)
