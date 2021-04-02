@@ -281,6 +281,22 @@ class GenerativeModel(nn.Module):
         # p(x | z)
         obs = self.get_obs_loc_hard(latent)
 
+        # HACK: mask out latents and obs that are unstable
+        #       that way, the neural net will learn to regress a black img to a dummy latent
+        # TODO: can do rejection sampling if we want to do it properly
+        # --Compute stability
+        stability = physics.get_stability_of_latent(latent, self.primitives)
+        # --Extract
+        num_blocks, (stacking_order, attachment), raw_locations = latent
+        # --Mask
+        num_blocks[~stability] = 1
+        stacking_order[~stability] = 0
+        attachment[~stability] = 0
+        raw_locations[~stability] = 0.0
+        obs[~stability] = 0.0
+        # --Combine
+        latent = num_blocks, (stacking_order, attachment), raw_locations
+
         return latent, obs
 
 
