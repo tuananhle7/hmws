@@ -346,6 +346,79 @@ def plot_primitives_stacking_top_down(path, generative_model):
     plot_primitives_stacking_pyro(path, generative_model)
 
 
+def plot_reconstructions_stacking_with_attachment(path, generative_model, guide, obs):
+    """
+    Args:
+        path (str)
+        generative_model
+        guide
+        obs: [num_test_obs, num_channels, im_size, im_size]
+    """
+    num_test_obs, num_channels, im_size, _ = obs.shape
+
+    # Sample latent
+    latent = guide.sample(obs)
+    num_blocks, (stacking_order, attachment), raw_locations = latent
+
+    # Sample reconstructions
+    # --Soft renders
+    reconstructed_obs_soft = generative_model.get_obs_loc(latent)
+
+    # --Hard renders
+    reconstructed_obs_hard = generative_model.get_obs_loc_hard(latent)
+
+    # Plot
+    num_rows = 3
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        # Plot obs
+        ax = axss[0, sample_id]
+        ax.imshow(obs[sample_id].cpu().permute(1, 2, 0))
+
+        # Plot probs
+        ax = axss[1, sample_id]
+        ax.imshow(reconstructed_obs_soft[sample_id].cpu().permute(1, 2, 0))
+        text = (
+            "Stacking order: "
+            + f"{list(stacking_order[sample_id, :num_blocks[sample_id]].detach().cpu().numpy())}"
+            + f"\nAttachments: "
+            f"{list(attachment[sample_id, :num_blocks[sample_id]].detach().cpu().numpy())}"
+        )
+        ax.text(
+            0.95,
+            0.95,
+            text,
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+
+        # Plot probs > 0.5
+        axss[2, sample_id].imshow(reconstructed_obs_hard[sample_id].cpu().permute(1, 2, 0))
+
+    # Set labels
+    axss[0, 0].set_ylabel("Observed image")
+    axss[1, 0].set_ylabel("Soft reconstruction")
+    axss[2, 0].set_ylabel("Hard reconstruction")
+
+    util.save_fig(fig, path)
+
+
+def plot_primitives_stacking_with_attachment(path, generative_model):
+    plot_primitives_stacking_pyro(path, generative_model)
+
+
 def main(args):
     # Cuda
     device = util.get_device()
@@ -453,6 +526,17 @@ def main(args):
                     obs,
                 )
                 plot_primitives_stacking_top_down(
+                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
+                    generative_model,
+                )
+            elif run_args.model_type == "stacking_with_attachment":
+                plot_reconstructions_stacking_with_attachment(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                )
+                plot_primitives_stacking_with_attachment(
                     f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
                     generative_model,
                 )

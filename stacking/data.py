@@ -1,10 +1,14 @@
 from models import stacking_pyro
+from models import stacking_with_attachment
 import util
 import torch
 
 
 @torch.no_grad()
 def generate_obs(run_args, num_obs, device, seed=None):
+    """
+    Returns [num_obs, num_channels, im_size, im_size]
+    """
     if seed is not None:
         # Fix seed
         util.set_seed(seed)
@@ -29,6 +33,14 @@ def generate_obs(run_args, num_obs, device, seed=None):
         obs = stacking_pyro.generate_from_true_generative_model_top_down(
             num_obs, num_primitives=3, device=device
         )
+    elif run_args.model_type == "stacking_with_attachment":
+        # Generative model with true primitives
+        true_generative_model = stacking_with_attachment.GenerativeModel(
+            num_primitives=3,
+            max_num_blocks=run_args.max_num_blocks,
+            true_primitives=True,
+        ).to(device)
+        _, obs = true_generative_model.sample((num_obs,))
 
     return obs
 

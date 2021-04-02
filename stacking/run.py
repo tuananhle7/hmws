@@ -46,6 +46,7 @@ def get_args_parser():
             "two_primitives",
             "stacking_pyro",
             "stacking_top_down",
+            "stacking_with_attachment",
         ],
         help=" ",
     )
