@@ -226,7 +226,7 @@ def plot_samples(path, latent, obs, stability):
     util.save_fig(fig, path)
 
 
-def get_stability_of_latent(latent):
+def get_stability_of_latent(latent, primitives):
     """Computes stability of a latent variable sampled in a
     `stacking_with_attachment.GenerativeModel` object
 
@@ -242,12 +242,10 @@ def get_stability_of_latent(latent):
     """
     num_blocks, (stacking_order, attachment), raw_locations = latent
     # [num_primitives]
-    square_sizes = torch.stack([primitive.size for primitive in generative_model.primitives])
+    square_sizes = torch.stack([primitive.size for primitive in primitives])
     # [*shape, max_num_blocks]
     sizes = square_sizes[stacking_order]
-    bottom_left = render.convert_raw_locations_batched(
-        raw_locations, stacking_order, generative_model.primitives
-    )
+    bottom_left = render.convert_raw_locations_batched(raw_locations, stacking_order, primitives)
     relationships = attachment
     return get_stability(num_blocks, bottom_left, sizes, relationships)
 
@@ -272,5 +270,5 @@ if __name__ == "__main__":
         max_num_blocks=max_num_blocks, true_primitives=True
     )
     latent, obs = generative_model.sample((num_samples,))
-    stability = get_stability_of_latent(latent)
+    stability = get_stability_of_latent(latent, generative_model.primitives)
     plot_samples("test/stacking_with_attachment_samples.png", latent, obs, stability)
