@@ -256,7 +256,7 @@ class GenerativeModel(nn.Module):
         # Log prob factor based on stability
         stability = physics.get_stability_of_latent(latent, self.primitives)
         stability_factor = torch.zeros(shape, device=self.device)
-        stability_factor[~stability] = float("-inf")
+        stability_factor[~stability] = -1e6  # supersmall
 
         return latent_log_prob + obs_log_prob + stability_factor
 
