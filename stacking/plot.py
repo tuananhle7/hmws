@@ -332,9 +332,6 @@ def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
                 reconstructed_obs_hard_front[reconstruction_id, sample_id].cpu().permute(1, 2, 0)
             )
 
-            # Plot probs > 0.5
-            # axss[3, sample_id].imshow(reconstructed_obs_hard_front[sample_id].cpu().permute(1, 2, 0))
-
     # Set labels
     axss[0, 0].set_ylabel("Observed image")
     for reconstruction_id in range(num_reconstructions):
