@@ -153,6 +153,58 @@ def get_is_inside_interval(x, interval):
     return (x >= left) & (x <= right)
 
 
+def plot_samples(path, latent, obs, stability):
+    """
+    Args:
+        path (str)
+        latent:
+            num_blocks [num_samples]
+            stacking_program
+                stacking_order [num_samples, max_num_blocks]
+                attachment [num_samples, max_num_blocks]
+            raw_locations [num_samples, max_num_blocks]
+        obs [num_samples, num_channels, im_size, im_size]
+        stability [num_samples]
+    """
+    import matplotlib.pyplot as plt
+
+    num_samples, num_channels, im_size, _ = obs.shape
+
+    # Plot
+    num_rows = 1
+    num_cols = num_samples
+    fig, axss = plt.subplots(
+        num_rows,
+        num_cols,
+        figsize=(2 * num_cols, 2 * num_rows),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_samples):
+        # Plot obs
+        ax = axss[0, sample_id]
+        ax.imshow(obs[sample_id].detach().cpu().permute(1, 2, 0))
+        ax.text(
+            0.95,
+            0.95,
+            "STABLE" if stability[sample_id] else "UNSTABLE",
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+
+    util.save_fig(fig, path)
+
+
 if __name__ == "__main__":
     device = "cuda"
     shape = [3]
@@ -164,3 +216,34 @@ if __name__ == "__main__":
 
     assert list(get_stability(num_blocks, bottom_left, sizes, relationships).shape) == shape
     print("Dims ok")
+
+    from models import stacking_with_attachment
+    import render
+
+    num_samples = 100
+    generative_model = stacking_with_attachment.GenerativeModel(
+        max_num_blocks=max_num_blocks, true_primitives=True
+    )
+    latent, obs = generative_model.sample((num_samples,))
+    num_blocks, (stacking_order, attachment), raw_locations = latent
+    # [num_primitives]
+    primitive_sizes = torch.stack([primitive.size for primitive in generative_model.primitives])
+    # [num_samples, max_num_blocks]
+    sizes = []
+    for sample_id in range(num_samples):
+        sizes.append(
+            torch.stack(
+                [
+                    primitive_sizes[stacking_order[sample_id, block_id]]
+                    for block_id in range(max_num_blocks)
+                ]
+            )
+        )
+    sizes = torch.stack(sizes)
+
+    bottom_left = render.convert_raw_locations_batched(
+        raw_locations, stacking_order, generative_model.primitives
+    )
+    relationships = attachment
+    stability = get_stability(num_blocks, bottom_left, sizes, relationships)
+    plot_samples("test/stacking_with_attachment_samples.png", latent, obs, stability)
