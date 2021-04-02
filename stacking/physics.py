@@ -209,13 +209,15 @@ def plot_samples(path, latent, obs, stability):
         # Plot obs
         ax = axss[0, sample_id]
         ax.imshow(obs[sample_id].detach().cpu().permute(1, 2, 0))
+        text = (
+            ("STABLE" if stability[sample_id] else "UNSTABLE")
+            + f"\nAttachments: "
+            + f"{list(attachment[sample_id, :num_blocks[sample_id]].detach().cpu().numpy())}"
+        )
         ax.text(
             0.95,
             0.95,
-            (
-                ("STABLE" if stability[sample_id] else "UNSTABLE")
-                + f"\nAttachments: {list(attachment[sample_id, :num_blocks[sample_id]].detach().cpu().numpy())}"
-            ),
+            text,
             transform=ax.transAxes,
             fontsize=7,
             va="top",
