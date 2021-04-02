@@ -194,13 +194,13 @@ class GenerativeModel(nn.Module):
         Returns: [*shape, num_channels, num_rows, num_cols]
         """
         # Extract stuff
-        num_blocks, stacking_program, raw_locations = latent
+        num_blocks, (stacking_order, attachment), raw_locations = latent
 
         # Compute stuff
         return render.soft_render_variable_num_blocks(
             self.primitives,
             num_blocks,
-            stacking_program,
+            stacking_order,
             raw_locations,
             self.raw_color_sharpness,
             self.raw_blur,
@@ -232,7 +232,6 @@ class GenerativeModel(nn.Module):
         Args:
             latent:
                 num_blocks [*shape]
-                TODO
                 stacking_program
                     stacking_order [*shape, max_num_blocks]
                     attachment [*shape, max_num_blocks]
@@ -249,6 +248,8 @@ class GenerativeModel(nn.Module):
             self.obs_dist(loc=self.get_obs_loc(latent), scale=self.obs_scale),
             reinterpreted_batch_ndims=3,
         ).log_prob(obs)
+
+        # TODO - incorporate stability factor
 
         return latent_log_prob + obs_log_prob
 
