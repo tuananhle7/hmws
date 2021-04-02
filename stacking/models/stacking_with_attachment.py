@@ -1,3 +1,4 @@
+import physics
 import torch
 import torch.nn as nn
 import render
@@ -240,6 +241,9 @@ class GenerativeModel(nn.Module):
 
         Returns: [*shape]
         """
+        # Extract
+        shape = latent[0].shape
+
         # p(z)
         latent_log_prob = self.latent_log_prob(latent)
 
@@ -249,9 +253,12 @@ class GenerativeModel(nn.Module):
             reinterpreted_batch_ndims=3,
         ).log_prob(obs)
 
-        # TODO - incorporate stability factor
+        # Log prob factor based on stability
+        stability = physics.get_stability_of_latent(latent)
+        stability_factor = torch.zeros(shape, device=self.device)
+        stability_factor[~stability] = float("-inf")
 
-        return latent_log_prob + obs_log_prob
+        return latent_log_prob + obs_log_prob + stability_factor
 
     def sample(self, sample_shape=[]):
         """Sample from p(z, x)
