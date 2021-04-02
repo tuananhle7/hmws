@@ -36,10 +36,7 @@ def get_stability(num_blocks, bottom_left, sizes, relationships, density=1.0):
     for bottom_block_id in range(max_num_blocks):
         # Center of mass of substack
         substack_centers_of_mass.append(
-            get_center_of_mass(
-                centers_of_mass[..., bottom_block_id:max_num_blocks, :],
-                masses[..., bottom_block_id:max_num_blocks],
-            )
+            get_substack_center_of_mass(centers_of_mass, masses, bottom_block_id, num_blocks)
         )
 
         # Contact interval of substack
@@ -82,6 +79,25 @@ def get_stability(num_blocks, bottom_left, sizes, relationships, density=1.0):
     substack_stability[relationships == ATTACHED] = True
 
     return torch.all(substack_stability, dim=-1)
+
+
+def get_substack_center_of_mass(centers_of_mass, masses, bottom_block_id, num_blocks):
+    """Determine the center of mass of a substack of blocks from
+    a particular bottom block id to the top block
+
+    Args
+        centers_of_mass [*shape, max_num_blocks, 2]
+        masses [*shape, max_num_blocks]
+        bottom_block_id (int)
+        num_blocks [*shape]
+
+    Returns [*shape, 2]
+    """
+    # Mask out in applicable masses to 0
+    masked_masses = util.pad_tensor(masses, num_blocks, 0)
+    return get_center_of_mass(
+        centers_of_mass[..., bottom_block_id:, :], masked_masses[..., bottom_block_id:]
+    )
 
 
 def get_center_of_mass(centers_of_mass, masses):
@@ -134,7 +150,7 @@ def get_intersection(interval_1, interval_2):
 
     # Fill with nan if there isn't an interesection
     is_there_an_intersection = (right_1 < left_2) | (left_1 < right_2)
-    intersection[is_there_an_intersection[..., None].expand(*[*shape, 2])] = float("nan")
+    intersection[~is_there_an_intersection[..., None].expand(*[*shape, 2])] = float("nan")
 
     return intersection
 
@@ -169,6 +185,7 @@ def plot_samples(path, latent, obs, stability):
     import matplotlib.pyplot as plt
 
     num_samples, num_channels, im_size, _ = obs.shape
+    num_blocks, (stacking_order, attachment), raw_locations = latent
 
     # Plot
     num_rows = 1
@@ -194,7 +211,10 @@ def plot_samples(path, latent, obs, stability):
         ax.text(
             0.95,
             0.95,
-            "STABLE" if stability[sample_id] else "UNSTABLE",
+            (
+                ("STABLE" if stability[sample_id] else "UNSTABLE")
+                + f"\nAttachments: {list(attachment[sample_id, :num_blocks[sample_id]].detach().cpu().numpy())}"
+            ),
             transform=ax.transAxes,
             fontsize=7,
             va="top",
@@ -207,7 +227,7 @@ def plot_samples(path, latent, obs, stability):
 
 if __name__ == "__main__":
     device = "cuda"
-    shape = [3]
+    shape = [100]
     max_num_blocks = 5
     num_blocks = torch.randint(1, max_num_blocks + 1, shape, device=device)
     bottom_left = torch.rand(*[*shape, max_num_blocks, 2], device=device)
@@ -220,6 +240,7 @@ if __name__ == "__main__":
     from models import stacking_with_attachment
     import render
 
+    util.set_seed(1)
     num_samples = 100
     generative_model = stacking_with_attachment.GenerativeModel(
         max_num_blocks=max_num_blocks, true_primitives=True
