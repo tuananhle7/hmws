@@ -80,10 +80,16 @@ class GenerativeModel(nn.Module):
 
     @property
     def stacking_order_logits(self):
+        """
+        Returns [max_num_blocks, num_primitives]
+        """
         return torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
 
     @property
     def attachment_probs(self):
+        """
+        Returns [max_num_blocks, 2]
+        """
         prob = torch.ones((self.max_num_blocks,), device=self.device) * 0.1
         return torch.stack([1 - prob, prob], dim=-1)
 
@@ -101,15 +107,25 @@ class GenerativeModel(nn.Module):
         Returns: [*shape]
         """
         # Extract
-        num_blocks, stacking_program, raw_locations = latent
+        num_blocks, (stacking_order, attachment), raw_locations = latent
 
         # Log prob of num_blocks
         num_blocks_log_prob = self.num_blocks_dist.log_prob(num_blocks)
 
-        # Log prob of stacking_program
-        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
-        stacking_program_log_prob = util.pad_tensor(
-            torch.distributions.Categorical(logits=logits).log_prob(stacking_program), num_blocks, 0
+        # Log prob of stacking_order
+        stacking_order_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(logits=self.stacking_order_logits).log_prob(
+                stacking_order
+            ),
+            num_blocks,
+            0,
+        ).sum(-1)
+
+        # Log prob of attachment
+        attachment_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(probs=self.attachment_probs).log_prob(attachment),
+            num_blocks,
+            0,
         ).sum(-1)
 
         # Log prob of raw_locations
@@ -121,7 +137,12 @@ class GenerativeModel(nn.Module):
             torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks, 0,
         ).sum(-1)
 
-        return num_blocks_log_prob + stacking_program_log_prob + raw_locations_log_prob
+        return (
+            num_blocks_log_prob
+            + stacking_order_log_prob
+            + attachment_log_prob
+            + raw_locations_log_prob
+        )
 
     def latent_sample(self, sample_shape=[]):
         """Sample from p(z)
