@@ -9,7 +9,13 @@ class GenerativeModel(nn.Module):
     """
 
     def __init__(
-        self, num_primitives=3, max_num_blocks=3, im_size=32, obs_scale=1.0, obs_dist_type="normal"
+        self,
+        num_primitives=3,
+        max_num_blocks=3,
+        im_size=32,
+        obs_scale=1.0,
+        obs_dist_type="normal",
+        true_primitives=False,
     ):
         super().__init__()
 
@@ -26,13 +32,40 @@ class GenerativeModel(nn.Module):
             self.obs_dist = torch.distributions.Laplace
 
         # Primitive parameters (parameters of symbols)
-        self.primitives = nn.ModuleList(
-            [render.LearnableSquare(f"{i}") for i in range(self.num_primitives)]
-        )
+        self.true_primitives = true_primitives
+        if self.true_primitives:
+            assert self.num_primitives == 3
+        else:
+            self.primitive_module_list = nn.ModuleList(
+                [render.LearnableSquare(f"{i}") for i in range(self.num_primitives)]
+            )
 
         # Rendering parameters
         self.raw_color_sharpness = nn.Parameter(torch.randn(()))
         self.raw_blur = nn.Parameter(torch.randn(()))
+
+    @property
+    def primitives(self):
+        if self.true_primitives:
+            return [
+                render.Square(
+                    "A",
+                    torch.tensor([1.0, 0.0, 0.0], device=self.device),
+                    torch.tensor(0.3, device=self.device),
+                ),
+                render.Square(
+                    "B",
+                    torch.tensor([0.0, 1.0, 0.0], device=self.device),
+                    torch.tensor(0.4, device=self.device),
+                ),
+                render.Square(
+                    "C",
+                    torch.tensor([0.0, 0.0, 1.0], device=self.device),
+                    torch.tensor(0.5, device=self.device),
+                ),
+            ]
+        else:
+            return self.primitive_module_list
 
     @property
     def device(self):
@@ -44,6 +77,15 @@ class GenerativeModel(nn.Module):
         batch_shape [], event_shape []
         """
         return util.CategoricalPlusOne(logits=torch.ones(self.max_num_blocks, device=self.device))
+
+    @property
+    def stacking_order_logits(self):
+        return torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
+
+    @property
+    def attachment_probs(self):
+        prob = torch.ones((self.max_num_blocks,), device=self.device) * 0.1
+        return torch.stack([1 - prob, prob], dim=-1)
 
     def latent_log_prob(self, latent):
         """Prior log p(z)
@@ -98,9 +140,15 @@ class GenerativeModel(nn.Module):
         # Sample num_blocks
         num_blocks = self.num_blocks_dist.sample(sample_shape)
 
-        # Sample stacking_program
-        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
-        stacking_program = torch.distributions.Categorical(logits=logits).sample(sample_shape)
+        # Sample stacking_order
+        stacking_order = torch.distributions.Categorical(logits=self.stacking_order_logits).sample(
+            sample_shape
+        )
+
+        # Sample attachment
+        attachment = torch.distributions.Categorical(probs=self.attachment_probs).sample(
+            sample_shape
+        )
 
         # Sample raw_locations
         # --Compute dist params
@@ -109,7 +157,7 @@ class GenerativeModel(nn.Module):
         # --Compute log prob [*shape]
         raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
 
-        return num_blocks, stacking_program, raw_locations
+        return num_blocks, (stacking_order, attachment), raw_locations
 
     def get_obs_loc(self, latent):
         """Location parameter of p(x | z)
@@ -151,10 +199,10 @@ class GenerativeModel(nn.Module):
         Returns: [*shape, num_channels, num_rows, num_cols]
         """
         # Extract stuff
-        num_blocks, stacking_program, raw_locations = latent
+        num_blocks, (stacking_order, attachment), raw_locations = latent
 
         # Compute stuff
-        return render.render_batched(self.primitives, num_blocks, stacking_program, raw_locations,)
+        return render.render_batched(self.primitives, num_blocks, stacking_order, raw_locations,)
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
@@ -192,7 +240,6 @@ class GenerativeModel(nn.Module):
         Returns
             latent:
                 num_blocks [*sample_shape]
-                TODO
                 stacking_program
                     stacking_order [*sample_shape, max_num_blocks]
                     attachment [*sample_shape, max_num_blocks]
