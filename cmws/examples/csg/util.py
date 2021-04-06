@@ -112,7 +112,7 @@ def init(run_args, device):
         optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
-    stats = Stats([])
+    stats = Stats([], [], [], [])
 
     return model, optimizer, stats
 
@@ -157,7 +157,7 @@ def load_checkpoint(path, device):
     return model, optimizer, stats, run_args
 
 
-Stats = collections.namedtuple("Stats", ["losses"])
+Stats = collections.namedtuple("Stats", ["losses", "sleep_pretraining_losses", "log_ps", "kls"])
 
 
 def plot_normal2d(ax, mean, cov, num_points=100, confidence=0.95, **kwargs):

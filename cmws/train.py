@@ -1,11 +1,12 @@
 import pyro
 import torch
+
+import cmws
 from cmws import losses, util
-from cmws.examples.stacking import data
-from cmws.examples.stacking import util as stacking_util
 
 
 def train(model, optimizer, stats, args):
+    # Extract
     checkpoint_path = util.get_checkpoint_path(args)
     num_iterations_so_far = len(stats.losses)
     num_sleep_pretraining_iterations_so_far = len(stats.sleep_pretraining_losses)
@@ -14,17 +15,24 @@ def train(model, optimizer, stats, args):
 
     # Initialize optimizer for pyro models
     if "_pyro" in args.model_type:
-        svi = pyro.infer.SVI(
-            model=generative_model,
-            guide=guide,
-            optim=optimizer,
-            loss=pyro.infer.ReweightedWakeSleep(
-                num_particles=args.num_particles,
-                vectorize_particles=False,
-                model_has_params=True,
-                insomnia=args.insomnia,
-            ),
-        )
+        if args.algorithm == "rws":
+            svi = pyro.infer.SVI(
+                model=generative_model,
+                guide=guide,
+                optim=optimizer,
+                loss=pyro.infer.ReweightedWakeSleep(
+                    num_particles=args.num_particles,
+                    vectorize_particles=False,
+                    model_has_params=True,
+                    insomnia=args.insomnia,
+                ),
+            )
+        elif args.algorithm == "elbo":
+            svi = pyro.infer.SVI(
+                model=generative_model, guide=guide, optim=optimizer, loss=pyro.infer.Trace_ELBO()
+            )
+        else:
+            raise ValueError(f"Algorithm {args.algorithm} not supported in pyro")
         util.logging.info(f"Using pyro version {pyro.__version__}")
 
     # Sleep pretraining
@@ -67,17 +75,38 @@ def train(model, optimizer, stats, args):
             iteration % args.save_interval == 0
             or iteration == args.num_sleep_pretraining_iterations - 1
         ):
-            stacking_util.save_checkpoint(checkpoint_path, model, optimizer, stats, run_args=args)
+            if "cmws.examples.stacking.models" in str(type(generative_model)):
+                cmws.examples.stacking.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
+            if "cmws.examples.stacking_3d.models" in str(type(generative_model)):
+                cmws.examples.stacking_3d.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
+            if "cmws.examples.csg.models" in str(type(generative_model)):
+                cmws.examples.csg.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
 
     # Generate test data
     # NOTE: super weird but when this is put before sleep pretraining, sleep pretraining doesn't
     # work
-    test_obs = data.generate_test_obs(args, device)
+    if "cmws.examples.stacking.models" in str(type(generative_model)):
+        test_obs = cmws.examples.stacking.data.generate_test_obs(args, device)
+    elif "cmws.examples.stacking_3d.models" in str(type(generative_model)):
+        test_obs = cmws.examples.stacking_3d.data.generate_test_obs(device)
+    elif "cmws.examples.csg.models" in str(type(generative_model)):
+        test_obs = cmws.examples.csg.data.generate_test_obs(args, device)
 
     # Normal training
     for iteration in range(num_iterations_so_far, args.num_iterations):
         # Generate data
-        obs = data.generate_obs(args, args.batch_size, device)
+        if "cmws.examples.stacking.models" in str(type(generative_model)):
+            obs = cmws.examples.stacking.data.generate_obs(args, args.batch_size, device)
+        elif "cmws.examples.stacking_3d.models" in str(type(generative_model)):
+            obs = cmws.examples.stacking_3d.data.generate_obs(args.batch_size, device)
+        elif "cmws.examples.csg.models" in str(type(generative_model)):
+            obs = cmws.examples.csg.data.generate_obs(args, args.batch_size, device)
 
         if "_pyro" in args.model_type:
             # Step gradient
@@ -128,7 +157,7 @@ def train(model, optimizer, stats, args):
 
                 pdb.set_trace()
 
-        # Test
+        # Compute log p and KL
         if iteration % args.test_interval == 0 or iteration == args.num_iterations - 1:
             if "_pyro" in args.model_type:
                 stats.log_ps.append([iteration, float("nan")])
@@ -154,13 +183,41 @@ def train(model, optimizer, stats, args):
 
         # Save checkpoint
         if iteration % args.save_interval == 0 or iteration == args.num_iterations - 1:
-            stacking_util.save_checkpoint(checkpoint_path, model, optimizer, stats, run_args=args)
+            if "cmws.examples.stacking.models" in str(type(generative_model)):
+                cmws.examples.stacking.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
+            elif "cmws.examples.stacking_3d.models" in str(type(generative_model)):
+                cmws.examples.stacking_3d.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
+            elif "cmws.examples.csg.models" in str(type(generative_model)):
+                cmws.examples.csg.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
 
         if iteration % args.checkpoint_interval == 0:
-            stacking_util.save_checkpoint(
-                util.get_checkpoint_path(args, checkpoint_iteration=iteration),
-                model,
-                optimizer,
-                stats,
-                run_args=args,
-            )
+            if "cmws.examples.stacking.models" in str(type(generative_model)):
+                cmws.examples.stacking.util.save_checkpoint(
+                    util.get_checkpoint_path(args, checkpoint_iteration=iteration),
+                    model,
+                    optimizer,
+                    stats,
+                    run_args=args,
+                )
+            elif "cmws.examples.stacking_3d.models" in str(type(generative_model)):
+                cmws.examples.stacking_3d.util.save_checkpoint(
+                    util.get_checkpoint_path(args, checkpoint_iteration=iteration),
+                    model,
+                    optimizer,
+                    stats,
+                    run_args=args,
+                )
+            elif "cmws.examples.csg.models" in str(type(generative_model)):
+                cmws.examples.csg.util.save_checkpoint(
+                    util.get_checkpoint_path(args, checkpoint_iteration=iteration),
+                    model,
+                    optimizer,
+                    stats,
+                    run_args=args,
+                )

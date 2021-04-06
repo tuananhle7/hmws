@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from cmws import util
-from cmws.examples.stacking import train
+from cmws import train, util
 from cmws.examples.stacking import util as stacking_util
 
 

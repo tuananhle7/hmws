@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from cmws import util
-from cmws.examples.stacking_3d import train
+from cmws import train, util
 from cmws.examples.stacking_3d import util as stacking_3d_util
 
 
