@@ -324,6 +324,19 @@ def unique(x, dim=None):
     return unique, inverse.new_empty(unique.size(0)).scatter_(0, inverse, perm)
 
 
+def cycle(iterable):
+    """Returns an infinite iterator by cycling through the iterable.
+
+    It's better than the itertools.cycle function because it resets to iterable each time it is
+    exhausted. This is useful when using cycling through the torch.utils.data.DataLoader object.
+
+    See https://stackoverflow.com/a/49987606
+    """
+    while True:
+        for x in iterable:
+            yield x
+
+
 if __name__ == "__main__":
     # Test pad_tensor
     x = torch.rand(4)
