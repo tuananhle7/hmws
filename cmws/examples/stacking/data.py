@@ -51,7 +51,7 @@ def generate_test_obs(run_args, device):
 
 class StackingDataset(torch.utils.data.Dataset):
     """Loads or generates a dataset
-    (Takes ~1.2GB of GPU memory)
+    Uses ~12M (test) / 1.2GB (train)
 
     Args
         device
@@ -71,7 +71,11 @@ class StackingDataset(torch.utils.data.Dataset):
         else:
             self.num_data = self.num_train_data
 
-        path = pathlib.Path(__file__).parent.absolute().joinpath("data", "stacking.pt")
+        path = (
+            pathlib.Path(__file__)
+            .parent.absolute()
+            .joinpath("data", "stacking", "test.pt" if self.test else "train.pt")
+        )
         if force_regenerate or not path.exists():
             util.logging.info(f"Generating dataset (test = {self.test})...")
 
@@ -82,34 +86,20 @@ class StackingDataset(torch.utils.data.Dataset):
             util.set_seed(seed)
 
             # Generate new dataset
-            # --Train
-            train_obs = stacking_pyro.generate_from_true_generative_model(
-                self.num_train_data, num_primitives=3, device=device
+            self.obs = stacking_pyro.generate_from_true_generative_model(
+                self.num_data, num_primitives=3, device=device
             )
-            train_obs_id = torch.arange(self.num_train_data, device=device)
-
-            # --Test
-            test_obs = stacking_pyro.generate_from_true_generative_model(
-                self.num_test_data, num_primitives=3, device=device
-            )
-            test_obs_id = torch.arange(self.num_test_data, device=device)
+            self.obs_id = torch.arange(self.num_data, device=device)
 
             # Save dataset
-            torch.save([train_obs, train_obs_id, test_obs, test_obs_id], path)
+            torch.save([self.obs, self.obs_id], path)
             util.logging.info(f"Dataset (test = {self.test}) generated and saved to {path}")
         else:
             util.logging.info(f"Loading dataset (test = {self.test})...")
 
             # Load dataset
-            train_obs, train_obs_id, test_obs, test_obs_id = torch.load(path, map_location=device)
+            self.obs, self.obs_id = torch.load(path, map_location=device)
             util.logging.info(f"Dataset (test = {self.test}) loaded {path}")
-
-        if self.test:
-            self.obs, self.obs_id = test_obs, test_obs_id
-            train_obs, train_obs_id = None, None
-        else:
-            self.obs, self.obs_id = train_obs, train_obs_id
-            test_obs, test_obs_id = None, None
 
     def __getitem__(self, idx):
         return self.obs[idx], self.obs_id[idx]
