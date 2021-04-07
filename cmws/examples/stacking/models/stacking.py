@@ -334,3 +334,123 @@ class Guide(nn.Module):
         raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
 
         return num_blocks, stacking_program, raw_locations
+
+    def sample_discrete(self, obs, sample_shape=[]):
+        """z_d ~ q(z_d | x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            sample_shape
+
+        Returns
+            num_blocks [*sample_shape, *shape]
+            stacking_program [*sample_shape, *shape, max_num_blocks]
+        """
+        # Compute params
+        num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
+
+        # Sample from q(Num blocks | x)
+        num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
+
+        # Sample from q(Stacking program | x)
+        stacking_program = torch.distributions.Categorical(logits=stacking_program_params).sample(
+            sample_shape
+        )
+
+        return num_blocks, stacking_program
+
+    def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+            sample_shape
+
+        Returns
+            raw_locations [*sample_shape, *discrete_shape, *shape, max_num_blocks]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+        shape = obs.shape[:-3]
+        discrete_shape = list(num_blocks.shape[: -len(shape)])
+
+        # Compute params
+        _, _, (loc, scale) = self.get_dist_params(obs)
+
+        # Sample from q(Raw locations | x)
+        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape)
+
+        return raw_locations
+
+    def log_prob_discrete(self, obs, discrete_latent):
+        """log q(z_d | x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+
+        Returns [*discrete_shape, *shape]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+
+        # Compute params
+        num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
+
+        # log q(Num blocks | x)
+        num_blocks_log_prob = util.CategoricalPlusOne(logits=num_blocks_params).log_prob(num_blocks)
+
+        # log q(Stacking program | x)
+        stacking_program_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_program_params).log_prob(
+                stacking_program
+            ),
+            num_blocks,
+            0,
+        ).sum(-1)
+
+        return num_blocks_log_prob + stacking_program_log_prob
+
+    def log_prob_continuous(self, obs, discrete_latent, continuous_latent):
+        """log q(z_c | z_d, x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+            continuous_latent (raw_locations)
+                [*continuous_shape, *discrete_shape, *shape, max_num_blocks]
+
+        Returns [*continuous_shape, *discrete_shape, *shape]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+        raw_locations = continuous_latent
+        shape = obs.shape[:-3]
+        discrete_shape = num_blocks.shape[: -len(shape)]
+        continuous_shape = continuous_latent.shape[: -(1 + len(shape) + len(discrete_shape))]
+        continuous_num_elements = util.get_num_elements(continuous_shape)
+
+        # Compute params
+        _, _, (loc, scale) = self.get_dist_params(obs)
+
+        # Expand num_blocks
+        # [*continuous_shape, *discrete_shape, *shape]
+        num_blocks_expanded = (
+            num_blocks[None]
+            .expand(*[continuous_num_elements, *discrete_shape, *shape])
+            .view(*[*continuous_shape, *discrete_shape, *shape])
+        )
+
+        # log q(Raw locations | x)
+        raw_locations_log_prob = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks_expanded, 0,
+        ).sum(-1)
+
+        return raw_locations_log_prob
