@@ -24,6 +24,7 @@ from cmws.examples.csg.models import (
 
 # Init, saving, etc
 def init(run_args, device):
+    memory = None
     if run_args.model_type == "rectangles":
         # Generative model
         generative_model = rectangles.GenerativeModel().to(device)
@@ -98,7 +99,7 @@ def init(run_args, device):
         guide = shape_program_pyro.Guide(num_primitives=run_args.num_primitives).to(device)
 
     # Model tuple
-    model = {"generative_model": generative_model, "guide": guide}
+    model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
     if run_args.model_type == "rectangles":
@@ -119,13 +120,14 @@ def init(run_args, device):
 
 def save_checkpoint(path, model, optimizer, stats, run_args=None):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    generative_model, guide = model["generative_model"], model["guide"]
+    generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
     torch.save(
         {
             "generative_model_state_dict": None
             if run_args.model_type == "rectangles"
             else generative_model.state_dict(),
             "guide_state_dict": guide.state_dict(),
+            "memory_state_dict": None if memory is None else memory.state_dict(),
             "optimizer_state_dict": optimizer.get_state()
             if "_pyro" in run_args.model_type
             else optimizer.state_dict(),
@@ -142,13 +144,14 @@ def load_checkpoint(path, device):
     run_args = checkpoint["run_args"]
     model, optimizer, stats = init(run_args, device)
 
-    generative_model, guide = model["generative_model"], model["guide"]
+    generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
     guide.load_state_dict(checkpoint["guide_state_dict"])
-
     if run_args.model_type != "rectangles":
         generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
+    if memory is not None:
+        memory.load_state_dict(checkpoint["memory_state_dict"])
 
-    model = {"generative_model": generative_model, "guide": guide}
+    model = {"generative_model": generative_model, "guide": guide, "memory": None}
     if "_pyro" in run_args.model_type:
         optimizer.set_state(checkpoint["optimizer_state_dict"])
     else:
