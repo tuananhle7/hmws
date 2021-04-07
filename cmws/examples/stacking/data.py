@@ -73,7 +73,7 @@ class StackingDataset(torch.utils.data.Dataset):
 
         path = pathlib.Path(__file__).parent.absolute().joinpath("data", "stacking.pt")
         if force_regenerate or not path.exists():
-            util.logging.info("Generating dataset...")
+            util.logging.info(f"Generating dataset (test = {self.test})...")
 
             # Make path
             pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -96,13 +96,13 @@ class StackingDataset(torch.utils.data.Dataset):
 
             # Save dataset
             torch.save([train_obs, train_obs_id, test_obs, test_obs_id], path)
-            util.logging.info(f"Dataset generated and saved to {path}")
+            util.logging.info(f"Dataset (test = {self.test}) generated and saved to {path}")
         else:
-            util.logging.info("Loading dataset...")
+            util.logging.info(f"Loading dataset (test = {self.test})...")
 
             # Load dataset
             train_obs, train_obs_id, test_obs, test_obs_id = torch.load(path, map_location=device)
-            util.logging.info(f"Dataset loaded {path}")
+            util.logging.info(f"Dataset (test = {self.test}) loaded {path}")
 
         if self.test:
             self.obs, self.obs_id = test_obs, test_obs_id
@@ -116,3 +116,13 @@ class StackingDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return self.num_data
+
+
+def get_stacking_data_loader(device, batch_size, test=False):
+    if test:
+        shuffle = True
+    else:
+        shuffle = False
+    return torch.utils.data.DataLoader(
+        StackingDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
+    )
