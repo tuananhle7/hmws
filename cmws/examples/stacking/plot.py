@@ -441,7 +441,7 @@ def main(args):
     #     if os.path.exists(checkpoint_path):
     #         # Load checkpoint
     #         model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
-    #         generative_model, guide = model
+    #         generative_model, guide = model["generative_model"], model["guide"]
     #         num_iterations = len(stats.losses)
 
     #         # Logp
@@ -470,7 +470,7 @@ def main(args):
             model, optimizer, stats, run_args = stacking_util.load_checkpoint(
                 checkpoint_path, device=device
             )
-            generative_model, guide = model
+            generative_model, guide = model["generative_model"], model["guide"]
             num_iterations = len(stats.losses)
 
             # Plot stats

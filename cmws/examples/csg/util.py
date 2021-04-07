@@ -98,7 +98,7 @@ def init(run_args, device):
         guide = shape_program_pyro.Guide(num_primitives=run_args.num_primitives).to(device)
 
     # Model tuple
-    model = (generative_model, guide)
+    model = {"generative_model": generative_model, "guide": guide}
 
     # Optimizer
     if run_args.model_type == "rectangles":
@@ -119,7 +119,7 @@ def init(run_args, device):
 
 def save_checkpoint(path, model, optimizer, stats, run_args=None):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    generative_model, guide = model
+    generative_model, guide = model["generative_model"], model["guide"]
     torch.save(
         {
             "generative_model_state_dict": None
@@ -142,13 +142,13 @@ def load_checkpoint(path, device):
     run_args = checkpoint["run_args"]
     model, optimizer, stats = init(run_args, device)
 
-    generative_model, guide = model
+    generative_model, guide = model["generative_model"], model["guide"]
     guide.load_state_dict(checkpoint["guide_state_dict"])
 
     if run_args.model_type != "rectangles":
         generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
 
-    model = (generative_model, guide)
+    model = {"generative_model": generative_model, "guide": guide}
     if "_pyro" in run_args.model_type:
         optimizer.set_state(checkpoint["optimizer_state_dict"])
     else:

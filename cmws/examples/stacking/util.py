@@ -69,8 +69,11 @@ def init(run_args, device):
             num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
         ).to(device)
 
-    # Model tuple
-    model = (generative_model, guide)
+    # Model dict
+    model = {
+        "generative_model": generative_model,
+        "guide": guide,
+    }
 
     # Optimizer
     if "_pyro" in run_args.model_type:
@@ -87,7 +90,7 @@ def init(run_args, device):
 
 def save_checkpoint(path, model, optimizer, stats, run_args=None):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    generative_model, guide = model
+    generative_model, guide = model["generative_model"], model["guide"]
     torch.save(
         {
             "generative_model_state_dict": generative_model.state_dict(),
@@ -116,11 +119,14 @@ def load_checkpoint(path, device, num_tries=3):
     run_args = checkpoint["run_args"]
     model, optimizer, stats = init(run_args, device)
 
-    generative_model, guide = model
+    generative_model, guide = model["generative_model"], model["guide"]
     guide.load_state_dict(checkpoint["guide_state_dict"])
     generative_model.load_state_dict(checkpoint["generative_model_state_dict"])
 
-    model = (generative_model, guide)
+    model = {
+        "generative_model": generative_model,
+        "guide": guide,
+    }
     if "_pyro" in run_args.model_type:
         optimizer.set_state(checkpoint["optimizer_state_dict"])
     else:

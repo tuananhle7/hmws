@@ -10,7 +10,7 @@ def train(model, optimizer, stats, args):
     checkpoint_path = util.get_checkpoint_path(args)
     num_iterations_so_far = len(stats.losses)
     num_sleep_pretraining_iterations_so_far = len(stats.sleep_pretraining_losses)
-    generative_model, guide = model
+    generative_model, guide = model["generative_model"], model["guide"]
     device = generative_model.device
 
     # Initialize optimizer for pyro models
@@ -68,7 +68,7 @@ def train(model, optimizer, stats, args):
             )
 
         # Make a model tuple
-        model = generative_model, guide
+        model = {"generative_model": generative_model, "guide": guide}
 
         # Save checkpoint
         if (
@@ -205,7 +205,7 @@ def train(model, optimizer, stats, args):
             )
 
         # Make a model tuple
-        model = generative_model, guide
+        model = {"generative_model": generative_model, "guide": guide}
 
         # Save checkpoint
         if iteration % args.save_interval == 0 or iteration == args.num_iterations - 1:
