@@ -116,7 +116,7 @@ class GenerativeModel(nn.Module):
                 stacking_program [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
-        Returns: [*shape, num_channels, num_rows, num_cols]
+        Returns: [*shape, num_channels, im_size, im_size]
         """
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
@@ -140,7 +140,7 @@ class GenerativeModel(nn.Module):
                 stacking_program [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
-        Returns: [*shape, num_channels, num_rows, num_cols]
+        Returns: [*shape, num_channels, im_size, im_size]
         """
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
@@ -157,7 +157,7 @@ class GenerativeModel(nn.Module):
                 num_blocks [*shape]
                 stacking_program [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
 
         Returns: [*shape]
         """
@@ -184,7 +184,7 @@ class GenerativeModel(nn.Module):
                 num_blocks [*sample_shape]
                 stacking_program [*sample_shape, max_num_blocks]
                 raw_locations [*sample_shape, max_num_blocks]
-            obs [*sample_shape, num_channels, num_rows, num_cols]
+            obs [*sample_shape, num_channels, im_size, im_size]
         """
         # p(z)
         latent = self.latent_sample(sample_shape)
@@ -234,7 +234,7 @@ class Guide(nn.Module):
     def get_dist_params(self, obs):
         """
         Args
-            obs: [*shape, num_channels, num_rows, num_cols]
+            obs: [*shape, num_channels, im_size, im_size]
 
         Returns
             num_blocks_params [*shape, max_num_blocks]
@@ -275,7 +275,7 @@ class Guide(nn.Module):
     def log_prob(self, obs, latent):
         """
         Args
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
             latent:
                 num_blocks [*shape]
                 stacking_program [*shape, max_num_blocks]
@@ -312,7 +312,7 @@ class Guide(nn.Module):
         """z ~ q(z | x)
 
         Args
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
 
         Returns
             num_blocks [*sample_shape, *shape]
