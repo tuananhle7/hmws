@@ -51,7 +51,7 @@ def generate_test_obs(run_args, device):
 
 class StackingDataset(torch.utils.data.Dataset):
     """Loads or generates a dataset
-    Uses ~12M (test) / 1.2GB (train)
+    Uses ~1.2M (test) / 120MB (train)
 
     Args
         device
@@ -64,8 +64,8 @@ class StackingDataset(torch.utils.data.Dataset):
     def __init__(self, device, test=False, force_regenerate=False, seed=1):
         self.device = device
         self.test = test
-        self.num_train_data = 100000
-        self.num_test_data = 1000
+        self.num_train_data = 10000
+        self.num_test_data = 100
         if self.test:
             self.num_data = self.num_test_data
         else:
