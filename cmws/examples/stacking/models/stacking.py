@@ -172,6 +172,38 @@ class GenerativeModel(nn.Module):
 
         return latent_log_prob + obs_log_prob
 
+    def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
+        """Log joint probability of the generative model
+        log p(z, x)
+
+        Args:
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+            continuous_latent
+                raw_locations [*continuous_shape, *discrete_shape, *shape, max_num_blocks]
+            obs [*shape, num_channels, im_size, im_size]
+
+        Returns: [*continuous_shape, *discrete_shape, *shape]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+        raw_locations = continuous_latent
+        shape = obs.shape[:-3]
+        discrete_shape = num_blocks.shape[: -len(shape)]
+        continuous_shape = continuous_latent.shape[: -(1 + len(shape) + len(discrete_shape))]
+        continuous_num_elements = util.get_num_elements(continuous_shape)
+
+        # Expand discrete latent
+        num_blocks_expanded = num_blocks[None].expand(
+            *[continuous_num_elements, *discrete_shape, *shape]
+        )
+        stacking_program_expanded = stacking_program[None].expand(
+            *[continuous_num_elements, *discrete_shape, *shape, self.max_num_blocks]
+        )
+
+        return self.log_prob((num_blocks_expanded, stacking_program_expanded, raw_locations), obs)
+
     @torch.no_grad()
     def sample(self, sample_shape=[]):
         """Sample from p(z, x)

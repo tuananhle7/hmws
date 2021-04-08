@@ -238,3 +238,37 @@ def get_log_p_and_kl(generative_model, guide, obs, num_particles):
     kl = log_p - elbo
 
     return log_p, kl
+
+
+def get_log_marginal_joint(generative_model, guide, discrete_latent, obs, num_particles):
+    """Estimate log p(z_d, x) using importance sampling
+
+    Args:
+        generative_model
+        guide
+        discrete_latent
+            [*shape, *dims]
+
+            OR
+
+            [*shape, *dims1]
+            ...
+            [*shape, *dimsN]
+        obs: tensor of shape [*shape, *obs_dims]
+        num_particles
+
+    Returns: [*shape]
+    """
+    # c ~ q(c | d, x)
+    # [num_particles, *shape, ...]
+    continuous_latent = guide.sample_continuous(obs, discrete_latent, [num_particles])
+
+    # log q(c | d)
+    # [num_particles, *shape]
+    log_q_continuous = guide.log_prob_continuous(obs, discrete_latent, continuous_latent)
+
+    # log p(d, c, x)
+    # [num_particles, *shape]
+    log_p = generative_model.log_prob_discrete_continuous(discrete_latent, continuous_latent, obs)
+
+    return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
