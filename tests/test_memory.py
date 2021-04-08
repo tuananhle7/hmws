@@ -7,12 +7,12 @@ def test_dims_single_x():
     dims = [5, 6]
     k, n = 7, 8
 
-    x = torch.randint(2, size=shape + [n] + dims)
-    scores = torch.randn(*[*shape, n])
+    x = torch.randint(2, size=[n] + shape + dims)
+    scores = torch.randn(*[n, *shape])
     x_selected, scores_selected = cmws.memory.get_unique_and_top_k(x, scores, k)
 
-    assert list(x_selected.shape) == shape + [k] + dims
-    assert list(scores_selected.shape) == shape + [k]
+    assert list(x_selected.shape) == [k] + shape + dims
+    assert list(scores_selected.shape) == [k] + shape
 
 
 def test_dims_multiple_x():
@@ -21,17 +21,18 @@ def test_dims_multiple_x():
     dims_1 = [7, 8]
     k, n = 9, 10
 
-    x = [torch.randint(2, size=shape + [n] + dims_0), torch.randint(2, size=shape + [n] + dims_1)]
-    scores = torch.randn(*[*shape, n])
+    x = [torch.randint(2, size=[n] + shape + dims_0), torch.randint(2, size=[n] + shape + dims_1)]
+    scores = torch.randn(*[n, *shape])
     x_selected, scores_selected = cmws.memory.get_unique_and_top_k(x, scores, k)
 
     assert len(x_selected) == 2
-    assert list(x_selected[0].shape) == shape + [k] + dims_0
-    assert list(x_selected[1].shape) == shape + [k] + dims_1
-    assert list(scores_selected.shape) == shape + [k]
+    assert list(x_selected[0].shape) == [k] + shape + dims_0
+    assert list(x_selected[1].shape) == [k] + shape + dims_1
+    assert list(scores_selected.shape) == [k] + shape
 
 
 def test_value():
+    # shape is []
     k = 2
     x = torch.tensor([[0, 1, 2, 3], [3, 2, 4, 1], [0, 1, 2, 3], [3, 1, 3, 2], [1, 2, 4, 1]]).long()
     scores = torch.tensor([10, 3, 10, 1, 5]).float()

@@ -206,32 +206,32 @@ def get_unique_and_top_k(x, scores, k):
 
     Args
         x (note that k <= n)
-            tensor [*shape, n, *dims]
+            tensor [n, *shape, *dims]
 
             or
 
             list of N tensors
-            [*shape, n, *dims_1]
+            [n, *shape, *dims_1]
             ...
-            [*shape, n, *dims_N]
-        scores [*shape, n]
+            [n, *shape, *dims_N]
+        scores [n, *shape]
         k (int)
 
     Returns
         x_selected
-            tensor [*shape, k, *dims]
+            tensor [k, *shape, *dims]
 
             or
 
             list of N tensors
-            [*shape, k, *dims_1]
+            [k, *shape, *dims_1]
             ...
-            [*shape, k, *dims_N]
-        scores_selected [*shape, k]
+            [k, *shape, *dims_N]
+        scores_selected [k, *shape]
     """
     # Extract
-    shape = scores.shape[:-1]
-    n = scores.shape[-1]
+    shape = scores.shape[1:]
+    n = scores.shape[0]
     num_elements = util.get_num_elements(shape)
     if torch.is_tensor(x):
         dims = x.shape[(len(shape) + 1) :]
@@ -242,14 +242,14 @@ def get_unique_and_top_k(x, scores, k):
     # Flatten
     # --Flatten x
     if torch.is_tensor(x):
-        # [num_elements, n, total_ndims]
-        x_flattened = x.view(num_elements, n, -1)
+        # [n, num_elements, total_ndims]
+        x_flattened = x.view(n, num_elements, -1)
     else:
-        # [num_elements, n, total_ndims_1 + ... + total_ndims_N]
-        x_flattened = torch.cat([single_x.view(num_elements, n, -1) for single_x in x], dim=-1)
+        # [n, num_elements, total_ndims_1 + ... + total_ndims_N]
+        x_flattened = torch.cat([single_x.view(n, num_elements, -1) for single_x in x], dim=-1)
 
     # --Flatten scores
-    scores_flattened = scores.view(num_elements, n)
+    scores_flattened = scores.view(n, num_elements)
 
     # Do everything unbatched
     x_top_k = []
@@ -257,9 +257,9 @@ def get_unique_and_top_k(x, scores, k):
     for element_id in range(num_elements):
         # Take the unique elements
         # [num_unique, total_ndims], [num_unique]
-        x_unique, indices_unique = util.unique(x_flattened[element_id], dim=0)
+        x_unique, indices_unique = util.unique(x_flattened[:, element_id], dim=0)
         # [num_unique]
-        scores_unique = scores_flattened[element_id][indices_unique]
+        scores_unique = scores_flattened[:, element_id][indices_unique]
 
         # Take the top k
         # --Sort
@@ -268,19 +268,19 @@ def get_unique_and_top_k(x, scores, k):
         # --Take top k
         x_top_k.append(x_unique[indices_sorted[-k:]])
         scores_top_k.append(scores_sorted[-k:])
-    # [num_elements, k, total_ndims] or [num_elements, k, total_ndims_1 + ... + total_ndims_N]
-    x_top_k = torch.stack(x_top_k)
-    # [num_elements, k]
-    scores_top_k = torch.stack(scores_top_k)
+    # [k, num_elements, total_ndims] or [k, num_elements, total_ndims_1 + ... + total_ndims_N]
+    x_top_k = torch.stack(x_top_k, dim=1)
+    # [k, num_elements]
+    scores_top_k = torch.stack(scores_top_k, dim=1)
 
     # Unflatten
     # --Unflatten x
     if torch.is_tensor(x):
-        # [*shape, k, *dims]
-        x_selected = x_top_k.view(*[*shape, k, *dims])
+        # [k, *shape, *dims]
+        x_selected = x_top_k.view(*[k, *shape, *dims])
     else:
         # Split up the xs
-        # [*shape, k, *dims_1], ..., [*shape, k, *dims_N]
+        # [k, *shape, *dims_1], ..., [k, *shape, *dims_N]
         x_selected = []
         start = 0
         end = total_ndimss[0]
@@ -293,9 +293,9 @@ def get_unique_and_top_k(x, scores, k):
                 x_tmp = x_top_k[:, :, start:end]
                 start = end
                 end = start + total_ndimss[i + 1]
-            x_selected.append(x_tmp.view(*[*shape, k, *dimss[i]]))
+            x_selected.append(x_tmp.view(*[k, *shape, *dimss[i]]))
 
     # --Unflatten scores
-    scores_selected = scores_top_k.view(*[*shape, k])
+    scores_selected = scores_top_k.view(*[k, *shape])
 
     return x_selected, scores_selected
