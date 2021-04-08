@@ -157,6 +157,7 @@ def train(model, optimizer, stats, args):
                     obs_id,
                     args.num_particles,
                     args.num_proposals_mws,
+                    insomnia=args.insomnia,
                 ).mean()
 
             # Compute gradient
