@@ -1,5 +1,5 @@
 import torch
-from cmws.examples.stacking.models.stacking import Guide
+from cmws.examples.stacking.models.stacking import GenerativeModel, Guide
 
 
 def test_guide_sample_discrete_dims():
@@ -83,5 +83,23 @@ def test_guide_log_prob_dims():
     raw_locations = torch.randn(*[*sample_shape, *shape, guide.max_num_blocks])
 
     log_prob = guide.log_prob(obs, (num_blocks, stacking_program, raw_locations))
+
+    assert list(log_prob.shape) == sample_shape + shape
+
+
+def test_generative_model_log_prob_dims():
+    num_channels, im_size = 3, 32
+    shape = [2, 3]
+    sample_shape = [4, 5]
+
+    generative_model = GenerativeModel(im_size=im_size)
+    obs = torch.rand(*[*shape, num_channels, im_size, im_size])
+    num_blocks = torch.randint(2, size=sample_shape + shape) + 1
+    stacking_program = torch.randint(
+        2, size=sample_shape + shape + [generative_model.max_num_blocks]
+    )
+    raw_locations = torch.randn(*[*sample_shape, *shape, generative_model.max_num_blocks])
+
+    log_prob = generative_model.log_prob((num_blocks, stacking_program, raw_locations), obs)
 
     assert list(log_prob.shape) == sample_shape + shape

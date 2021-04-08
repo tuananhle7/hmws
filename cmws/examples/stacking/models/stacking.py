@@ -154,12 +154,12 @@ class GenerativeModel(nn.Module):
 
         Args:
             latent:
-                num_blocks [*shape]
-                stacking_program [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
+                num_blocks [*sample_shape, *shape]
+                stacking_program [*sample_shape, *shape, max_num_blocks]
+                raw_locations [*sample_shape, *shape, max_num_blocks]
             obs [*shape, num_channels, im_size, im_size]
 
-        Returns: [*shape]
+        Returns: [*sample_shape, *shape]
         """
         # p(z)
         latent_log_prob = self.latent_log_prob(latent)
