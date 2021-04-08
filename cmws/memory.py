@@ -192,15 +192,16 @@ def flatten_tensors(x, len_shape):
 
         [*shape, total_ndims_1 + ... + total_ndims_N]
     """
-    # Extract
-    shape = x.shape[:len_shape]
-
     # Flatten
     # --Flatten x
     if torch.is_tensor(x):
+        shape = x.shape[:len_shape]
+
         # [*shape, total_ndims]
         x_flattened = x.view(*[*shape, -1])
     else:
+        shape = x[0].shape[:len_shape]
+
         # [*shape, total_ndims_1 + ... + total_ndims_N]
         x_flattened = torch.cat([single_x.view(*[*shape, -1]) for single_x in x], dim=-1)
 
