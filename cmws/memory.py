@@ -170,39 +170,39 @@ class Memory:
         raise NotImplementedError
 
 
-def flatten_tensors(x):
+def flatten_tensors(x, len_shape):
     """Flatten tensor / list of tensors into a single tensor
 
     Args
         x
-            tensor [n, batch_size, *dims]
+            tensor [*shape, *dims]
 
             or
 
             list of N tensors
-            [n, batch_size, *dims_1]
+            [*shape, *dims_1]
             ...
-            [n, batch_size, *dims_N]
+            [*shape, *dims_N]
+        len_shape (int) is the length of shape
 
     Returns
-        [n, batch_size, total_ndims]
+        [*shape, total_ndims]
 
         OR
 
-        [n, batch_size, total_ndims_1 + ... + total_ndims_N]
+        [*shape, total_ndims_1 + ... + total_ndims_N]
     """
     # Extract
-    batch_size = x.shape[1]
-    n = x.shape[0]
+    shape = x.shape[:len_shape]
 
     # Flatten
     # --Flatten x
     if torch.is_tensor(x):
-        # [n, batch_size, total_ndims]
-        x_flattened = x.view(n, batch_size, -1)
+        # [*shape, total_ndims]
+        x_flattened = x.view(*[*shape, -1])
     else:
-        # [n, batch_size, total_ndims_1 + ... + total_ndims_N]
-        x_flattened = torch.cat([single_x.view(n, batch_size, -1) for single_x in x], dim=-1)
+        # [*shape, total_ndims_1 + ... + total_ndims_N]
+        x_flattened = torch.cat([single_x.view(*[*shape, -1]) for single_x in x], dim=-1)
 
     return x_flattened
 
@@ -268,6 +268,7 @@ def get_unique_and_top_k(x, scores, k):
     """
     # Extract
     shape = scores.shape[1:]
+    n = scores.shape[0]
     num_elements = util.get_num_elements(shape)
     if torch.is_tensor(x):
         dims = x.shape[(len(shape) + 1) :]
@@ -277,10 +278,10 @@ def get_unique_and_top_k(x, scores, k):
 
     # Flatten
     # --Flatten x
-    x_flattened = flatten_tensors(x)
+    x_flattened = flatten_tensors(x, 1 + len(shape)).view(n, num_elements, -1)
 
     # --Flatten scores
-    scores_flattened = flatten_tensors(scores)
+    scores_flattened = scores.view(n, num_elements)
 
     # Do everything unbatched
     x_top_k = []
