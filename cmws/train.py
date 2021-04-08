@@ -150,7 +150,13 @@ def train(model, optimizer, stats, args):
                 ).mean()
             elif args.algorithm == "cmws":
                 loss = losses.get_cmws_loss(
-                    generative_model, guide, obs, obs_id, args.num_particles, args.num_proposals_mws
+                    generative_model,
+                    guide,
+                    memory,
+                    obs,
+                    obs_id,
+                    args.num_particles,
+                    args.num_proposals_mws,
                 ).mean()
 
             # Compute gradient

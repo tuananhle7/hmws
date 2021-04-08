@@ -100,6 +100,7 @@ class Memory:
     def to(self, device):
         for group_id in range(self.num_groups):
             self.memory_groups[group_id] = self.memory_groups[group_id].to(device)
+        return self
 
     def state_dict(self):
         return [self.memory_groups[group_id] for group_id in range(self.num_groups)]
