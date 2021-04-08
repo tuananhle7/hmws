@@ -148,6 +148,10 @@ def train(model, optimizer, stats, args):
                 loss = losses.get_vimco_loss(
                     generative_model, guide, obs, args.num_particles
                 ).mean()
+            elif args.algorithm == "cmws":
+                loss = losses.get_cmws_loss(
+                    generative_model, guide, obs, obs_id, args.num_particles, args.num_proposals_mws
+                ).mean()
 
             # Compute gradient
             loss.backward()

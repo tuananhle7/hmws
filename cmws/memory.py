@@ -170,6 +170,36 @@ class Memory:
         raise NotImplementedError
 
 
+def concat(x, y):
+    """Concatenates latent x and latent y
+
+    Args
+        x, y
+            tensor [batch_size, n_x or n_y, *dims]
+
+            or
+
+            list of N tensors
+            [batch_size, n_x or n_y, *dims_1]
+            ...
+            [batch_size, n_x or n_y, *dims_N]
+
+    Returns
+            tensor [batch_size, n_x + n_y, *dims]
+
+            or
+
+            list of N tensors
+            [batch_size, n_x + n_y, *dims_1]
+            ...
+            [batch_size, n_x + n_y, *dims_N]
+    """
+    if torch.istensor(x):
+        return torch.cat([x, y], dim=1)
+    else:
+        return [torch.cat([x_, y_], dim=1) for x_, y_ in zip(x, y)]
+
+
 def get_unique_and_top_k(x, scores, k):
     """Removes duplicates in x, sorts them according to their scores and
     takes the top k.

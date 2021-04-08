@@ -28,12 +28,13 @@ def get_args_parser():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
-        "--algorithm", default="rws", choices=["rws", "elbo", "vimco"], help=" ",
+        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws"], help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=5, type=int, help=" ")
     parser.add_argument("--num-particles", default=50, type=int, help=" ")
     parser.add_argument("--memory-size", default=10, type=int, help=" ")
+    parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
     parser.add_argument("--test-num-particles", default=500, type=int, help=" ")
 
     # Model
