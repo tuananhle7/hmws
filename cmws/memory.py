@@ -36,7 +36,7 @@ class Memory:
 
     Args
         num_obs (int)
-        memory_size (int)
+        size (int)
         event_shapes
             list
                 shape of the latent variable group
@@ -60,7 +60,10 @@ class Memory:
                     is the range of the ith latent variable group
     """
 
-    def __init__(self, num_obs, memory_size, event_shapes, event_ranges):
+    def __init__(self, num_obs, size, event_shapes, event_ranges):
+        self.num_obs = num_obs
+        self.size = size
+
         # Determine number of groups
         if isinstance(event_shapes[0], int):
             self.num_groups = 1
@@ -73,7 +76,7 @@ class Memory:
             self.event_ranges = event_ranges
 
         self.memory_groups = [
-            init_memory_group(num_obs, memory_size, event_shape, event_range)
+            init_memory_group(num_obs, size, event_shape, event_range)
             for event_shape, event_range in zip(self.event_shapes, self.event_ranges)
         ]
 
@@ -98,12 +101,12 @@ class Memory:
             obs_id [batch_size]
 
         Returns
-            [batch_size, memory_size, ...]
+            [batch_size, size, ...]
 
             OR
 
             list of tensors latent_groups
-                latent_groups[i]'s shape is [batch_size, memory_size, *event_shape[i]]
+                latent_groups[i]'s shape is [batch_size, size, *event_shape[i]]
         """
         latent = [memory_group[obs_id] for memory_group in self.memory_groups]
         if self.num_groups == 1:
@@ -116,12 +119,12 @@ class Memory:
         Args
             obs_id [batch_size]
             latent
-                [batch_size, memory_size, ...]
+                [batch_size, size, ...]
 
                 OR
 
                 list of tensors latent_groups
-                    latent_groups[i]'s shape is [batch_size, memory_size, *event_shape[i]]
+                    latent_groups[i]'s shape is [batch_size, size, *event_shape[i]]
         """
         if self.num_groups == 1:
             self.memory_groups[0][obs_id] = latent
@@ -138,13 +141,13 @@ class Memory:
             sample_shape (list like)
 
         Returns
-            [*sample_shape, batch_size, memory_size, ...]
+            [*sample_shape, batch_size, size, ...]
 
             OR
 
             list of tensors latent_groups
                 latent_groups[i]'s shape is
-                [*sample_shape, batch_size, memory_size, *event_shape[i]]
+                [*sample_shape, batch_size, size, *event_shape[i]]
         """
         raise NotImplementedError
 
@@ -155,12 +158,12 @@ class Memory:
             obs [batch_size, *obs_dims]
             generative_model
             latent
-                [*shape, batch_size, memory_size, ...]
+                [*shape, batch_size, size, ...]
 
                 OR
 
                 list of tensors latent_groups
-                    latent_groups[i]'s shape is [*shape, batch_size, memory_size, *event_shape[i]]
+                    latent_groups[i]'s shape is [*shape, batch_size, size, *event_shape[i]]
 
         Returns [*shape]
         """
