@@ -268,7 +268,6 @@ def get_unique_and_top_k(x, scores, k):
     """
     # Extract
     shape = scores.shape[1:]
-    n = scores.shape[0]
     num_elements = util.get_num_elements(shape)
     if torch.is_tensor(x):
         dims = x.shape[(len(shape) + 1) :]
