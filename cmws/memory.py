@@ -170,6 +170,43 @@ class Memory:
         raise NotImplementedError
 
 
+def flatten_tensors(x):
+    """Flatten tensor / list of tensors into a single tensor
+
+    Args
+        x
+            tensor [n, batch_size, *dims]
+
+            or
+
+            list of N tensors
+            [n, batch_size, *dims_1]
+            ...
+            [n, batch_size, *dims_N]
+
+    Returns
+        [n, batch_size, total_ndims]
+
+        OR
+
+        [n, batch_size, total_ndims_1 + ... + total_ndims_N]
+    """
+    # Extract
+    batch_size = x.shape[1]
+    n = x.shape[0]
+
+    # Flatten
+    # --Flatten x
+    if torch.is_tensor(x):
+        # [n, batch_size, total_ndims]
+        x_flattened = x.view(n, batch_size, -1)
+    else:
+        # [n, batch_size, total_ndims_1 + ... + total_ndims_N]
+        x_flattened = torch.cat([single_x.view(n, batch_size, -1) for single_x in x], dim=-1)
+
+    return x_flattened
+
+
 def concat(x, y):
     """Concatenates latent x and latent y
 
@@ -241,15 +278,10 @@ def get_unique_and_top_k(x, scores, k):
 
     # Flatten
     # --Flatten x
-    if torch.is_tensor(x):
-        # [n, num_elements, total_ndims]
-        x_flattened = x.view(n, num_elements, -1)
-    else:
-        # [n, num_elements, total_ndims_1 + ... + total_ndims_N]
-        x_flattened = torch.cat([single_x.view(n, num_elements, -1) for single_x in x], dim=-1)
+    x_flattened = flatten_tensors(x)
 
     # --Flatten scores
-    scores_flattened = scores.view(n, num_elements)
+    scores_flattened = flatten_tensors(scores)
 
     # Do everything unbatched
     x_top_k = []
