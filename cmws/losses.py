@@ -278,7 +278,9 @@ def get_log_marginal_joint(generative_model, guide, discrete_latent, obs, num_pa
     return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
 
 
-def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, num_proposals):
+def get_cmws_loss(
+    generative_model, guide, memory, obs, obs_id, num_particles, num_proposals, insomnia=1.0
+):
     """MWS loss for hybrid discrete-continuous models as described in
     https://www.overleaf.com/project/5dfd4bbac2914e0001efb29b
 
@@ -348,8 +350,30 @@ def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, n
     )
 
     # COMPUTE losses
-    # [batch_size]
+    # --Compute generative_model loss
     generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
-    guide_loss = -(log_q * normalized_weight).sum(dim=0)
+
+    # --Compute guide loss
+    # ----Compute guide wake loss
+    batch_size = obs.shape[0]
+    if insomnia < 1.0:
+        # [batch_size]
+        guide_loss_sleep = (
+            get_sleep_loss(generative_model, guide, num_particles * batch_size)
+            .view(batch_size, num_particles)
+            .mean(-1)
+        )
+    # ----Compute guide CMWS loss
+    if insomnia > 0.0:
+        # [batch_size]
+        guide_loss_cmws = -(log_q * normalized_weight).sum(dim=0)
+
+    # ----Combine guide sleep and CMWS losses
+    if insomnia == 0.0:
+        guide_loss = guide_loss_sleep
+    elif insomnia == 1.0:
+        guide_loss = guide_loss_cmws
+    else:
+        guide_loss = insomnia * guide_loss_cmws + (1 - insomnia) * guide_loss_sleep
 
     return generative_model_loss + guide_loss
