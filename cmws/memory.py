@@ -23,7 +23,7 @@ def init_memory_group(num_obs, memory_size, event_shape, event_range):
     memory = []
     for _ in range(num_obs):
         while True:
-            x = torch.randint(low, high, *[memory_size, *event_shape])
+            x = torch.randint(low, high, [memory_size] + event_shape)
 
             if len(torch.unique(x, dim=0)) == memory_size:
                 memory.append(x)
