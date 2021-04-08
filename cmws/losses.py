@@ -294,38 +294,53 @@ def get_cmws_loss(generative_model, guide, memory, obs, obs_id, num_particles, n
     Returns:
         loss: scalar that we call .backward() on and step the optimizer
     """
-    # TODO: fix the transposing and shit
+    # SAMPLE d'_{1:R} ~ q(d | x)
     # [num_proposals, batch_size, ...]
     proposed_discrete_latent = guide.sample_discrete(obs, (num_proposals,))
 
+    # ASSIGN d_{1:(R + M)} = CONCAT(d'_{1:R}, d_{1:M})
     # [batch_size, memory_size + num_proposals, ...]
     discrete_latent_concat = cmws.memory.concat(proposed_discrete_latent, memory.select(obs_id))
 
+    # COMPUTE SCORES s_i = log p(d_i, x) for i  {1, ..., (R + M)}
     # [batch_size, memory_size + num_proposals]
     log_marginal_joint = get_log_marginal_joint(
         generative_model, guide, discrete_latent_concat, obs, num_particles
     )
 
+    # ASSIGN d_{1:M} = TOP_K_UNIQUE(d_{1:(R + M)}, s_{1:(R + M)})
     # [batch_size, memory_size, ...]
     discrete_latent_selected, _ = cmws.memory.get_unique_and_top_k(
         discrete_latent_concat, log_marginal_joint, memory.size
     )
 
+    # UPDATE MEMORY with d_{1:M}
     memory.update(obs_id, discrete_latent_selected)
 
+    # SAMPLE CONTINUOUS c_i ~ q(c | d_i, x) for i in {1, ..., M}
     # [memory_size, batch_size, ...]
     continuous_latent = guide.sample_continuous(obs, discrete_latent_selected.T)
 
+    # COMPUTE WEIGHT
+    # --COMPUTE log p(d_i, c_i, x) for i in {1, ..., M}
     # [memory_size, batch_size]
     log_p = generative_model.log_prob((discrete_latent_selected, continuous_latent), obs)
+
+    # --COMPUTE log q(c_i | d_i, x) for i in {1, ..., M}
     log_q_continuous = guide.log_prob_continuous(obs, discrete_latent_selected, continuous_latent)
-    log_q = guide.log_prob(obs, (discrete_latent_selected, continuous_latent))
+
+    # --COMPUTE log (1 / M)
     log_uniform = -math.log(memory.size)
 
+    # --COMPUTE weight w_i and normalize
     normalized_weight = torch.softmax(
         log_p - (log_uniform + log_q_continuous), dim=0
     ).detach()  # [memory_size, batch_size]
 
+    # COMPUTE log q(d_i, c_i | x) for i in {1, ..., M}
+    log_q = guide.log_prob(obs, (discrete_latent_selected, continuous_latent))
+
+    # COMPUTE losses
     generative_model_loss = -(log_p * normalized_weight).sum(dim=0)
     guide_loss = -(log_q * normalized_weight).sum(dim=0)
 
