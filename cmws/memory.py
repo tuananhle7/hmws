@@ -194,7 +194,7 @@ def concat(x, y):
             ...
             [n_x + n_y, batch_size, *dims_N]
     """
-    if torch.istensor(x):
+    if torch.is_tensor(x):
         return torch.cat([x, y], dim=0)
     else:
         return [torch.cat([x_, y_], dim=0) for x_, y_ in zip(x, y)]
