@@ -250,28 +250,28 @@ def get_log_marginal_joint(generative_model, guide, discrete_latent, obs, num_pa
         generative_model
         guide
         discrete_latent
-            [*shape, *dims]
+            [*discrete_shape, *shape, *dims]
 
             OR
 
-            [*shape, *dims1]
+            [*discrete_shape, *shape, *dims1]
             ...
-            [*shape, *dimsN]
+            [*discrete_shape, *shape, *dimsN]
         obs: tensor of shape [*shape, *obs_dims]
         num_particles
 
-    Returns: [*shape]
+    Returns: [*discrete_shape, *shape]
     """
     # c ~ q(c | d, x)
-    # [num_particles, *shape, ...]
+    # [num_particles, *discrete_shape, *shape, ...]
     continuous_latent = guide.sample_continuous(obs, discrete_latent, [num_particles])
 
     # log q(c | d)
-    # [num_particles, *shape]
+    # [num_particles, *discrete_shape, *shape]
     log_q_continuous = guide.log_prob_continuous(obs, discrete_latent, continuous_latent)
 
     # log p(d, c, x)
-    # [num_particles, *shape]
+    # [num_particles, *discrete_shape, *shape]
     log_p = generative_model.log_prob_discrete_continuous(discrete_latent, continuous_latent, obs)
 
     return torch.logsumexp(log_p - log_q_continuous, dim=0) - math.log(num_particles)
