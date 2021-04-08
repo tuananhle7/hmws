@@ -337,6 +337,20 @@ def cycle(iterable):
             yield x
 
 
+def tensors_to_list(tensors):
+    """Convert tensor / list of tensors to a list of tensors
+
+    Args
+        tensors: tensor or list of tensors
+
+    Returns list of tensors
+    """
+    if torch.is_tensor(tensors):
+        return [tensors]
+    else:
+        return tensors
+
+
 if __name__ == "__main__":
     # Test pad_tensor
     x = torch.rand(4)

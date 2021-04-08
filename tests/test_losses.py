@@ -1,6 +1,7 @@
+import cmws
 import cmws.examples.stacking.models.stacking
 import torch
-from cmws.losses import get_log_marginal_joint
+from cmws.losses import get_cmws_loss, get_log_marginal_joint
 
 
 def test_get_log_marginal_joint_dims():
@@ -22,3 +23,28 @@ def test_get_log_marginal_joint_dims():
     )
 
     assert list(log_marginal_joint.shape) == discrete_shape + shape
+
+
+def test_get_cmws_loss_dims():
+    num_channels, im_size = 3, 32
+    batch_size = 7
+    obs = torch.rand(*[batch_size, num_channels, im_size, im_size])
+    obs_id = torch.arange(batch_size)
+    num_particles = 8
+    num_proposals = 9
+
+    device = "cpu"
+    args = cmws.examples.stacking.run.get_args_parser().parse_args([])
+    args.algorithm = "cmws"
+    model, optimizer, stats = cmws.examples.stacking.util.init(args, device)
+    loss = get_cmws_loss(
+        model["generative_model"],
+        model["guide"],
+        model["memory"],
+        obs,
+        obs_id,
+        num_particles,
+        num_proposals,
+    )
+
+    assert len(loss) == batch_size
