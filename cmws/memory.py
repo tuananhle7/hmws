@@ -5,30 +5,46 @@ from cmws import util
 import torch
 
 
-def init_memory_group(num_obs, memory_size, event_shape, event_range):
-    """Initializes a discrete latent variable, making sure it's unique.
+def init_memory_groups(num_obs, memory_size, event_shapes, event_ranges):
+    """Initializes a latent variables, making sure it's unique.
 
     Args
         num_obs (int)
         memory_size (int)
-        event_shape (list) shape of the latent variable group
-        event_range
-            low (int) inclusive
-            high (int) exclusive
+        event_shapes
+            list of lists
+                event_shapes[i] is the shape of the ith latent variable
+                group
+                (there is more than one group)
+        event_ranges
+            list of lists
+                event_ranges[i] = [min_i (inclusive), max_i (exclusive)]
+                    is the range of the ith latent variable group
 
-    Returns [num_obs, memory_size, *event_shape]"""
+    Returns list of
+        [num_obs, memory_size, *event_shapes[i]]
+    """
     # Extract
-    low, high = event_range
+    num_groups = len(event_shapes)
 
-    memory = []
+    latent_groupss = []
     for _ in range(num_obs):
         while True:
-            x = torch.randint(low, high, [memory_size] + event_shape)
+            latent_groups = []
+            for group_id in range(num_groups):
+                low, high = event_ranges[group_id]
+                latent_groups.append(
+                    torch.randint(low, high, [memory_size] + event_shapes[group_id])
+                )
 
-            if len(torch.unique(x, dim=0)) == memory_size:
-                memory.append(x)
+            if len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size:
+                latent_groupss.append(latent_groups)
                 break
-    return torch.stack(memory)
+
+    memory_groups = []
+    for group_id in range(num_groups):
+        memory_groups.append(torch.stack([latent_groupss[i][group_id] for i in range(num_obs)]))
+    return memory_groups
 
 
 class Memory:
@@ -75,10 +91,7 @@ class Memory:
             self.event_shapes = event_shapes
             self.event_ranges = event_ranges
 
-        self.memory_groups = [
-            init_memory_group(num_obs, size, event_shape, event_range)
-            for event_shape, event_range in zip(self.event_shapes, self.event_ranges)
-        ]
+        self.memory_groups = init_memory_groups(num_obs, size, event_shapes, event_ranges)
 
     @property
     def device(self):
