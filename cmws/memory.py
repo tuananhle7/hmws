@@ -48,7 +48,7 @@ class Memory:
                 event_shapes[i] is the shape of the ith latent variable
                 group
                 (there is more than one group)
-        event_ranges (list of lists)
+        event_ranges
             list
                 min (int) inclusive
                 max (int) exclusive
