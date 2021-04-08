@@ -69,3 +69,19 @@ def test_guide_log_prob_continuous_dims():
     log_prob = guide.log_prob_continuous(obs, discrete_latent, continuous_latent)
 
     assert list(log_prob.shape) == continuous_shape + discrete_shape + shape
+
+
+def test_guide_log_prob_dims():
+    num_channels, im_size = 3, 32
+    shape = [2, 3]
+    sample_shape = [4, 5]
+
+    guide = Guide(im_size=im_size)
+    obs = torch.rand(*[*shape, num_channels, im_size, im_size])
+    num_blocks = torch.randint(2, size=sample_shape + shape) + 1
+    stacking_program = torch.randint(2, size=sample_shape + shape + [guide.max_num_blocks])
+    raw_locations = torch.randn(*[*sample_shape, *shape, guide.max_num_blocks])
+
+    log_prob = guide.log_prob(obs, (num_blocks, stacking_program, raw_locations))
+
+    assert list(log_prob.shape) == sample_shape + shape

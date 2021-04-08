@@ -309,11 +309,11 @@ class Guide(nn.Module):
         Args
             obs [*shape, num_channels, im_size, im_size]
             latent:
-                num_blocks [*shape]
-                stacking_program [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
+                num_blocks [*sample_shape, *shape]
+                stacking_program [*sample_shape, *shape, max_num_blocks]
+                raw_locations [*sample_shape, *shape, max_num_blocks]
 
-        Returns [*shape]
+        Returns [*sample_shape, *shape]
         """
         # Extract
         num_blocks, stacking_program, raw_locations = latent
