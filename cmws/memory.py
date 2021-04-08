@@ -101,14 +101,14 @@ class Memory:
             obs_id [batch_size]
 
         Returns
-            [batch_size, size, ...]
+            [size, batch_size, ...]
 
             OR
 
             list of tensors latent_groups
-                latent_groups[i]'s shape is [batch_size, size, *event_shape[i]]
+                latent_groups[i]'s shape is [size, batch_size, *event_shape[i]]
         """
-        latent = [memory_group[obs_id] for memory_group in self.memory_groups]
+        latent = [memory_group[obs_id].transpose(0, 1) for memory_group in self.memory_groups]
         if self.num_groups == 1:
             return latent[0]
         else:
@@ -119,18 +119,18 @@ class Memory:
         Args
             obs_id [batch_size]
             latent
-                [batch_size, size, ...]
+                [size, batch_size, ...]
 
                 OR
 
                 list of tensors latent_groups
-                    latent_groups[i]'s shape is [batch_size, size, *event_shape[i]]
+                    latent_groups[i]'s shape is [size, batch_size, *event_shape[i]]
         """
         if self.num_groups == 1:
-            self.memory_groups[0][obs_id] = latent
+            self.memory_groups[0][obs_id] = latent.transpose(0, 1)
         else:
             for group_id in range(self.num_groups):
-                self.memory_groups[group_id][obs_id] = latent[group_id]
+                self.memory_groups[group_id][obs_id] = latent[group_id].transpose(0, 1)
 
     def sample(self, obs_id, obs, generative_model, sample_shape=[]):
         """

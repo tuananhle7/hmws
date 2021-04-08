@@ -42,3 +42,36 @@ def test_value():
 
     assert torch.equal(x_selected, x_selected_correct)
     assert torch.equal(scores_selected, scores_selected_correct)
+
+
+def test_select():
+    num_obs = 10
+    memory_size = 11
+    event_shapes = [[2, 3], [4, 5]]
+    event_ranges = [[0, 10], [0, 5]]
+    obs_id = torch.tensor([0, 5])
+    batch_size = len(obs_id)
+    num_groups = len(event_shapes)
+
+    memory = cmws.memory.Memory(num_obs, memory_size, event_shapes, event_ranges)
+    latent_groups = memory.select(obs_id)
+    for group_id in range(num_groups):
+        list(latent_groups[group_id].shape) == [memory_size, batch_size] + event_shapes[group_id]
+
+
+def test_update():
+    num_obs = 10
+    memory_size = 11
+    event_shapes = [[2, 3], [4, 5]]
+    event_ranges = [[0, 10], [0, 5]]
+    obs_id = torch.tensor([0, 5])
+    batch_size = len(obs_id)
+    num_groups = len(event_shapes)
+
+    memory = cmws.memory.Memory(num_obs, memory_size, event_shapes, event_ranges)
+
+    latent = [
+        torch.randint(0, 2, [memory_size, batch_size] + event_shapes[group_id])
+        for group_id in range(num_groups)
+    ]
+    memory.update(obs_id, latent)
