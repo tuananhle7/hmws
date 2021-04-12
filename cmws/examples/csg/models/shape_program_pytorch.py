@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from cmws import util
+from cmws.examples.csg import render
 
 
 class GenerativeModel(nn.Module):
@@ -94,6 +95,84 @@ class GenerativeModel(nn.Module):
 
         raise program_id_log_prob + shape_ids_log_prob + raw_positions_log_prob
 
+    def get_shape_obs_logits_single(self, shape_id, raw_position):
+        """p(obs | shape_id, raw_position)
+
+        Args
+            shape_id (int)
+            raw_position [*shape, 2]
+
+        Returns: [*shape, im_size, im_size]
+        """
+        # Extract
+        position = raw_position.sigmoid() - 0.5
+        shape = raw_position.shape[:-1]
+
+        # Get canvas
+        # [*shape]
+        position_x, position_y = position[..., 0], position[..., 1]
+        # [im_size, im_size]
+        canvas_x, canvas_y = render.get_canvas_xy(self.im_size, self.im_size, self.device)
+
+        # Shift and scale
+        # [num_samples, im_size, im_size]
+        canvas_x = canvas_x[None] - position_x.view(-1, 1, 1)
+        canvas_y = canvas_y[None] - position_y.view(-1, 1, 1)
+
+        # Build input
+        # [num_samples * num_rows * num_cols, 1]
+        mlp_input = torch.atan2(canvas_y, canvas_x).view(-1, 1)
+
+        # Run MLP
+        # [*shape, im_size, im_size]
+        logits = self.logit_multipliers_raw[shape_id].exp() * (
+            self.mlps[shape_id](mlp_input).view(*[*shape, self.im_size, self.im_size]).exp()
+            - torch.sqrt(canvas_x ** 2 + canvas_y ** 2).view(*[*shape, self.im_size, self.im_size])
+        )
+
+        if torch.isnan(logits).any():
+            raise RuntimeError("nan")
+
+        return logits
+
+    def get_obs_probs_single(self, program, raw_positions):
+        """p_S(obs | program, raw_positions)
+
+        Args
+            program
+                program_id (long)
+                shape_ids (long,) or (long, long)
+            raw_positions [2] or ([2], [2])
+
+        Returns: [im_size, im_size] (probs)
+        """
+        # Extract
+        program_id, shape_ids = program
+        if program_id == 0:
+            # Extract
+            shape_id = shape_ids[0]
+            raw_position = raw_positions[0]
+
+            return self.get_shape_obs_logits(
+                shape_id, raw_position, self.im_size, self.im_size
+            ).sigmoid()
+        else:
+            obs_probss = []
+            for shape_id, raw_position in zip(shape_ids, raw_positions):
+                obs_probss.append(
+                    self.get_shape_obs_logits(
+                        shape_id, raw_position, self.im_size, self.im_size
+                    ).sigmoid()
+                )
+
+            if program_id == 1:
+                obs_probs = obs_probss[0] + obs_probss[1]
+            elif program_id == 2:
+                obs_probs = obs_probss[0] - obs_probss[1]
+            else:
+                raise RuntimeError("Invalid program")
+            return obs_probs.clamp(0, 1)
+
     def get_obs_probs(self, latent):
         """p_S(obs | program, raw_positions)
 
@@ -105,7 +184,26 @@ class GenerativeModel(nn.Module):
 
         Returns: [*shape, im_size, im_size] (probs)
         """
-        raise NotImplementedError
+        # Extract
+        program_id, shape_ids, raw_positions = latent
+        shape = program_id.shape
+        num_elements = util.get_num_elements(shape)
+
+        # Flatten
+        program_id_flattened = program_id.view(-1)
+        shape_ids_flattened = shape_ids.view(-1, self.max_num_shapes)
+        raw_positions_flattened = raw_positions.view(-1, self.max_num_shapes, 2)
+
+        # Compute for each element in the batch
+        result = []
+        for element_id in range(num_elements):
+            result.append(
+                self.get_obs_probs_single(
+                    (program_id_flattened[element_id], shape_ids_flattened[element_id]),
+                    raw_positions_flattened[element_id],
+                )
+            )
+        return torch.stack(result).view(*[*shape, self.im_size, self.im_size])
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
