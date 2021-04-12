@@ -275,7 +275,27 @@ class GenerativeModel(nn.Module):
 
         Returns: [*continuous_shape, *discrete_shape, *shape]
         """
-        raise NotImplementedError
+        # Extract
+        program_id, shape_ids = discrete_latent
+        raw_positions = continuous_latent
+        shape = obs.shape[:-2]
+        discrete_shape = program_id.shape[: -len(shape)]
+        continuous_shape = continuous_latent.shape[: -(len(shape) + len(discrete_shape) + 2)]
+        continuous_num_elements = util.get_num_elements(continuous_shape)
+
+        # Expand discrete latent
+        program_id_expanded = (
+            program_id[None]
+            .expand(*[continuous_num_elements, *discrete_shape, *shape])
+            .view(*[*continuous_shape, *discrete_shape, *shape])
+        )
+        shape_ids_expanded = (
+            shape_ids[None]
+            .expand(*[continuous_num_elements, *discrete_shape, *shape, self.max_num_shapes])
+            .view(*[*continuous_shape, *discrete_shape, *shape])
+        )
+
+        return self.log_prob((program_id_expanded, shape_ids_expanded, raw_positions), obs)
 
     @torch.no_grad()
     def sample(self, sample_shape=[]):
