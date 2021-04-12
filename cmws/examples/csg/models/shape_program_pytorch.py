@@ -15,6 +15,8 @@ class GenerativeModel(nn.Module):
         self.im_size = im_size
         self.num_primitives = num_primitives
 
+        self.max_num_shapes = 2
+
         # Primitive parameters (parameters of symbols)
         self.mlps = nn.ModuleList(
             [
@@ -35,6 +37,13 @@ class GenerativeModel(nn.Module):
     @property
     def device(self):
         return next(self.mlps[0].parameters()).device
+
+    @property
+    def program_id_dist(self):
+        """Prior distribution p(program_id)
+        batch_shape [], event_shape []
+        """
+        return torch.distributions.Categorical(logits=self.program_id_logits)
 
     def get_num_shapes(self, program_id):
         """Determines number of shapes based on program id
@@ -59,7 +68,31 @@ class GenerativeModel(nn.Module):
 
         Returns: [*shape]
         """
-        raise NotImplementedError
+        # Extract
+        program_id, shape_ids, raw_positions = latent
+
+        # log p(program_id)
+        program_id_log_prob = self.program_id_dist.log_prob(program_id)
+
+        # log p(shape_ids)
+        # --Compute num shapes
+        num_shapes = self.get_num_shapes(program_id)
+        shape_ids_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(logits=self.shape_id_logits).log_prob(shape_ids),
+            num_shapes,
+            0,
+        ).sum(-1)
+
+        # log p(raw_positions)
+        # --Compute dist params
+        loc = torch.zeros(self.max_num_shapes, device=self.device)
+        scale = torch.ones(self.max_num_shapes, device=self.device)
+        # --Compute log prob [*shape]
+        raw_positions_log_prob = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).log_prob(raw_positions), num_shapes, 0,
+        ).sum(-1)
+
+        raise program_id_log_prob + shape_ids_log_prob + raw_positions_log_prob
 
     def get_obs_probs(self, latent):
         """p_S(obs | program, raw_positions)
