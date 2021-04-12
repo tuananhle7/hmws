@@ -430,34 +430,62 @@ def main(args):
     else:
         checkpoint_paths = [args.checkpoint_path]
 
-    # # Plot log p for all checkpoints
-    # fig, ax = plt.subplots(1, 1)
+    # Plot log p and KL for all checkpoints
+    fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
 
-    # colors = {0.0: "blue", 0.25: "C1", 0.5: "C2", 0.75: "C4", 1.0: "C5"}
-    # for checkpoint_path in checkpoint_paths:
-    #     # Fix seed
-    #     util.set_seed(1)
+    colors = {0.0: "blue", 0.25: "C1", 0.5: "C2", 0.75: "C4", 1.0: "C5"}
+    linestyles = {10: "solid", 20: "dashed", 50: "dotted"}
+    for checkpoint_path in checkpoint_paths:
+        # Fix seed
+        util.set_seed(1)
 
-    #     if os.path.exists(checkpoint_path):
-    #         # Load checkpoint
-    #         model, optimizer, stats, run_args = util.load_checkpoint(checkpoint_path, device=device)
-    #         generative_model, guide = model["generative_model"], model["guide"]
-    #         num_iterations = len(stats.losses)
+        if os.path.exists(checkpoint_path):
+            # Load checkpoint
+            model, optimizer, stats, run_args = stacking_util.load_checkpoint(
+                checkpoint_path, device=device
+            )
+            generative_model, guide = model["generative_model"], model["guide"]
+            num_iterations = len(stats.losses)
+            # if run_args.insomnia != 0.75 and run_args.algorithm == "cmws":
+            #     continue
 
-    #         # Logp
-    #         ax.plot(
-    #             [x[0] for x in stats.log_ps],
-    #             [x[1] for x in stats.log_ps],
-    #             label=util.get_path_base_from_args(run_args),
-    #             linestyle="dashed" if run_args.num_sleep_pretraining_iterations > 0 else "solid",
-    #             color=colors[run_args.insomnia],
-    #         )
-    # ax.set_xlim(0, 50000)
-    # ax.legend()
-    # ax.set_xlabel("Iteration")
-    # ax.set_ylabel("Log p")
-    # sns.despine(ax=ax, trim=True)
-    # util.save_fig(fig, "losses.png", dpi=200)
+            label = util.get_path_base_from_args(run_args)
+            linestyle = (
+                linestyles[run_args.num_particles] if run_args.algorithm == "cmws" else "solid"
+            )
+            color = colors[run_args.insomnia] if run_args.algorithm == "cmws" else "black"
+
+            # Logp
+            ax = axs[0]
+            ax.plot(
+                [x[0] for x in stats.log_ps],
+                [x[1] for x in stats.log_ps],
+                label=label,
+                linestyle=linestyle,
+                color=color,
+            )
+
+            # KL
+            ax = axs[1]
+            ax.plot(
+                [x[0] for x in stats.kls],
+                [x[1] for x in stats.kls],
+                label=label,
+                linestyle=linestyle,
+                color=color,
+            )
+    ax = axs[0]
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Log p")
+
+    ax = axs[1]
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("KL")
+    ax.legend()
+    for ax in axs:
+        ax.set_xlim(0, 50000)
+        sns.despine(ax=ax, trim=True)
+    util.save_fig(fig, "save/losses.png", dpi=200)
     # return
 
     # Plot for all checkpoints
