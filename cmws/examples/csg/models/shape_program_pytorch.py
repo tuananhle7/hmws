@@ -33,7 +33,7 @@ class GenerativeModel(nn.Module):
         # Program = Shape | Shape + Shape | Shape - Shape
         self.program_id_logits = nn.Parameter(torch.ones((3,)))
         # Shape = Shape_1 | ... | Shape_N
-        self.shape_id_logits = nn.Parameter(torch.ones((self.num_primitives,)))
+        self.shape_id_logits = nn.Parameter(torch.ones((self.max_num_shapes, self.num_primitives)))
 
     @property
     def device(self):
@@ -57,6 +57,38 @@ class GenerativeModel(nn.Module):
         one = torch.ones_like(program_id)
         two = torch.ones_like(program_id) * 2
         return one * (program_id == 0).float() + two * (program_id != 0).float()
+
+    def latent_sample(self, sample_shape=[]):
+        """Sample from p(z)
+
+        Args
+            sample_shape
+
+        Returns
+            latent:
+                program_id [*sample_shape]
+                shape_ids [*sample_shape, max_num_shapes=2]
+                raw_positions [*sample_shape, max_num_shapes=2, 2]
+        """
+        # Sample program_id
+        program_id = self.program_id_dist.sample(sample_shape)
+
+        # Sample stacking_program
+        num_shapes = self.get_num_shapes(program_id)
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=self.shape_id_logits).sample(sample_shape),
+            num_shapes,
+            0,
+        )
+
+        # Sample raw_locations
+        # --Compute dist params
+        loc = torch.zeros((self.max_num_shapes, 2), device=self.device)
+        scale = torch.ones((self.max_num_shapes, 2), device=self.device)
+        # --Compute log prob [*shape]
+        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+
+        return program_id, stacking_program, raw_locations
 
     def latent_log_prob(self, latent):
         """Prior log p(z)
@@ -86,8 +118,8 @@ class GenerativeModel(nn.Module):
 
         # log p(raw_positions)
         # --Compute dist params
-        loc = torch.zeros(self.max_num_shapes, device=self.device)
-        scale = torch.ones(self.max_num_shapes, device=self.device)
+        loc = torch.zeros((self.max_num_shapes, 2), device=self.device)
+        scale = torch.ones((self.max_num_shapes, 2), device=self.device)
         # --Compute log prob [*shape]
         raw_positions_log_prob = util.pad_tensor(
             torch.distributions.Normal(loc, scale).log_prob(raw_positions), num_shapes, 0,
@@ -259,7 +291,13 @@ class GenerativeModel(nn.Module):
                 raw_positions [*sample_shape, max_num_shapes=2, 2]
             obs [*sample_shape, im_size, im_size]
         """
-        raise NotImplementedError
+        # p(z)
+        latent = self.latent_sample(sample_shape)
+
+        # p(x | z)
+        obs = self.get_obs_probs(latent)
+
+        return latent, obs
 
 
 class Guide(nn.Module):
