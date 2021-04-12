@@ -36,6 +36,18 @@ class GenerativeModel(nn.Module):
     def device(self):
         return next(self.mlps[0].parameters()).device
 
+    def get_num_shapes(self, program_id):
+        """Determines number of shapes based on program id
+
+        Args:
+            program_id [*shape]
+
+        Returns: [*shape]
+        """
+        one = torch.ones_like(program_id)
+        two = torch.ones_like(program_id) * 2
+        return one * (program_id == 0).float() + two * (program_id != 0).float()
+
     def latent_log_prob(self, latent):
         """Prior log p(z)
 
