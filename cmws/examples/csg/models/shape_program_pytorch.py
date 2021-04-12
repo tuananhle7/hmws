@@ -86,7 +86,13 @@ class GenerativeModel(nn.Module):
         loc = torch.zeros((self.max_num_shapes, 2), device=self.device)
         scale = torch.ones((self.max_num_shapes, 2), device=self.device)
         # --Compute log prob [*shape]
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Independent(
+                torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1,
+            ).sample(sample_shape),
+            num_shapes,
+            0,
+        )
 
         return program_id, stacking_program, raw_locations
 
@@ -122,10 +128,14 @@ class GenerativeModel(nn.Module):
         scale = torch.ones((self.max_num_shapes, 2), device=self.device)
         # --Compute log prob [*shape]
         raw_positions_log_prob = util.pad_tensor(
-            torch.distributions.Normal(loc, scale).log_prob(raw_positions), num_shapes, 0,
+            torch.distributions.Independent(
+                torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1,
+            ).log_prob(raw_positions),
+            num_shapes,
+            0,
         ).sum(-1)
 
-        raise program_id_log_prob + shape_ids_log_prob + raw_positions_log_prob
+        return program_id_log_prob + shape_ids_log_prob + raw_positions_log_prob
 
     def get_shape_obs_logits_single(self, shape_id, raw_position):
         """p(obs | shape_id, raw_position)
@@ -185,16 +195,12 @@ class GenerativeModel(nn.Module):
             shape_id = shape_ids[0]
             raw_position = raw_positions[0]
 
-            return self.get_shape_obs_logits(
-                shape_id, raw_position, self.im_size, self.im_size
-            ).sigmoid()
+            return self.get_shape_obs_logits_single(shape_id, raw_position).sigmoid()
         else:
             obs_probss = []
             for shape_id, raw_position in zip(shape_ids, raw_positions):
                 obs_probss.append(
-                    self.get_shape_obs_logits(
-                        shape_id, raw_position, self.im_size, self.im_size
-                    ).sigmoid()
+                    self.get_shape_obs_logits_single(shape_id, raw_position).sigmoid()
                 )
 
             if program_id == 1:
@@ -222,9 +228,9 @@ class GenerativeModel(nn.Module):
         num_elements = util.get_num_elements(shape)
 
         # Flatten
-        program_id_flattened = program_id.view(-1)
-        shape_ids_flattened = shape_ids.view(-1, self.max_num_shapes)
-        raw_positions_flattened = raw_positions.view(-1, self.max_num_shapes, 2)
+        program_id_flattened = program_id.reshape(-1)
+        shape_ids_flattened = shape_ids.reshape(-1, self.max_num_shapes)
+        raw_positions_flattened = raw_positions.reshape(-1, self.max_num_shapes, 2)
 
         # Compute for each element in the batch
         result = []
@@ -292,7 +298,7 @@ class GenerativeModel(nn.Module):
         shape_ids_expanded = (
             shape_ids[None]
             .expand(*[continuous_num_elements, *discrete_shape, *shape, self.max_num_shapes])
-            .view(*[*continuous_shape, *discrete_shape, *shape])
+            .view(*[*continuous_shape, *discrete_shape, *shape, self.max_num_shapes])
         )
 
         return self.log_prob((program_id_expanded, shape_ids_expanded, raw_positions), obs)
