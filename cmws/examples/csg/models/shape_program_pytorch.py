@@ -36,6 +36,32 @@ class GenerativeModel(nn.Module):
     def device(self):
         return next(self.mlps[0].parameters()).device
 
+    def latent_log_prob(self, latent):
+        """Prior log p(z)
+
+        Args:
+            latent:
+                program_id [*shape]
+                shape_ids [*shape, max_num_shapes=2]
+                raw_positions [*shape, max_num_shapes=2, 2]
+
+        Returns: [*shape]
+        """
+        raise NotImplementedError
+
+    def get_obs_probs(self, latent):
+        """p_S(obs | program, raw_positions)
+
+        Args
+            latent
+                program_id [*shape]
+                shape_ids [*shape, max_num_shapes=2]
+                raw_positions [*shape, max_num_shapes=2, 2]
+
+        Returns: [*shape, im_size, im_size] (probs)
+        """
+        raise NotImplementedError
+
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
         log p(z, x)
@@ -49,7 +75,16 @@ class GenerativeModel(nn.Module):
 
         Returns: [*sample_shape, *shape]
         """
-        raise NotImplementedError
+        # p(z)
+        latent_log_prob = self.latent_log_prob(latent)
+
+        # p(x | z)
+        obs_log_prob = torch.distributions.Independent(
+            torch.distributions.Bernoulli(probs=self.get_obs_probs(latent)),
+            reinterpreted_batch_ndims=2,
+        ).log_prob(obs)
+
+        return latent_log_prob + obs_log_prob
 
     def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
         """Log joint probability of the generative model
