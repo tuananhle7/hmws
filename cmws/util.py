@@ -247,15 +247,15 @@ def pad_tensor(x, length, value):
     """Pads a tensor with a prespecified value
 
     Args
-        x [*shape, max_length]
+        x [*shape, max_length, ...]
         length [*shape]
         value []
 
-    Returns [*shape, max_length]
+    Returns [*shape, max_length, ...]
     """
     # Extract
     shape = length.shape
-    max_length = x.shape[-1]
+    max_length = x.shape[len(shape)]
     device = x.device
     num_elements = get_num_elements(shape)
 
