@@ -99,6 +99,14 @@ def train(model, optimizer, stats, args):
         test_data_loader = cmws.examples.stacking.data.get_stacking_data_loader(
             device, args.batch_size, test=True
         )
+    elif "cmws.examples.csg.models.shape_program_pytorch" in str(type(generative_model)):
+        # Use a data loader
+        train_data_iterator = util.cycle(
+            cmws.examples.csg.data.get_csg_data_loader(device, args.batch_size, test=False)
+        )
+        test_data_loader = cmws.examples.csg.data.get_csg_data_loader(
+            device, args.batch_size, test=True
+        )
     else:
         # Generate test data
         # NOTE: super weird but when this is put before sleep pretraining, sleep pretraining doesn't
@@ -113,6 +121,8 @@ def train(model, optimizer, stats, args):
     # Normal training
     for iteration in range(num_iterations_so_far, args.num_iterations):
         if "cmws.examples.stacking.models.stacking" in str(type(generative_model)):
+            obs, obs_id = next(train_data_iterator)
+        if "cmws.examples.csg.models.shape_program_pytorch" in str(type(generative_model)):
             obs, obs_id = next(train_data_iterator)
         else:
             # Generate data
@@ -190,7 +200,11 @@ def train(model, optimizer, stats, args):
                 stats.kls.append([iteration, float("nan")])
             else:
                 util.logging.info("Computing logp and KL")
-                if "cmws.examples.stacking.models.stacking" in str(type(generative_model)):
+                if "cmws.examples.stacking.models.stacking" in str(
+                    type(generative_model)
+                ) or "cmws.examples.csg.models.shape_program_pytorch" in str(
+                    type(generative_model)
+                ):
                     log_p, kl = [], []
                     for test_obs, test_obs_id in test_data_loader:
                         log_p_, kl_ = losses.get_log_p_and_kl(

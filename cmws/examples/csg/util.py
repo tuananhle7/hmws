@@ -19,6 +19,7 @@ from cmws.examples.csg.models import (
     rectangles,
     shape_program,
     shape_program_pyro,
+    shape_program_pytorch,
 )
 
 
@@ -97,6 +98,12 @@ def init(run_args, device):
 
         # Guide
         guide = shape_program_pyro.Guide(num_primitives=run_args.num_primitives).to(device)
+    elif run_args.model_type == "shape_program_pytorch":
+        # Generative model
+        generative_model = shape_program_pytorch.GenerativeModel().to(device)
+
+        # Guide
+        guide = shape_program_pytorch.Guide().to(device)
 
     # Model tuple
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}

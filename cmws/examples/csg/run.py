@@ -54,6 +54,7 @@ def get_args_parser():
             "neural_boundary",
             "neural_boundary_pyro",
             "shape_program_pyro",
+            "shape_program_pytorch",
         ],
         help=" ",
     )

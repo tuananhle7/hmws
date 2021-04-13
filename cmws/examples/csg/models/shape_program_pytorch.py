@@ -429,7 +429,7 @@ class Guide(nn.Module):
 
         # Get obs embedding (flattened)
         # [num_elements, obs_embedding_dim]
-        obs_embedding = self.get_obs_embedding(obs.view(-1, self.im_size, self.im_size))
+        obs_embedding = self.get_obs_embedding(obs.reshape(-1, self.im_size, self.im_size))
 
         # Flatten latents
         program_id_flattened = program_id_batched.view(num_samples, num_elements)
