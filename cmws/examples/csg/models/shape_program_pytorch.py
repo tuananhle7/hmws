@@ -1543,3 +1543,36 @@ class Guide(nn.Module):
                     # traces.append(trace)
 
         return result.view(*[*continuous_shape, *discrete_shape, *shape])
+
+
+def latent_to_str(latent, sample_id):
+    """
+    Args
+        latent
+            program_id [*shape]
+            shape_ids [*shape, max_num_shapes=2]
+            raw_positions [*shape, max_num_shapes=2, 2]
+        sample_id
+
+    """
+    program_id, shape_ids, raw_positions = latent
+    program_id = program_id[sample_id]
+    shape_ids = shape_ids[sample_id]
+    raw_positions = raw_positions[sample_id]
+
+    if program_id == 0:
+        shape_id = shape_ids[0]
+        raw_position = raw_positions[0]
+        position = raw_position.sigmoid() - 0.5
+        return f"$S_{shape_id}$({position[0]:.2f}, {position[1]:.2f})"
+    else:
+        operation = "+" if program_id == 1 else "-"
+        shape_id_0, shape_id_1 = shape_ids
+        raw_position_0, raw_position_1 = raw_positions
+        position_0 = raw_position_0.sigmoid() - 0.5
+        position_1 = raw_position_1.sigmoid() - 0.5
+        return (
+            f"$S_{shape_id_0}$({position_0[0]:.2f}, {position_0[1]:.2f})"
+            f"{operation}\n"
+            f"$S_{shape_id_1}$({position_1[0]:.2f}, {position_1[1]:.2f})"
+        )

@@ -15,6 +15,7 @@ from cmws.examples.csg.models import (
     rectangles,
     shape_program,
     shape_program_pyro,
+    shape_program_pytorch,
 )
 
 
@@ -835,13 +836,151 @@ def plot_shape_program_pyro_reconstructions(
     util.save_fig(fig, path)
 
 
-def plot_stats(path, stats):
-    fig, ax_losses = plt.subplots(1, 1)
+def plot_occupancy_network_shape_program_pytorch(path, generative_model):
+    """
+    Args:
+        generative_model
+    """
+    device = generative_model.device
+    im_size = generative_model.im_size
 
-    ax_losses.plot(stats.losses)
-    ax_losses.set_xlabel("Iteration")
-    ax_losses.set_ylabel("Loss")
-    sns.despine(ax=ax_losses, trim=True)
+    # Shape pose
+    position = torch.zeros((2,), device=device)
+    raw_position = util.logit(position + 0.5)
+
+    # Plot
+    num_rows, num_cols = 1, generative_model.num_primitives
+    fig, axs = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axs.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for i, ax in enumerate(axs):
+        obs = generative_model.get_shape_obs_logits_single(i, raw_position).sigmoid()
+        ax.imshow(obs.cpu(), cmap="Greys", vmin=0, vmax=1)
+
+    util.save_fig(fig, path)
+
+
+def plot_shape_program_pytorch_reconstructions(
+    path, generative_model, guide, obs, ground_truth_latent
+):
+    """
+    Args:
+        generative_model
+        guide
+        obs: [num_test_obs, im_size, im_size]
+    """
+    num_test_obs, im_size, _ = obs.shape
+
+    # Deconstruct ground truth latent
+    (
+        ground_truth_program_id,
+        ground_truth_raw_positions,
+        ground_truth_rectangle_poses,
+    ) = ground_truth_latent
+
+    # Sample latent
+    latent = guide.sample(obs)
+
+    # Sample reconstructions
+    reconstructed_obs_probs = generative_model.get_obs_probs(latent)
+
+    # Plot
+    num_rows = 3
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for sample_id in range(num_test_obs):
+        # Plot obs
+        ax = axss[0, sample_id]
+        ax.imshow(obs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.text(
+            0.95,
+            0.95,
+            shape_program.latent_to_str(
+                (
+                    ground_truth_program_id[sample_id],
+                    ground_truth_raw_positions[sample_id],
+                    ground_truth_rectangle_poses[sample_id],
+                ),
+                fixed_scale=True,
+            ),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+
+        # Plot probs
+        ax = axss[1, sample_id]
+        ax.imshow(reconstructed_obs_probs[sample_id].cpu(), cmap="Greys", vmin=0, vmax=1)
+        ax.text(
+            0.95,
+            0.95,
+            shape_program_pytorch.latent_to_str(latent, sample_id),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+
+        # Plot probs > 0.5
+        axss[2, sample_id].imshow(
+            reconstructed_obs_probs[sample_id].cpu() > 0.5, cmap="Greys", vmin=0, vmax=1
+        )
+
+    util.save_fig(fig, path)
+
+
+def plot_stats(path, stats):
+    if len(stats.sleep_pretraining_losses) > 0:
+        fig, (ax_sleep_pretraining_losses, ax_losses, ax_logp, ax_kl) = plt.subplots(
+            1, 4, figsize=(24, 4)
+        )
+
+        # Sleep pretraining Loss
+        ax = ax_sleep_pretraining_losses
+        ax.plot(stats.sleep_pretraining_losses)
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Sleep Pretraining Loss")
+        sns.despine(ax=ax, trim=True)
+    else:
+        fig, (ax_losses, ax_logp, ax_kl) = plt.subplots(1, 3, figsize=(18, 4))
+
+    # Loss
+    ax = ax_losses
+    ax.plot(stats.losses)
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Loss")
+    sns.despine(ax=ax, trim=True)
+
+    # Logp
+    ax = ax_logp
+    ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps])
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Log p")
+    sns.despine(ax=ax, trim=True)
+
+    # KL
+    ax = ax_kl
+    ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls])
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("KL")
+    sns.despine(ax=ax, trim=True)
 
     util.save_fig(fig, path)
 
@@ -1042,6 +1181,23 @@ def main(args):
                     ground_truth_latent,
                 )
                 plot_occupancy_network_shape_program_pyro(
+                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
+                    generative_model,
+                )
+            elif run_args.model_type == "shape_program_pytorch":
+                # Test data
+                true_generative_model = shape_program.TrueGenerativeModelFixedScale().to(device)
+                ground_truth_latent, obs = true_generative_model.sample((num_test_obs,))
+
+                # Plot
+                plot_shape_program_pytorch_reconstructions(
+                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs,
+                    ground_truth_latent,
+                )
+                plot_occupancy_network_shape_program_pytorch(
                     f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
                     generative_model,
                 )
