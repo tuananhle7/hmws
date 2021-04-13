@@ -96,14 +96,18 @@ class GenerativeModel(nn.Module):
 
         # Sample stacking_program
         logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
-        stacking_program = torch.distributions.Categorical(logits=logits).sample(sample_shape)
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=logits).sample(sample_shape), num_blocks, 0
+        )
 
         # Sample raw_locations
         # --Compute dist params
         loc = torch.zeros(self.max_num_blocks, device=self.device)
         scale = torch.ones(self.max_num_blocks, device=self.device)
         # --Compute log prob [*shape]
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape), num_blocks, 0
+        )
 
         return num_blocks, stacking_program, raw_locations
 
@@ -116,7 +120,7 @@ class GenerativeModel(nn.Module):
                 stacking_program [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
-        Returns: [*shape, num_channels, num_rows, num_cols]
+        Returns: [*shape, num_channels, im_size, im_size]
         """
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
@@ -131,25 +135,6 @@ class GenerativeModel(nn.Module):
             self.raw_blur,
         )
 
-    def get_obs_loc_hard(self, latent):
-        """Location parameter of p(x | z)
-
-        Args:
-            latent:
-                num_blocks [*shape]
-                stacking_program [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
-
-        Returns: [*shape, num_channels, num_rows, num_cols]
-        """
-        # Extract stuff
-        num_blocks, stacking_program, raw_locations = latent
-
-        # Compute stuff
-        return render.render_batched_top_down(
-            self.primitives, num_blocks, stacking_program, raw_locations,
-        )
-
     def get_obs_loc_hard_front(self, latent):
         """Location parameter of p(x | z)
 
@@ -159,7 +144,7 @@ class GenerativeModel(nn.Module):
                 stacking_program [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
-        Returns: [*shape, num_channels, num_rows, num_cols]
+        Returns: [*shape, num_channels, im_size, im_size]
         """
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
@@ -167,18 +152,37 @@ class GenerativeModel(nn.Module):
         # Compute stuff
         return render.render_batched(self.primitives, num_blocks, stacking_program, raw_locations,)
 
-    def log_prob(self, latent, obs):
-        """Log joint probability of the generative model
-        log p(z, x)
+    def get_obs_loc_hard(self, latent):
+        """Location parameter of p(x | z)
 
         Args:
             latent:
                 num_blocks [*shape]
                 stacking_program [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
-            obs [*shape, num_channels, num_rows, num_cols]
 
-        Returns: [*shape]
+        Returns: [*shape, num_channels, im_size, im_size]
+        """
+        # Extract stuff
+        num_blocks, stacking_program, raw_locations = latent
+
+        # Compute stuff
+        return render.render_batched_top_down(
+            self.primitives, num_blocks, stacking_program, raw_locations,
+        )
+
+    def log_prob(self, latent, obs):
+        """Log joint probability of the generative model
+        log p(z, x)
+
+        Args:
+            latent:
+                num_blocks [*sample_shape, *shape]
+                stacking_program [*sample_shape, *shape, max_num_blocks]
+                raw_locations [*sample_shape, *shape, max_num_blocks]
+            obs [*shape, num_channels, im_size, im_size]
+
+        Returns: [*sample_shape, *shape]
         """
         # p(z)
         latent_log_prob = self.latent_log_prob(latent)
@@ -191,6 +195,39 @@ class GenerativeModel(nn.Module):
 
         return latent_log_prob + obs_log_prob
 
+    def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
+        """Log joint probability of the generative model
+        log p(z, x)
+
+        Args:
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+            continuous_latent
+                raw_locations [*continuous_shape, *discrete_shape, *shape, max_num_blocks]
+            obs [*shape, num_channels, im_size, im_size]
+
+        Returns: [*continuous_shape, *discrete_shape, *shape]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+        raw_locations = continuous_latent
+        shape = obs.shape[:-3]
+        discrete_shape = num_blocks.shape[: -len(shape)]
+        continuous_shape = continuous_latent.shape[: -(1 + len(shape) + len(discrete_shape))]
+        continuous_num_elements = util.get_num_elements(continuous_shape)
+
+        # Expand discrete latent
+        num_blocks_expanded = num_blocks[None].expand(
+            *[continuous_num_elements, *discrete_shape, *shape]
+        )
+        stacking_program_expanded = stacking_program[None].expand(
+            *[continuous_num_elements, *discrete_shape, *shape, self.max_num_blocks]
+        )
+
+        return self.log_prob((num_blocks_expanded, stacking_program_expanded, raw_locations), obs)
+
+    @torch.no_grad()
     def sample(self, sample_shape=[]):
         """Sample from p(z, x)
 
@@ -202,7 +239,7 @@ class GenerativeModel(nn.Module):
                 num_blocks [*sample_shape]
                 stacking_program [*sample_shape, max_num_blocks]
                 raw_locations [*sample_shape, max_num_blocks]
-            obs [*sample_shape, num_channels, num_rows, num_cols]
+            obs [*sample_shape, num_channels, im_size, im_size]
         """
         # p(z)
         latent = self.latent_sample(sample_shape)
@@ -252,7 +289,7 @@ class Guide(nn.Module):
     def get_dist_params(self, obs):
         """
         Args
-            obs: [*shape, num_channels, num_rows, num_cols]
+            obs: [*shape, num_channels, im_size, im_size]
 
         Returns
             num_blocks_params [*shape, max_num_blocks]
@@ -293,13 +330,13 @@ class Guide(nn.Module):
     def log_prob(self, obs, latent):
         """
         Args
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
             latent:
-                num_blocks [*shape]
-                stacking_program [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
+                num_blocks [*sample_shape, *shape]
+                stacking_program [*sample_shape, *shape, max_num_blocks]
+                raw_locations [*sample_shape, *shape, max_num_blocks]
 
-        Returns [*shape]
+        Returns [*sample_shape, *shape]
         """
         # Extract
         num_blocks, stacking_program, raw_locations = latent
@@ -330,7 +367,7 @@ class Guide(nn.Module):
         """z ~ q(z | x)
 
         Args
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
 
         Returns
             num_blocks [*sample_shape, *shape]
@@ -344,11 +381,144 @@ class Guide(nn.Module):
         num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
 
         # Sample from q(Stacking program | x)
-        stacking_program = torch.distributions.Categorical(logits=stacking_program_params).sample(
-            sample_shape
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_program_params).sample(sample_shape),
+            num_blocks,
+            0,
         )
 
         # Sample from q(Raw locations | x)
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape), num_blocks, 0
+        )
 
         return num_blocks, stacking_program, raw_locations
+
+    def sample_discrete(self, obs, sample_shape=[]):
+        """z_d ~ q(z_d | x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            sample_shape
+
+        Returns
+            num_blocks [*sample_shape, *shape]
+            stacking_program [*sample_shape, *shape, max_num_blocks]
+        """
+        # Compute params
+        num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
+
+        # Sample from q(Num blocks | x)
+        num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
+
+        # Sample from q(Stacking program | x)
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_program_params).sample(sample_shape),
+            num_blocks,
+            0,
+        )
+
+        return num_blocks, stacking_program
+
+    def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+            sample_shape
+
+        Returns
+            raw_locations [*sample_shape, *discrete_shape, *shape, max_num_blocks]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+        shape = obs.shape[:-3]
+        discrete_shape = list(num_blocks.shape[: -len(shape)])
+        num_elements = util.get_num_elements(sample_shape)
+
+        # Compute params
+        _, _, (loc, scale) = self.get_dist_params(obs)
+
+        # Sample from q(Raw locations | x)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape),
+            num_blocks[None]
+            .expand(*[num_elements, *discrete_shape, *shape])
+            .view(*[*sample_shape, *discrete_shape, *shape]),
+            0,
+        )
+
+        return raw_locations
+
+    def log_prob_discrete(self, obs, discrete_latent):
+        """log q(z_d | x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+
+        Returns [*discrete_shape, *shape]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+
+        # Compute params
+        num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
+
+        # log q(Num blocks | x)
+        num_blocks_log_prob = util.CategoricalPlusOne(logits=num_blocks_params).log_prob(num_blocks)
+
+        # log q(Stacking program | x)
+        stacking_program_log_prob = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_program_params).log_prob(
+                stacking_program
+            ),
+            num_blocks,
+            0,
+        ).sum(-1)
+
+        return num_blocks_log_prob + stacking_program_log_prob
+
+    def log_prob_continuous(self, obs, discrete_latent, continuous_latent):
+        """log q(z_c | z_d, x)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape]
+                stacking_program [*discrete_shape, *shape, max_num_blocks]
+            continuous_latent (raw_locations)
+                [*continuous_shape, *discrete_shape, *shape, max_num_blocks]
+
+        Returns [*continuous_shape, *discrete_shape, *shape]
+        """
+        # Extract
+        num_blocks, stacking_program = discrete_latent
+        raw_locations = continuous_latent
+        shape = obs.shape[:-3]
+        discrete_shape = num_blocks.shape[: -len(shape)]
+        continuous_shape = continuous_latent.shape[: -(1 + len(shape) + len(discrete_shape))]
+        continuous_num_elements = util.get_num_elements(continuous_shape)
+
+        # Compute params
+        _, _, (loc, scale) = self.get_dist_params(obs)
+
+        # Expand num_blocks
+        # [*continuous_shape, *discrete_shape, *shape]
+        num_blocks_expanded = (
+            num_blocks[None]
+            .expand(*[continuous_num_elements, *discrete_shape, *shape])
+            .view(*[*continuous_shape, *discrete_shape, *shape])
+        )
+
+        # log q(Raw locations | x)
+        raw_locations_log_prob = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks_expanded, 0,
+        ).sum(-1)
+
+        return raw_locations_log_prob
