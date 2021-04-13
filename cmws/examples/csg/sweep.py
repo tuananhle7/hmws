@@ -9,15 +9,31 @@ from cmws.examples.csg import run
 
 
 def get_sweep_argss():
-    for num_primitives in [10, 20, 50]:
-        for insomnia in [0.25, 0.5, 0.75]:
+    insomnias = [0.0, 0.25, 0.5, 0.75, 1.0]
+    model_type = "shape_program_pytorch"
+    num_primitives = 10
+
+    # CMWS
+    for num_particles in [10, 20]:
+        for insomnia in insomnias:
             args = run.get_args_parser().parse_args([])
-            args.model_type = "shape_program_pyro"
-            args.algorithm = "rws"
-            args.num_primitives = num_primitives
+            args.algorithm = "cmws"
+            args.num_particles = num_particles
             args.insomnia = insomnia
+            args.model_type = model_type
+            args.num_primitives = num_primitives
             args.continue_training = True
             yield args
+
+    # RWS
+    for insomnia in insomnias:
+        args = run.get_args_parser().parse_args([])
+        args.algorithm = "rws"
+        args.insomnia = insomnia
+        args.model_type = model_type
+        args.num_primitives = num_primitives
+        args.continue_training = True
+        yield args
 
 
 def args_to_str(args):
@@ -81,27 +97,13 @@ def main(args):
             # SBATCH OPTIONS
             logs_dir = f"{util.get_save_dir(sweep_args)}/logs"
             Path(logs_dir).mkdir(parents=True, exist_ok=True)
-
             job_name = util.get_save_job_name_from_args(sweep_args)
-
-            if args.priority:
-                partition_option = "--partition=tenenbaum "
-            else:
-                partition_option = ""
-
-            if args.titan_x:
-                gpu_option = ":titan-x"
-            else:
-                gpu_option = ""
-
-            cpu_memory_gb = 16
             sbatch_options = (
                 f"--time={time_option} "
                 + "--ntasks=1 "
-                + f"--gres=gpu{gpu_option}:1 "
-                + "--constraint=high-capacity "
-                + f"--mem={cpu_memory_gb}G "
-                + partition_option
+                + f"--gres=gpu:1 "
+                # + "--constraint=high-capacity "
+                + "--constraint=14GB "
                 + f'-J "{job_name}" '
                 + f'-o "{logs_dir}/%j.out" '
                 + f'-e "{logs_dir}/%j.err" '
@@ -114,9 +116,7 @@ def main(args):
 def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--local", action="store_true", help="")
-    parser.add_argument("--titan-x", action="store_true", help="")
     parser.add_argument("--rm", action="store_true", help="")
-    parser.add_argument("--priority", action="store_true", help="runs on lab partition")
     parser.add_argument(
         "--no-repeat",
         action="store_true",

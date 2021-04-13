@@ -9,16 +9,28 @@ from cmws.examples.stacking import run
 
 
 def get_sweep_argss():
-    for num_sleep_pretraining_iterations in [0, 10000]:
+    # CMWS
+    for num_particles in [10, 20, 50]:
         for insomnia in [0.0, 0.25, 0.5, 0.75, 1.0]:
             args = run.get_args_parser().parse_args([])
-            args.model_type = "stacking_top_down"
-            args.num_sleep_pretraining_iterations = num_sleep_pretraining_iterations
+            args.num_particles = num_particles
             args.insomnia = insomnia
+            args.algorithm = "cmws"
+            args.model_type = "stacking"
             args.num_primitives = 5
             args.max_num_blocks = 3
             args.continue_training = True
             yield args
+
+    # RWS
+    args = run.get_args_parser().parse_args([])
+    args.algorithm = "rws"
+    args.model_type = "stacking"
+    args.insomnia = 0.75
+    args.num_primitives = 5
+    args.max_num_blocks = 3
+    args.continue_training = True
+    yield args
 
 
 def args_to_str(args):
