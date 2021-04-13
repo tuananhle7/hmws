@@ -1,5 +1,5 @@
 import torch
-from cmws.examples.csg.models.shape_program_pytorch import GenerativeModel
+from cmws.examples.csg.models.shape_program_pytorch import GenerativeModel, Guide
 
 
 def test_generative_model_log_prob_dims():
@@ -50,3 +50,18 @@ def test_generative_model_log_prob_discrete_continuous_dims():
     )
 
     assert list(log_prob.shape) == continuous_shape + discrete_shape + shape
+
+
+def test_guide_sample_dims():
+    im_size = 64
+    shape = [2, 3]
+    sample_shape = [4, 5]
+
+    guide = Guide(im_size=im_size)
+    obs = torch.rand(*[*shape, im_size, im_size])
+
+    program_id, shape_ids, raw_positions = guide.sample(obs, sample_shape)
+
+    assert list(program_id.shape) == sample_shape + shape
+    assert list(shape_ids.shape) == sample_shape + shape + [guide.max_num_shapes]
+    assert list(raw_positions.shape) == sample_shape + shape + [guide.max_num_shapes, 2]
