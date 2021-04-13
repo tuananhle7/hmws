@@ -54,6 +54,7 @@ class StackingDataset(torch.utils.data.Dataset):
     Uses ~1.2M (test) / 120MB (train)
 
     Args
+        dataset_type (str) (stacking or stacking_top_down)
         device
         test (bool; default: False)
         force_regenerate (bool; default: False): if False, the dataset is loaded if it exists
@@ -61,7 +62,9 @@ class StackingDataset(torch.utils.data.Dataset):
         seed (int): only used for generation
     """
 
-    def __init__(self, device, test=False, force_regenerate=False, seed=1):
+    def __init__(self, dataset_type, device, test=False, force_regenerate=False, seed=1):
+        assert dataset_type == "stacking" or dataset_type == "stacking_top_down"
+        self.dataset_type = dataset_type
         self.device = device
         self.test = test
         self.num_train_data = 10000
@@ -74,10 +77,10 @@ class StackingDataset(torch.utils.data.Dataset):
         path = (
             pathlib.Path(__file__)
             .parent.absolute()
-            .joinpath("data", "stacking", "test.pt" if self.test else "train.pt")
+            .joinpath("data", self.dataset_type, "test.pt" if self.test else "train.pt")
         )
         if force_regenerate or not path.exists():
-            util.logging.info(f"Generating dataset (test = {self.test})...")
+            util.logging.info(f"Generating {self.dataset_type} dataset (test = {self.test})...")
 
             # Make path
             pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -86,20 +89,27 @@ class StackingDataset(torch.utils.data.Dataset):
             util.set_seed(seed)
 
             # Generate new dataset
-            self.obs = stacking_pyro.generate_from_true_generative_model(
-                self.num_data, num_primitives=3, device=device
-            )
+            if self.dataset_type == "stacking":
+                self.obs = stacking_pyro.generate_from_true_generative_model(
+                    self.num_data, num_primitives=3, device=device
+                )
+            elif self.dataset_type == "stacking_top_down":
+                self.obs = stacking_pyro.generate_from_true_generative_model_top_down(
+                    self.num_data, num_primitives=3, device=device
+                )
             self.obs_id = torch.arange(self.num_data, device=device)
 
             # Save dataset
             torch.save([self.obs, self.obs_id], path)
-            util.logging.info(f"Dataset (test = {self.test}) generated and saved to {path}")
+            util.logging.info(
+                f"Dataset {self.dataset_type} (test = {self.test}) generated and saved to {path}"
+            )
         else:
-            util.logging.info(f"Loading dataset (test = {self.test})...")
+            util.logging.info(f"Loading {self.dataset_type} dataset (test = {self.test})...")
 
             # Load dataset
             self.obs, self.obs_id = torch.load(path, map_location=device)
-            util.logging.info(f"Dataset (test = {self.test}) loaded {path}")
+            util.logging.info(f"Dataset {self.dataset_type} (test = {self.test}) loaded {path}")
 
     def __getitem__(self, idx):
         return self.obs[idx], self.obs_id[idx]
@@ -108,11 +118,11 @@ class StackingDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_stacking_data_loader(device, batch_size, test=False):
+def get_stacking_data_loader(dataset_type, device, batch_size, test=False):
     if test:
         shuffle = True
     else:
         shuffle = False
     return torch.utils.data.DataLoader(
-        StackingDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
+        StackingDataset(dataset_type, device, test=test), batch_size=batch_size, shuffle=shuffle
     )
