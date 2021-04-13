@@ -561,7 +561,7 @@ def plot_occupancy_network_ldif_representation(path, generative_model):
             i, (raw_position, raw_scale)
         )
         im = ax.imshow(analytic_shape_density.cpu())
-        ax.set_title(f"$g_{i + 1}(x, \Sigma)$")
+        ax.set_title(f"$g_{i + 1}(x, \\Sigma)$")
         fig.colorbar(im, ax=ax)
     for i, ax in enumerate(axss[1]):
         deep_shape_density = generative_model._get_deep_shape_density(i, (raw_position, raw_scale))
@@ -579,7 +579,7 @@ def plot_occupancy_network_ldif_representation(path, generative_model):
             i, (raw_position, raw_scale)
         )
         im = ax.imshow(((deep_shape_density + 1) * analytic_shape_density).cpu())
-        ax.set_title(f"$LDIF_{i + 1}(x) = g_{i + 1}(x, \Sigma)(f_{i + 1}(x, \\theta) + 1)$")
+        ax.set_title(f"$LDIF_{i + 1}(x) = g_{i + 1}(x, \\Sigma)(f_{i + 1}(x, \\theta) + 1)$")
         fig.colorbar(im, ax=ax)
     for i, ax in enumerate(axss[4]):
         deep_shape_density = generative_model._get_deep_shape_density(i, (raw_position, raw_scale))
