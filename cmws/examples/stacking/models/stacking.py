@@ -96,14 +96,18 @@ class GenerativeModel(nn.Module):
 
         # Sample stacking_program
         logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
-        stacking_program = torch.distributions.Categorical(logits=logits).sample(sample_shape)
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=logits).sample(sample_shape), num_blocks, 0
+        )
 
         # Sample raw_locations
         # --Compute dist params
         loc = torch.zeros(self.max_num_blocks, device=self.device)
         scale = torch.ones(self.max_num_blocks, device=self.device)
         # --Compute log prob [*shape]
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape), num_blocks, 0
+        )
 
         return num_blocks, stacking_program, raw_locations
 
@@ -358,12 +362,16 @@ class Guide(nn.Module):
         num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
 
         # Sample from q(Stacking program | x)
-        stacking_program = torch.distributions.Categorical(logits=stacking_program_params).sample(
-            sample_shape
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_program_params).sample(sample_shape),
+            num_blocks,
+            0,
         )
 
         # Sample from q(Raw locations | x)
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape), num_blocks, 0
+        )
 
         return num_blocks, stacking_program, raw_locations
 
@@ -385,8 +393,10 @@ class Guide(nn.Module):
         num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
 
         # Sample from q(Stacking program | x)
-        stacking_program = torch.distributions.Categorical(logits=stacking_program_params).sample(
-            sample_shape
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=stacking_program_params).sample(sample_shape),
+            num_blocks,
+            0,
         )
 
         return num_blocks, stacking_program
@@ -408,12 +418,19 @@ class Guide(nn.Module):
         num_blocks, stacking_program = discrete_latent
         shape = obs.shape[:-3]
         discrete_shape = list(num_blocks.shape[: -len(shape)])
+        num_elements = util.get_num_elements(sample_shape)
 
         # Compute params
         _, _, (loc, scale) = self.get_dist_params(obs)
 
         # Sample from q(Raw locations | x)
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape),
+            num_blocks[None]
+            .expand(*[num_elements, *discrete_shape, *shape])
+            .view(*[*sample_shape, *discrete_shape, *shape]),
+            0,
+        )
 
         return raw_locations
 
