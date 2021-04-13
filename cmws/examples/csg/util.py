@@ -170,7 +170,7 @@ def load_checkpoint(path, device):
     if memory is not None:
         memory.load_state_dict(checkpoint["memory_state_dict"])
 
-    model = {"generative_model": generative_model, "guide": guide, "memory": None}
+    model = {"generative_model": generative_model, "guide": guide, "memory": memory}
     if "_pyro" in run_args.model_type:
         optimizer.set_state(checkpoint["optimizer_state_dict"])
     else:
