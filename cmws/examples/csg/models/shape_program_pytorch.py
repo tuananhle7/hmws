@@ -985,10 +985,212 @@ class Guide(nn.Module):
             sample_shape
 
         Returns
-            raw_positions [*sample_shape, *discrete_shape, *shape, *shape, max_num_shapes=2, 2]
+            raw_positions [*sample_shape, *discrete_shape, *shape, max_num_shapes=2, 2]
 
         """
-        raise NotImplementedError
+        # Extract
+        shape = obs.shape[:-2]
+        discrete_shape = discrete_latent[0].shape[: -len(shape)]
+        num_elements = util.get_num_elements(shape)
+        num_discrete_elements = util.get_num_elements(discrete_shape)
+        num_samples = util.get_num_elements(sample_shape)
+
+        # Get obs embedding (flattened)
+        # [num_elements, obs_embedding_dim]
+        obs_embedding = self.get_obs_embedding(obs.view(-1, self.im_size, self.im_size))
+
+        # Flatten discrete latent
+        program_id_flattened = discrete_latent[0].view(num_discrete_elements, num_elements)
+        shape_ids_flattened = discrete_latent[1].view(
+            num_discrete_elements, num_elements, self.max_num_shapes
+        )
+
+        # Init result
+        raw_positions_flattened = torch.zeros(
+            (num_samples, num_discrete_elements, num_elements, self.max_num_shapes, 2),
+            device=self.device,
+        )
+
+        # traces = []
+        for sample_id in range(num_samples):
+            for discrete_element_id in range(num_discrete_elements):
+                for element_id in range(num_elements):
+                    # trace = []
+
+                    # Extract obs embedding
+                    obs_embedding_b = obs_embedding[element_id]
+
+                    # Sample program id
+                    # --LSTM Input
+                    prev_sample_embedding = torch.zeros(
+                        (self.sample_embedding_dim,), device=self.device
+                    )
+                    address_embedding = self.get_address_embedding("program_id")
+                    lstm_input = torch.cat(
+                        [obs_embedding_b, prev_sample_embedding, address_embedding]
+                    )
+
+                    # --Run LSTM
+                    h, c = self.lstm_cell(lstm_input[None])
+                    hc = h, c
+
+                    # # --Extract params
+                    # program_id_logits = self.program_id_param_extractor(h)[0]
+
+                    # --Extract program_id
+                    program_id = program_id_flattened[discrete_element_id, element_id]
+                    # trace.append(program_id)
+
+                    if program_id == 0:
+                        # Extract shape id
+                        # --LSTM Input
+                        prev_sample_embedding = self.program_id_embeddings[program_id]
+                        address_embedding = self.get_address_embedding("shape_id")
+                        lstm_input = torch.cat(
+                            [obs_embedding_b, prev_sample_embedding, address_embedding]
+                        )
+
+                        # --Run LSTM
+                        h, c = self.lstm_cell(lstm_input[None], hc)
+                        hc = h, c
+
+                        # # --Extract params
+                        # shape_id_logits = self.shape_id_param_extractor(h)[0]
+
+                        # --Sample shape id
+                        shape_id = shape_ids_flattened[discrete_element_id, element_id, 0]
+
+                        # # --Update trace
+                        # trace.append(("shape_id", shape_id))
+
+                        # Sample raw position
+                        # --LSTM Input
+                        prev_sample_embedding = self.shape_id_embeddings[shape_id]
+                        address_embedding = self.get_address_embedding("raw_position")
+                        lstm_input = torch.cat(
+                            [obs_embedding_b, prev_sample_embedding, address_embedding]
+                        )
+
+                        # --Run LSTM
+                        h, c = self.lstm_cell(lstm_input[None], hc)
+                        hc = h, c
+
+                        # --Extract params
+                        raw_position_param = self.raw_position_param_extractor(h)[0]
+                        raw_position_loc = raw_position_param[:2]
+                        raw_position_scale = raw_position_param[2:].exp()
+
+                        # --Sample raw_position
+                        raw_position = torch.distributions.Independent(
+                            torch.distributions.Normal(raw_position_loc, raw_position_scale),
+                            reinterpreted_batch_ndims=1,
+                        ).sample()
+
+                        # # --Update trace
+                        raw_positions_flattened[
+                            sample_id, discrete_element_id, element_id, 0
+                        ] = raw_position
+                    else:
+                        # Extract shape id 0
+                        # --LSTM Input
+                        prev_sample_embedding = self.program_id_embeddings[program_id]
+                        address_embedding = self.get_address_embedding("shape_id_0")
+                        lstm_input = torch.cat(
+                            [obs_embedding_b, prev_sample_embedding, address_embedding]
+                        )
+
+                        # --Run LSTM
+                        h, c = self.lstm_cell(lstm_input[None], hc)
+                        hc = h, c
+
+                        # # --Extract params
+                        # shape_id_0_logits = self.shape_id_param_extractor(h)[0]
+
+                        # --Extract shape id
+                        shape_id_0 = shape_ids_flattened[discrete_element_id, element_id, 0]
+
+                        # # --Update trace
+                        # trace.append(("shape_id_0", shape_id_0))
+
+                        # Extract shape id 1
+                        # --LSTM Input
+                        prev_sample_embedding = self.shape_id_embeddings[shape_id_0]
+                        address_embedding = self.get_address_embedding("shape_id_1")
+                        lstm_input = torch.cat(
+                            [obs_embedding_b, prev_sample_embedding, address_embedding]
+                        )
+
+                        # --Run LSTM
+                        h, c = self.lstm_cell(lstm_input[None], hc)
+                        hc = h, c
+
+                        # # --Extract params
+                        # shape_id_1_logits = self.shape_id_param_extractor(h)[0]
+
+                        # --Extract shape id
+                        shape_id_1 = shape_ids_flattened[discrete_element_id, element_id, 1]
+
+                        # # --Update trace
+                        # trace.append(("shape_id_1", shape_id_1))
+
+                        # Sample raw position 0
+                        # --LSTM Input
+                        prev_sample_embedding = self.shape_id_embeddings[shape_id_1]
+                        address_embedding = self.get_address_embedding("raw_position_0")
+                        lstm_input = torch.cat(
+                            [obs_embedding_b, prev_sample_embedding, address_embedding]
+                        )
+
+                        # --Run LSTM
+                        h, c = self.lstm_cell(lstm_input[None], hc)
+                        hc = h, c
+
+                        # --Extract params
+                        raw_position_param = self.raw_position_param_extractor(h)[0]
+                        raw_position_loc = raw_position_param[:2]
+                        raw_position_scale = raw_position_param[2:].exp()
+
+                        # --Sample raw_position
+                        raw_position_0 = torch.distributions.Independent(
+                            torch.distributions.Normal(raw_position_loc, raw_position_scale),
+                            reinterpreted_batch_ndims=1,
+                        ).sample()
+
+                        # # --Update trace
+                        # trace.append(("raw_position_0", raw_position_0))
+
+                        # Sample raw position 1
+                        # --LSTM Input
+                        prev_sample_embedding = self.raw_position_embedder(raw_position_0[None])[0]
+                        address_embedding = self.get_address_embedding("raw_position_1")
+                        lstm_input = torch.cat(
+                            [obs_embedding_b, prev_sample_embedding, address_embedding]
+                        )
+
+                        # --Run LSTM
+                        h, c = self.lstm_cell(lstm_input[None], hc)
+                        hc = h, c
+
+                        # --Extract params
+                        raw_position_param = self.raw_position_param_extractor(h)[0]
+                        raw_position_loc = raw_position_param[:2]
+                        raw_position_scale = raw_position_param[2:].exp()
+
+                        # --Sample raw_position
+                        raw_position_1 = torch.distributions.Independent(
+                            torch.distributions.Normal(raw_position_loc, raw_position_scale),
+                            reinterpreted_batch_ndims=1,
+                        ).sample()
+
+                        # # --Update trace
+                        raw_positions_flattened[discrete_element_id, element_id, 0] = raw_position_0
+                        raw_positions_flattened[discrete_element_id, element_id, 1] = raw_position_1
+
+                    # traces.append(trace)
+
+        return raw_positions_flattened.view(
+            *[*sample_shape, *discrete_shape, *shape, self.max_num_shapes, 2]
+        )
 
     def log_prob_discrete(self, obs, discrete_latent):
         """log q(z_d | x)
