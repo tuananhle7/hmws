@@ -101,10 +101,12 @@ def init(run_args, device):
         guide = shape_program_pyro.Guide(num_primitives=run_args.num_primitives).to(device)
     elif run_args.model_type == "shape_program_pytorch":
         # Generative model
-        generative_model = shape_program_pytorch.GenerativeModel().to(device)
+        generative_model = shape_program_pytorch.GenerativeModel(
+            num_primitives=run_args.num_primitives
+        ).to(device)
 
         # Guide
-        guide = shape_program_pytorch.Guide().to(device)
+        guide = shape_program_pytorch.Guide(num_primitives=run_args.num_primitives).to(device)
 
         # Memory
         if "mws" in run_args.algorithm:
