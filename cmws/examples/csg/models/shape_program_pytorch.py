@@ -1183,8 +1183,12 @@ class Guide(nn.Module):
                         ).sample()
 
                         # # --Update trace
-                        raw_positions_flattened[discrete_element_id, element_id, 0] = raw_position_0
-                        raw_positions_flattened[discrete_element_id, element_id, 1] = raw_position_1
+                        raw_positions_flattened[
+                            sample_id, discrete_element_id, element_id, 0
+                        ] = raw_position_0
+                        raw_positions_flattened[
+                            sample_id, discrete_element_id, element_id, 1
+                        ] = raw_position_1
 
                     # traces.append(trace)
 
