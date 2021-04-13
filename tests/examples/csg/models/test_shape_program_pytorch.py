@@ -65,3 +65,19 @@ def test_guide_sample_dims():
     assert list(program_id.shape) == sample_shape + shape
     assert list(shape_ids.shape) == sample_shape + shape + [guide.max_num_shapes]
     assert list(raw_positions.shape) == sample_shape + shape + [guide.max_num_shapes, 2]
+
+
+def test_guide_log_prob_dims():
+    im_size = 64
+    shape = [2, 3]
+    sample_shape = [4, 5]
+
+    guide = Guide(im_size=im_size)
+    obs = torch.rand(*[*shape, im_size, im_size])
+    program_id = torch.randint(3, size=sample_shape + shape)
+    shape_ids = torch.randint(2, size=sample_shape + shape + [guide.max_num_shapes])
+    raw_positions = torch.randn(*[*sample_shape, *shape, guide.max_num_shapes, 2])
+
+    log_prob = guide.log_prob(obs, (program_id, shape_ids, raw_positions))
+
+    assert list(log_prob.shape) == sample_shape + shape
