@@ -1,9 +1,28 @@
 import random
 
-import pyredner
 import torch
 import torch.nn as nn
 from cmws import util
+import torch
+from pytorch3d.renderer import (
+    look_at_view_transform,
+    FoVPerspectiveCameras,
+    PointLights,
+    DirectionalLights,
+    Materials,
+    RasterizationSettings,
+    MeshRenderer,
+    MeshRasterizer,
+    SoftPhongShader,
+    HardPhongShader,
+    TexturesUV,
+    TexturesVertex
+)
+from pytorch3d.structures.meshes import (
+    Meshes,
+    join_meshes_as_batch,
+    join_meshes_as_scene,
+)
 
 
 class Cube:
@@ -150,81 +169,71 @@ def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
 
     Returns rgb image [im_size, im_size, 3]
     """
+    # Modified from PyTorch3D tutorial
+    # https://github.com/facebookresearch/pytorch3d/blob/master/docs/tutorials/render_textured_meshes.ipynb
+
     # Extract
     device = sizes.device
     num_objects = len(sizes)
-    if render_seed is None:
-        render_seed = random.randrange(1000000)
 
-    # Set pyredner stuff
-    pyredner.set_print_timing(False)
-    pyredner.set_use_gpu("cuda" in str(device))
+    # Create camera
+    R, T = look_at_view_transform(2.7, 0, 180)
+    cameras = FoVPerspectiveCameras(device=device, R=R, T=T)
 
-    # Camera
-    cam = pyredner.Camera(
-        position=torch.tensor([0.0, -2.0, -0.2]),
-        look_at=torch.tensor([0.0, 1.0, -0.6]),
-        up=torch.tensor([0.0, 1.0, 0.0]),
-        fov=torch.tensor([45.0]),  # in degree
-        clip_near=1e-2,  # needs to > 0
-        resolution=(im_size, im_size),
-        fisheye=False,
+    # Settings for rasterizer (optional blur)
+    raster_settings = RasterizationSettings(
+        image_size=im_size, # crisper objects + texture w/ higher resolution
+        blur_radius=0.0,
+        faces_per_pixel=2, # increase at cost of GPU memory
     )
 
-    # Material
-    object_materials = [pyredner.Material(diffuse_reflectance=color) for color in colors]
-    white_material = pyredner.Material(
-        diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0], device=device)
-    )
-    materials = [white_material] + object_materials
+    # Add light from the front
+    lights = PointLights(device=device, location=[[0.0, 0.0, -3.0]])
 
-    # Shape
-    shape_objects = []
+    # Compose renderer and shader
+    renderer = MeshRenderer(
+        rasterizer=MeshRasterizer(
+            cameras=cameras,
+            raster_settings=raster_settings
+        ),
+        shader=SoftPhongShader(
+            device=device,
+            cameras=cameras,
+            lights=lights
+        )
+    )
+
+    # Combine obj meshes into single mesh from rendering
+    # https://github.com/facebookresearch/pytorch3d/issues/15
+    vertices = []
+    faces = []
+    textures = []
+    vert_offset = 0 # offset by vertices from prior meshes
     for i, (position, size) in enumerate(zip(positions, sizes)):
         cube_vertices, cube_faces = get_cube_mesh(position, size)
-        shape_objects.append(
-            pyredner.Shape(
-                vertices=cube_vertices,
-                indices=cube_faces,
-                uvs=None,
-                normals=None,
-                material_id=1 + i,
-            )
-        )
-    shape_light_top = pyredner.Shape(
-        vertices=torch.tensor(
-            [[-1.0, -1.0, 1.0], [1.0, -1.0, 1.0], [-1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], device=device
-        ),
-        indices=torch.tensor([[0, 2, 1], [1, 2, 3]], dtype=torch.int32, device=device),
-        uvs=None,
-        normals=None,
-        material_id=0,
-    )
-    shape_light_front = pyredner.Shape(
-        vertices=torch.tensor(
-            [[-1.0, -2.0, -1.0], [1.0, -2.0, -1.0], [-1.0, -2.0, 1.0], [1.0, -2.0, 1.0]],
-            device=device,
-        ),
-        indices=torch.tensor([[0, 2, 1], [1, 2, 3]], dtype=torch.int32, device=device),
-        uvs=None,
-        normals=None,
-        material_id=0,
-    )
+        # TODO: learn entire texture vector
+        # For now, apply same color to each mesh vertex (v \in V)
+        texture = torch.ones_like(cube_vertices) * colors[i] # [V, 3]
+        # Offset faces (account for diff indexing, b/c treating as one mesh)
+        cube_faces = cube_faces + vert_offset
+        vert_offset = cube_vertices.shape[0]
+        vertices.append(cube_vertices)
+        faces.append(cube_faces)
+        textures.append(texture)
 
-    shapes = shape_objects + [shape_light_top, shape_light_front]
+    # Concatenate data into single mesh
+    vertices = torch.cat(vertices)
+    faces = torch.cat(faces)
+    textures = torch.cat(textures)[None]  # (1, num_verts, 3)
+    textures = TexturesVertex(verts_features=textures)
+    # each elmt of verts array is diff mesh in batch
+    mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
 
-    # Light
-    light_top = pyredner.AreaLight(shape_id=num_objects, intensity=torch.ones(3) * 2)
-    light_front = pyredner.AreaLight(shape_id=num_objects + 1, intensity=torch.ones(3) * 2)
-    area_lights = [light_top, light_front]
+    # Render image
+    img = renderer(mesh)   # (B, H, W, 4)
 
-    # Scene
-    scene = pyredner.Scene(cam, shapes, materials, area_lights)
-    scene_args = pyredner.RenderFunction.serialize_scene(scene=scene, num_samples=32, max_bounces=1)
-
-    # Render
-    render = pyredner.RenderFunction.apply
-    img = render(render_seed, *scene_args)
+    # Remove alpha channel and return (im_size, im_size, 3)
+    img = img[0, ..., :3]#.detach().squeeze().cpu().numpy()
 
     return img
 
