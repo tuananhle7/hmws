@@ -55,6 +55,7 @@ def plot_reconstructions_stacking(path, generative_model, guide, obs):
         guide
         obs: [num_test_obs, num_channels, im_size, im_size]
     """
+    obs = obs.squeeze(1)
     num_test_obs, num_channels, im_size, _ = obs.shape
     hi_res_im_size = 256
 

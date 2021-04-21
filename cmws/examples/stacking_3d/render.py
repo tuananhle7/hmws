@@ -142,7 +142,7 @@ def get_cube_mesh(position, size):
     return vertices, faces
 
 
-def render_cube(size, color, position, im_size=32, render_seed=None):
+def render_cube(size, color, position, im_size=32):
     """Renders a cube given cube specs
 
     Args
@@ -150,35 +150,38 @@ def render_cube(size, color, position, im_size=32, render_seed=None):
         color [3]
         position [3]
         im_size (int)
-        render_seed (int) -- to be passed into the redner renderer
 
     Returns rgb image [im_size, im_size, 3]
     """
-    return render_cubes(size[None], color[None], position[None], im_size, render_seed)
+    num_cubes = torch.IntTensor([1])
+    imgs = render_cubes(num_cubes, size[None,None], color[None,None], position[None, None], im_size)
+    return imgs[0]
 
 
-def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
+def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
     """Renders cubes given cube specs
 
     Args
-        sizes [num_cubes]
-        colors [num_cubes, 3]
-        positions [num_cubes, 3]
+        num_cubes [*shape]
+        sizes [*shape,max_num_cubes]
+        colors [*shape, max_num_cubes, 3]
+        positions [*shape, max_num_cubes, 3]
         im_size (int)
-        render_seed (int) -- to be passed into the redner renderer
 
-    Returns rgb image [im_size, im_size, 3]
+    Returns rgb image [*shape, im_size, im_size, 3]
     """
     # Modified from PyTorch3D tutorial
     # https://github.com/facebookresearch/pytorch3d/blob/master/docs/tutorials/render_textured_meshes.ipynb
 
     # Extract
     device = sizes.device
-    num_objects = len(sizes)
 
     # Create camera
-    R, T = look_at_view_transform(2.7, 0, 180)
-    cameras = FoVPerspectiveCameras(device=device, R=R, T=T)
+    R, T = look_at_view_transform(2.7, 90, 180,
+                                  up=((0.0, -1.0, 0.0),),
+                                  at=((0, 1, -0.6),))  # view top to see stacking
+    cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
+                                    fov=45.0)
 
     # Settings for rasterizer (optional blur)
     raster_settings = RasterizationSettings(
@@ -188,7 +191,7 @@ def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
     )
 
     # Add light from the front
-    lights = PointLights(device=device, location=[[0.0, 0.0, -3.0]])
+    lights = PointLights(device=device, location=[[0.0, 3.0, 0.0]]) # top light
 
     # Compose renderer and shader
     renderer = MeshRenderer(
@@ -203,37 +206,43 @@ def render_cubes(sizes, colors, positions, im_size=32, render_seed=None):
         )
     )
 
-    # Combine obj meshes into single mesh from rendering
-    # https://github.com/facebookresearch/pytorch3d/issues/15
-    vertices = []
-    faces = []
-    textures = []
-    vert_offset = 0 # offset by vertices from prior meshes
-    for i, (position, size) in enumerate(zip(positions, sizes)):
-        cube_vertices, cube_faces = get_cube_mesh(position, size)
-        # TODO: learn entire texture vector
-        # For now, apply same color to each mesh vertex (v \in V)
-        texture = torch.ones_like(cube_vertices) * colors[i] # [V, 3]
-        # Offset faces (account for diff indexing, b/c treating as one mesh)
-        cube_faces = cube_faces + vert_offset
-        vert_offset = cube_vertices.shape[0]
-        vertices.append(cube_vertices)
-        faces.append(cube_faces)
-        textures.append(texture)
+    # create one mesh per elmt in batch
+    meshes = []
+    for batch_idx, n_cubes in enumerate(num_cubes):
+        # Combine obj meshes into single mesh from rendering
+        # https://github.com/facebookresearch/pytorch3d/issues/15
+        vertices = []
+        faces = []
+        textures = []
+        vert_offset = 0 # offset by vertices from prior meshes
+        for i, (position, size,color) in enumerate(zip(positions[batch_idx, :n_cubes, :], sizes[batch_idx, :n_cubes],
+                                                       colors[batch_idx, :n_cubes, :])):
+            cube_vertices, cube_faces = get_cube_mesh(position, size)
+            # For now, apply same color to each mesh vertex (v \in V)
+            texture = torch.ones_like(cube_vertices) * color# [V, 3]
+            # Offset faces (account for diff indexing, b/c treating as one mesh)
+            cube_faces = cube_faces + vert_offset
+            vert_offset = cube_vertices.shape[0]
+            vertices.append(cube_vertices)
+            faces.append(cube_faces)
+            textures.append(texture)
 
-    # Concatenate data into single mesh
-    vertices = torch.cat(vertices)
-    faces = torch.cat(faces)
-    textures = torch.cat(textures)[None]  # (1, num_verts, 3)
-    textures = TexturesVertex(verts_features=textures)
-    # each elmt of verts array is diff mesh in batch
-    mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+        # Concatenate data into single mesh
+        vertices = torch.cat(vertices)
+        faces = torch.cat(faces)
+        textures = torch.cat(textures)[None]  # (1, num_verts, 3)
+        textures = TexturesVertex(verts_features=textures)
+        # each elmt of verts array is diff mesh in batch
+        mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+        meshes.append(mesh)
+
+    batched_mesh = join_meshes_as_batch(meshes)
 
     # Render image
-    img = renderer(mesh)   # (B, H, W, 4)
+    img = renderer(batched_mesh)   # (B, H, W, 4)
 
-    # Remove alpha channel and return (im_size, im_size, 3)
-    img = img[0, ..., :3]#.detach().squeeze().cpu().numpy()
+    # Remove alpha channel and return (B, im_size, im_size, 3)
+    img = img[:, ..., :3]#.detach().squeeze().cpu().numpy()
 
     return img
 
@@ -332,13 +341,8 @@ def render(
     stacking_program_flattened = stacking_program.reshape((num_elements, max_num_blocks))
     locations_flattened = locations.view((num_elements, max_num_blocks, 3))
 
-    # Render
-    imgs = []
-    for i in range(num_elements):
-        num_blocks_i = num_blocks_flattened[i]
-        sizes_i = square_size[stacking_program_flattened[i, :num_blocks_i]]
-        colors_i = square_color[stacking_program_flattened[i, :num_blocks_i]]
-        positions_i = locations_flattened[i, :num_blocks_i]
-        imgs.append(render_cubes(sizes_i, colors_i, positions_i, im_size).permute(2, 0, 1))
+    imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size)
+    imgs = imgs.permute(0, 3, 1, 2)
 
-    return torch.stack(imgs).view(*[*shape, num_channels, im_size, im_size])
+    return imgs
+
