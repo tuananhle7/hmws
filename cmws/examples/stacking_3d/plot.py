@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 from cmws import util
-from cmws.examples.stacking_3d import data, render
+from cmws.examples.stacking_3d import data, render, run
 from cmws.examples.stacking_3d import util as stacking_3d_util
 
 
@@ -146,7 +146,7 @@ def main(args):
 
     # Checkpoint paths
     if args.checkpoint_path is None:
-        checkpoint_paths = list(util.get_checkpoint_paths())
+        checkpoint_paths = list(util.get_checkpoint_paths(args.experiment_name))
     else:
         checkpoint_paths = [args.checkpoint_path]
 
@@ -162,9 +162,10 @@ def main(args):
             )
             generative_model, guide = model["generative_model"], model["guide"]
             num_iterations = len(stats.losses)
+            save_dir = util.get_save_dir(run_args.experiment_name, run.get_config_name(run_args))
 
             # Plot stats
-            plot_stats(f"{util.get_save_dir(run_args)}/stats.png", stats)
+            plot_stats(f"{save_dir}/stats.png", stats)
 
             # Plot reconstructions and other things
             # Test data
@@ -173,14 +174,13 @@ def main(args):
             # Plot
             if run_args.model_type == "stacking":
                 plot_reconstructions_stacking(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_primitives_stacking(
-                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
 
         else:
@@ -193,6 +193,7 @@ def get_parser():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument("--experiment-name", type=str, default="", help=" ")
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
 

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 from cmws import util
-from cmws.examples.stacking import data, render
+from cmws.examples.stacking import data, render, run
 from cmws.examples.stacking import util as stacking_util
 
 
@@ -337,7 +337,7 @@ def plot_memory_stacking(path, memory, generative_model, guide, num_obs_to_plot=
                 .numpy()
             )
             stacking_program_single_rest = list(
-                stacking_program[sorted_memory_id, i][num_blocks[sorted_memory_id, i]:]
+                stacking_program[sorted_memory_id, i][num_blocks[sorted_memory_id, i] :]
                 .long()
                 .cpu()
                 .numpy()
@@ -522,7 +522,7 @@ def main(args):
 
     # Checkpoint paths
     if args.checkpoint_path is None:
-        checkpoint_paths = list(util.get_checkpoint_paths())
+        checkpoint_paths = list(util.get_checkpoint_paths(args.experiment_name))
     else:
         checkpoint_paths = [args.checkpoint_path]
 
@@ -568,7 +568,7 @@ def main(args):
         for ax in axs:
             # ax.set_xlim(0, 20000)
             sns.despine(ax=ax, trim=True)
-        util.save_fig(fig, f"save/losses_{model_type}.png", dpi=200)
+        util.save_fig(fig, f"save/{args.experiment_name}/losses_{model_type}.png", dpi=200)
     # return
 
     # Plot for all checkpoints
@@ -587,9 +587,10 @@ def main(args):
                 model["memory"],
             )
             num_iterations = len(stats.losses)
+            save_dir = util.get_save_dir(run_args.experiment_name, run.get_config_name(run_args))
 
             # Plot stats
-            plot_stats(f"{util.get_save_dir(run_args)}/stats.png", stats)
+            plot_stats(f"{save_dir}/stats.png", stats)
 
             # Plot reconstructions and other things
             # Test data
@@ -598,72 +599,64 @@ def main(args):
             # Plot
             if run_args.model_type == "stacking_pyro":
                 plot_reconstructions_stacking_pyro(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_primitives_stacking_pyro(
-                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "one_primitive":
                 plot_reconstructions_one_primitive(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
             elif run_args.model_type == "two_primitives":
                 plot_reconstructions_two_primitives(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_primitives_two_primitives(
-                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "stacking":
                 plot_reconstructions_stacking(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_primitives_stacking(
-                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
                 if memory is not None:
                     plot_memory_stacking(
-                        f"{util.get_save_dir(run_args)}/memory/{num_iterations}.png",
-                        memory,
-                        generative_model,
-                        guide,
+                        f"{save_dir}/memory/{num_iterations}.png", memory, generative_model, guide,
                     )
             elif run_args.model_type == "stacking_top_down":
                 plot_reconstructions_stacking_top_down(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_primitives_stacking_top_down(
-                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "stacking_with_attachment":
                 plot_reconstructions_stacking_with_attachment(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_primitives_stacking_with_attachment(
-                    f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
 
         else:
@@ -676,6 +669,7 @@ def get_parser():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument("--experiment-name", type=str, default="", help=" ")
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
 

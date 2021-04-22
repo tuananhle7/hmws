@@ -75,7 +75,9 @@ def submit_slurm_job(run_args, logs_dir, job_name, no_repeat=False):
     subprocess.call(cmd, shell=True)
 
 
-def submit_slurm_jobs(run_argss, no_repeat=False, cancel=False, rm=False):
+def submit_slurm_jobs(
+    get_run_argss, get_config_name, get_job_name, no_repeat=False, cancel=False, rm=False
+):
     if cancel:
         cancel_all_my_non_bash_jobs()
 
@@ -84,12 +86,16 @@ def submit_slurm_jobs(run_argss, no_repeat=False, cancel=False, rm=False):
         if Path(dir_).exists():
             shutil.rmtree(dir_, ignore_errors=True)
 
-    cmws.util.logging.info(f"Launching {len(run_argss)} runs from {socket.gethostname()}")
-    for run_args in run_argss:
+    cmws.util.logging.info(
+        f"Launching {len(list(get_run_argss()))} runs from {socket.gethostname()}"
+    )
+    for run_args in get_run_argss():
+        config_name = get_config_name(run_args)
+        job_name = get_job_name(run_args)
         submit_slurm_job(
             run_args,
-            f"{cmws.util.get_save_dir(run_args)}/logs",
-            cmws.util.get_save_job_name_from_args(run_args),
+            cmws.util.get_logs_dir(run_args.experiment_name, config_name),
+            job_name,
             no_repeat=no_repeat,
         )
 

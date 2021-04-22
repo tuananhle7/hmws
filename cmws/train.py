@@ -7,11 +7,17 @@ from cmws import losses, util
 
 def train(model, optimizer, stats, args):
     # Extract
-    checkpoint_path = util.get_checkpoint_path(args)
     num_iterations_so_far = len(stats.losses)
     num_sleep_pretraining_iterations_so_far = len(stats.sleep_pretraining_losses)
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
     device = generative_model.device
+    if "cmws.examples.stacking.models" in str(type(generative_model)):
+        config_name = cmws.examples.stacking.run.get_config_name(args)
+    elif "cmws.examples.stacking_3d.models" in str(type(generative_model)):
+        config_name = cmws.examples.stacking_3d.run.get_config_name(args)
+    elif "cmws.examples.csg.models" in str(type(generative_model)):
+        config_name = cmws.examples.csg.run.get_config_name(args)
+    checkpoint_path = util.get_checkpoint_path(args.experiment_name, config_name)
 
     # Initialize optimizer for pyro models
     if "_pyro" in args.model_type:
@@ -274,27 +280,18 @@ def train(model, optimizer, stats, args):
                 )
 
         if iteration % args.checkpoint_interval == 0:
+            checkpoint_path_iter = util.get_checkpoint_path(
+                args.experiment_name, config_name, checkpoint_iteration=iteration
+            )
             if "cmws.examples.stacking.models" in str(type(generative_model)):
                 cmws.examples.stacking.util.save_checkpoint(
-                    util.get_checkpoint_path(args, checkpoint_iteration=iteration),
-                    model,
-                    optimizer,
-                    stats,
-                    run_args=args,
+                    checkpoint_path_iter, model, optimizer, stats, run_args=args,
                 )
             elif "cmws.examples.stacking_3d.models" in str(type(generative_model)):
                 cmws.examples.stacking_3d.util.save_checkpoint(
-                    util.get_checkpoint_path(args, checkpoint_iteration=iteration),
-                    model,
-                    optimizer,
-                    stats,
-                    run_args=args,
+                    checkpoint_path_iter, model, optimizer, stats, run_args=args,
                 )
             elif "cmws.examples.csg.models" in str(type(generative_model)):
                 cmws.examples.csg.util.save_checkpoint(
-                    util.get_checkpoint_path(args, checkpoint_iteration=iteration),
-                    model,
-                    optimizer,
-                    stats,
-                    run_args=args,
+                    checkpoint_path_iter, model, optimizer, stats, run_args=args,
                 )

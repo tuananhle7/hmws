@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 from cmws import util
+from cmws.examples.csg import run
 from cmws.examples.csg import util as csg_util
 from cmws.examples.csg.models import (
     heartangles,
@@ -991,7 +992,7 @@ def main(args):
 
     # Checkpoint paths
     if args.checkpoint_path is None:
-        checkpoint_paths = list(util.get_checkpoint_paths())
+        checkpoint_paths = list(util.get_checkpoint_paths(args.experiment_name))
     else:
         checkpoint_paths = [args.checkpoint_path]
 
@@ -1019,12 +1020,7 @@ def main(args):
 
             label = run_args.algorithm if run_args.seed == 0 else None
             color = colors[run_args.algorithm]
-            plot_kwargs = {
-                "label": label,
-                "color": color,
-                "alpha": 0.8,
-                "linewidth": 1.5
-            }
+            plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
 
             # Logp
             ax = axs[0]
@@ -1045,7 +1041,7 @@ def main(args):
     for ax in axs:
         # ax.set_xlim(0, 25000)
         sns.despine(ax=ax, trim=True)
-    util.save_fig(fig, "save/losses.png", dpi=200)
+    util.save_fig(fig, f"save/{args.experiment_name}/losses.png", dpi=200)
     # return
 
     # Plot for all checkpoints
@@ -1060,9 +1056,10 @@ def main(args):
             )
             generative_model, guide = model["generative_model"], model["guide"]
             num_iterations = len(stats.losses)
+            save_dir = util.get_save_dir(run_args.experiment_name, run.get_config_name(run_args))
 
             # Plot stats
-            plot_stats(f"{util.get_save_dir(run_args)}/stats.png", stats)
+            plot_stats(f"{save_dir}/stats.png", stats)
 
             # Plot reconstructions and other things
             num_test_obs = 30
@@ -1072,9 +1069,7 @@ def main(args):
                 latent, obs = generative_model.sample((num_test_obs,))
 
                 # Plot
-                plot_rectangles_posterior(
-                    f"{util.get_save_dir(run_args)}/posterior/{num_iterations}.png", guide, obs
-                )
+                plot_rectangles_posterior(f"{save_dir}/posterior/{num_iterations}.png", guide, obs)
             elif run_args.model_type == "hearts" or run_args.model_type == "hearts_pyro":
                 # Test data
                 true_generative_model = hearts.TrueGenerativeModel().to(device)
@@ -1086,14 +1081,13 @@ def main(args):
 
                 # Plot
                 plot_hearts_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "heartangles":
                 # Test data
@@ -1106,14 +1100,13 @@ def main(args):
 
                 # Plot
                 plot_heartangles_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "shape_program":
                 # Test data
@@ -1126,15 +1119,14 @@ def main(args):
 
                 # Plot
                 plot_shape_program_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "no_rectangle" or run_args.model_type == "neural_boundary":
                 # Test data
@@ -1149,15 +1141,14 @@ def main(args):
 
                 # Plot
                 plot_no_rectangle_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network_no_rectangle(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "ldif_representation":
                 # Test data
@@ -1170,15 +1161,14 @@ def main(args):
 
                 # Plot
                 plot_ldif_representation_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network_ldif_representation(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "ldif_representation_pyro":
                 # Test data
@@ -1191,15 +1181,14 @@ def main(args):
 
                 # Plot
                 plot_ldif_representation_pyro_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network_ldif_representation(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "neural_boundary_pyro":
                 # Test data
@@ -1210,15 +1199,14 @@ def main(args):
 
                 # Plot
                 plot_neural_boundary_pyro_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network_neural_boundary_pyro(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "shape_program_pyro":
                 # Test data
@@ -1227,15 +1215,14 @@ def main(args):
 
                 # Plot
                 plot_shape_program_pyro_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network_shape_program_pyro(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
             elif run_args.model_type == "shape_program_pytorch":
                 # Test data
@@ -1244,15 +1231,14 @@ def main(args):
 
                 # Plot
                 plot_shape_program_pytorch_reconstructions(
-                    f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                     ground_truth_latent,
                 )
                 plot_occupancy_network_shape_program_pytorch(
-                    f"{util.get_save_dir(run_args)}/occupancy_network/{num_iterations}.png",
-                    generative_model,
+                    f"{save_dir}/occupancy_network/{num_iterations}.png", generative_model,
                 )
         else:
             # Checkpoint doesn't exist
@@ -1264,6 +1250,7 @@ def get_parser():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument("--experiment-name", type=str, default="", help=" ")
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
 

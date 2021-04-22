@@ -12,7 +12,7 @@ def main(args):
     util.set_seed(args.seed)
 
     # Initialize models, optimizer, stats, data
-    checkpoint_path = util.get_checkpoint_path(args)
+    checkpoint_path = util.get_checkpoint_path(args.experiment_name, get_config_name(args))
     if not (args.continue_training and Path(checkpoint_path).exists()):
         util.logging.info("Training from scratch")
         model, optimizer, stats = csg_util.init(args, device)
@@ -23,10 +23,15 @@ def main(args):
     train.train(model, optimizer, stats, args)
 
 
+def get_config_name(args):
+    return f"{args.algorithm}_{args.seed}"
+
+
 def get_args_parser():
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--experiment-name", default="", help=" ")
     parser.add_argument(
         "--algorithm",
         default="rws",

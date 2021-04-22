@@ -20,38 +20,29 @@ logging.basicConfig(
 
 
 # Paths
-def get_path_base_from_args(args):
-    return "0"
+def get_save_dir(experiment_name, config_name):
+    if experiment_name == "":
+        raise RuntimeError("Must specify experiment name")
+
+    return f"save/{experiment_name}/{config_name}"
 
 
-def get_save_job_name_from_args(args):
-    return get_path_base_from_args(args)
+def get_logs_dir(experiment_name, config_name):
+    return f"{get_save_dir(experiment_name, config_name)}/logs"
 
 
-def get_save_dir_from_path_base(path_base):
-    return f"save/{path_base}"
-
-
-def get_save_dir(args):
-    return get_save_dir_from_path_base(get_path_base_from_args(args))
-
-
-def get_checkpoint_path(args, checkpoint_iteration=-1):
-    return get_checkpoint_path_from_path_base(get_path_base_from_args(args), checkpoint_iteration)
-
-
-def get_checkpoint_path_from_path_base(path_base, checkpoint_iteration=-1):
-    checkpoints_dir = f"{get_save_dir_from_path_base(path_base)}/checkpoints"
+def get_checkpoint_path(experiment_name, config_name, checkpoint_iteration=-1):
+    checkpoints_dir = f"{get_save_dir(experiment_name, config_name)}/checkpoints"
     if checkpoint_iteration == -1:
         return f"{checkpoints_dir}/latest.pt"
     else:
         return f"{checkpoints_dir}/{checkpoint_iteration}.pt"
 
 
-def get_checkpoint_paths(checkpoint_iteration=-1):
-    save_dir = "./save/"
-    for path_base in sorted(os.listdir(save_dir)):
-        yield get_checkpoint_path_from_path_base(path_base, checkpoint_iteration)
+def get_checkpoint_paths(experiment_name, checkpoint_iteration=-1):
+    save_dir = f"./save/{experiment_name}"
+    for config_name in sorted(os.listdir(save_dir)):
+        yield get_checkpoint_path(experiment_name, config_name, checkpoint_iteration)
 
 
 def sqrt(x):

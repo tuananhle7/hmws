@@ -3,20 +3,33 @@ from cmws.examples.stacking_3d import run
 
 
 def get_run_argss():
-    for num_sleep_pretraining_iterations in [0, 1000]:
-        for insomnia in [0.0, 0.25, 0.5, 0.75, 1.0]:
-            args = run.get_args_parser().parse_args([])
-            args.model_type = "stacking"
-            args.num_sleep_pretraining_iterations = num_sleep_pretraining_iterations
-            args.insomnia = insomnia
-            args.num_primitives = 5
-            args.max_num_blocks = 3
+    experiment_name = "cmws_vs_rws"
+    for seed in range(5):
+        # CMWS
+        args = run.get_args_parser().parse_args([])
+        args.experiment_name = experiment_name
+        args.seed = seed
+        args.num_particles = 10
+        args.insomnia = 0.75
+        args.algorithm = "cmws"
+        args.model_type = "stacking"
+        args.continue_training = True
+        yield args
 
-            # Basically don't test
-            args.test_num_particles = 2
-            args.test_interval = 10000
-            args.continue_training = True
-            yield args
+        # RWS
+        args = run.get_args_parser().parse_args([])
+        args.experiment_name = experiment_name
+        args.seed = seed
+        args.num_particles = 50
+        args.insomnia = 0.75
+        args.algorithm = "rws"
+        args.model_type = "stacking"
+        args.continue_training = True
+        yield args
+
+
+def get_job_name(run_args):
+    return run.get_config_name(run_args)
 
 
 def main(args):

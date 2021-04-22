@@ -3,12 +3,14 @@ from cmws.examples.csg import run
 
 
 def get_run_argss():
+    experiment_name = "cmws_vs_rws"
     model_type = "shape_program_pytorch"
     num_primitives = 10
 
     for seed in range(5):
         # CMWS
         args = run.get_args_parser().parse_args([])
+        args.experiment_name = experiment_name
         args.seed = seed
         args.algorithm = "cmws"
         args.num_particles = 10
@@ -20,6 +22,7 @@ def get_run_argss():
 
         # RWS
         args = run.get_args_parser().parse_args([])
+        args.experiment_name = experiment_name
         args.seed = seed
         args.algorithm = "rws"
         args.num_particles = 50
@@ -28,6 +31,10 @@ def get_run_argss():
         args.num_primitives = num_primitives
         args.continue_training = True
         yield args
+
+
+def get_job_name(run_args):
+    return run.get_config_name(run_args)
 
 
 def main(args):
