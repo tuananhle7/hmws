@@ -267,6 +267,94 @@ def plot_primitives_stacking(path, generative_model):
     plot_primitives_stacking_pyro(path, generative_model)
 
 
+def plot_memory_stacking(path, memory, generative_model, guide, num_obs_to_plot=10):
+    # Extract
+    device = generative_model.device
+    im_size = generative_model.num_rows
+
+    # Load training data
+    data_loader = torch.utils.data.DataLoader(
+        cmws.examples.stacking.data.StackingDataset("stacking", device, test=False),
+        batch_size=num_obs_to_plot,
+        shuffle=False,
+    )
+    obs, obs_id = next(iter(data_loader))
+
+    # Select latents
+    # --Discrete latent from memory
+    discrete_latent = memory.select(obs_id)
+
+    # --Sample a continuous one from the guide
+    raw_locations = guide.sample_continuous(obs, discrete_latent)
+
+    # --Assemble latent
+    latent = discrete_latent + [raw_locations]
+
+    # --Compute log probs
+    num_particles = 10
+    log_prob = cmws.losses.get_log_marginal_joint(
+        generative_model, guide, discrete_latent, obs, num_particles
+    )
+
+    # Plot
+    # Sample reconstructions
+    # --Soft renders
+    # reconstructed_obs_soft = generative_model.get_obs_loc(latent)
+    reconstructed_obs_hard = generative_model.get_obs_loc_hard(latent)
+
+    # Plot
+    num_rows = 1 + memory.size
+    num_cols = num_obs_to_plot
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), sharex=True, sharey=True
+    )
+    for ax in axss.flat:
+        ax.set_xlim(0, im_size)
+        ax.set_ylim(im_size, 0)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for i in range(num_obs_to_plot):
+        # Plot obs
+        ax = axss[0, i]
+        ax.imshow(obs[i].cpu().permute(1, 2, 0))
+
+        # Sorting according to log prob
+        _, sorted_id = torch.sort(log_prob[:, i])
+
+        for memory_id, sorted_memory_id in enumerate(reversed(sorted_id)):
+            # Plot probs
+            ax = axss[1 + memory_id, i]
+            ax.imshow(reconstructed_obs_hard[sorted_memory_id, i].cpu().permute(1, 2, 0))
+
+            # Print latents
+            num_blocks, stacking_program = discrete_latent
+            stacking_program_single = list(
+                stacking_program[sorted_memory_id, i][: num_blocks[sorted_memory_id, i]]
+                .long()
+                .cpu()
+                .numpy()
+            )
+            ax.text(
+                0.95,
+                0.95,
+                f"$z_d = $ {stacking_program_single}\n"
+                f"$\\log p(z_d, x)$ = {log_prob[sorted_memory_id, i]:.0f}",
+                transform=ax.transAxes,
+                fontsize=7,
+                va="top",
+                ha="right",
+                color="gray",
+            )
+
+    # Set labels
+    axss[0, 0].set_ylabel("Observed image")
+    for memory_id in range(memory.size):
+        axss[1 + memory_id, 0].set_ylabel(f"Memory {memory_id}")
+
+    util.save_fig(fig, path)
+
+
 def plot_reconstructions_stacking_top_down(path, generative_model, guide, obs):
     """
     Args:
@@ -498,7 +586,11 @@ def main(args):
             model, optimizer, stats, run_args = stacking_util.load_checkpoint(
                 checkpoint_path, device=device
             )
-            generative_model, guide = model["generative_model"], model["guide"]
+            generative_model, guide, memory = (
+                model["generative_model"],
+                model["guide"],
+                model["memory"],
+            )
             num_iterations = len(stats.losses)
 
             # Plot stats
@@ -549,6 +641,13 @@ def main(args):
                     f"{util.get_save_dir(run_args)}/primitives/{num_iterations}.png",
                     generative_model,
                 )
+                if memory is not None:
+                    plot_memory_stacking(
+                        f"{util.get_save_dir(run_args)}/memory/{num_iterations}.png",
+                        memory,
+                        generative_model,
+                        guide,
+                    )
             elif run_args.model_type == "stacking_top_down":
                 plot_reconstructions_stacking_top_down(
                     f"{util.get_save_dir(run_args)}/reconstructions/{num_iterations}.png",
