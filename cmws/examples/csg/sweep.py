@@ -38,7 +38,9 @@ def get_job_name(run_args):
 
 
 def main(args):
-    cmws.slurm_util.submit_slurm_jobs(list(get_run_argss()), args.no_repeat, args.cancel, args.rm)
+    cmws.slurm_util.submit_slurm_jobs(
+        get_run_argss, run.get_config_name, get_job_name, args.no_repeat, args.cancel, args.rm
+    )
 
 
 if __name__ == "__main__":
