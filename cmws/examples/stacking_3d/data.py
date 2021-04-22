@@ -2,6 +2,7 @@ import pyro
 import torch
 from cmws import util
 from cmws.examples.stacking_3d import render
+import pathlib
 
 
 def sample_stacking_program(num_primitives, device, address_suffix="", fixed_num_blocks=False):
@@ -107,6 +108,7 @@ def generate_from_true_generative_model_single(
         raw_locations,
         im_size,
     )
+    assert len(img.shape) == 3
 
     return img
 
@@ -142,6 +144,75 @@ def generate_obs(num_obs, device, seed=None):
 @torch.no_grad()
 def generate_test_obs(device):
     return generate_obs(10, device, seed=1)
+
+
+class StackingDataset(torch.utils.data.Dataset):
+    """Loads or generates a dataset
+    Uses ~1.2M (test) / 120MB (train)
+
+    Args
+        device
+        test (bool; default: False)
+        force_regenerate (bool; default: False): if False, the dataset is loaded if it exists
+            if True, the dataset is regenerated regardless
+        seed (int): only used for generation
+    """
+
+    def __init__(self, device, test=False, force_regenerate=False, seed=1):
+        self.device = device
+        self.test = test
+        self.num_train_data = 10000
+        self.num_test_data = 100
+        if self.test:
+            self.num_data = self.num_test_data
+        else:
+            self.num_data = self.num_train_data
+
+        path = (
+            pathlib.Path(__file__)
+            .parent.absolute()
+            .joinpath("data", "test.pt" if self.test else "train.pt")
+        )
+        if force_regenerate or not path.exists():
+            util.logging.info(f"Generating dataset (test = {self.test})...")
+
+            # Make path
+            pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+            # Set seed
+            util.set_seed(seed)
+
+            # Generate new dataset
+            self.obs = generate_from_true_generative_model(
+                self.num_data, num_primitives=3, device=device
+            )
+            self.obs_id = torch.arange(self.num_data, device=device)
+
+            # Save dataset
+            torch.save([self.obs, self.obs_id], path)
+            util.logging.info(f"Dataset (test = {self.test}) generated and saved to {path}")
+        else:
+            util.logging.info(f"Loading dataset (test = {self.test})...")
+
+            # Load dataset
+            self.obs, self.obs_id = torch.load(path, map_location=device)
+            util.logging.info(f"Dataset (test = {self.test}) loaded {path}")
+
+    def __getitem__(self, idx):
+        return self.obs[idx], self.obs_id[idx]
+
+    def __len__(self):
+        return self.num_data
+
+
+def get_stacking_data_loader(device, batch_size, test=False):
+    if test:
+        shuffle = True
+    else:
+        shuffle = False
+    return torch.utils.data.DataLoader(
+        StackingDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
+    )
 
 
 if __name__ == "__main__":
