@@ -998,8 +998,7 @@ def main(args):
     # Plot log p and KL for all checkpoints
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
 
-    colors = {0.0: "blue", 0.25: "C1", 0.5: "C2", 0.75: "C4", 1.0: "C5"}
-    linestyles = {10: "solid", 20: "dashed", 50: "dotted"}
+    colors = {"cmws": "C0", "rws": "C1"}
     for checkpoint_path in checkpoint_paths:
         # Fix seed
         util.set_seed(1)
@@ -1013,16 +1012,18 @@ def main(args):
             num_iterations = len(stats.losses)
             # if run_args.insomnia != 0.75 and run_args.algorithm == "cmws":
             #     continue
+            # if run_args.insomnia != 0.5 or (
+            #     (run_args.num_particles == 10 and run_args.algorithm == "cmws")
+            # ):
+            #     continue
 
-            label = util.get_path_base_from_args(run_args)
-            linestyle = linestyles[run_args.num_particles]
-            color = colors[run_args.insomnia]
-            linewidth = 1 if run_args.algorithm == "cmws" else 2
+            label = run_args.algorithm if run_args.seed == 0 else None
+            color = colors[run_args.algorithm]
             plot_kwargs = {
                 "label": label,
-                "linestyle": linestyle,
                 "color": color,
-                "linewidth": linewidth,
+                "alpha": 0.8,
+                "linewidth": 1.5
             }
 
             # Logp
@@ -1039,9 +1040,10 @@ def main(args):
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
+    ax.set_ylim(0, 1000)
     ax.legend()
     for ax in axs:
-        ax.set_xlim(0, 50000)
+        # ax.set_xlim(0, 25000)
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, "save/losses.png", dpi=200)
     # return

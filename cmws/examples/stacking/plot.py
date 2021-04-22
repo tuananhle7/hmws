@@ -1,5 +1,6 @@
 import os
 
+import cmws
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
@@ -71,8 +72,8 @@ def plot_reconstructions_stacking_pyro(path, generative_model, guide, obs):
                 generative_model.raw_color_sharpness,
                 generative_model.raw_blur,
                 num_channels=generative_model.num_channels,
-                num_rows=generative_model.num_rows,
-                num_cols=generative_model.num_cols,
+                num_rows=generative_model.im_size,
+                num_cols=generative_model.im_size,
             )
             for trace in traces
         ]
@@ -85,8 +86,8 @@ def plot_reconstructions_stacking_pyro(path, generative_model, guide, obs):
                 trace["stacking_program"],
                 trace["raw_locations"],
                 num_channels=generative_model.num_channels,
-                num_rows=generative_model.num_rows,
-                num_cols=generative_model.num_cols,
+                num_rows=generative_model.im_size,
+                num_cols=generative_model.im_size,
             )
             for trace in traces
         ]
@@ -138,15 +139,15 @@ def plot_reconstructions_stacking_pyro(path, generative_model, guide, obs):
 
 def plot_primitives_stacking_pyro(path, generative_model):
     device = generative_model.device
-    im_size = generative_model.num_rows
+    im_size = generative_model.im_size
 
     # Init
     location = torch.zeros((2,), device=device)
     blank_canvas = render.init_canvas(
         device,
         num_channels=generative_model.num_channels,
-        num_rows=generative_model.num_rows,
-        num_cols=generative_model.num_cols,
+        num_rows=generative_model.im_size,
+        num_cols=generative_model.im_size,
     )
 
     # Plot
@@ -270,7 +271,7 @@ def plot_primitives_stacking(path, generative_model):
 def plot_memory_stacking(path, memory, generative_model, guide, num_obs_to_plot=10):
     # Extract
     device = generative_model.device
-    im_size = generative_model.num_rows
+    im_size = generative_model.im_size
 
     # Load training data
     data_loader = torch.utils.data.DataLoader(
@@ -335,10 +336,17 @@ def plot_memory_stacking(path, memory, generative_model, guide, num_obs_to_plot=
                 .cpu()
                 .numpy()
             )
+            stacking_program_single_rest = list(
+                stacking_program[sorted_memory_id, i][num_blocks[sorted_memory_id, i]:]
+                .long()
+                .cpu()
+                .numpy()
+            )
             ax.text(
                 0.95,
                 0.95,
                 f"$z_d = $ {stacking_program_single}\n"
+                f"$z_d' = $ {stacking_program_single_rest}\n"
                 f"$\\log p(z_d, x)$ = {log_prob[sorted_memory_id, i]:.0f}",
                 transform=ax.transAxes,
                 fontsize=7,
@@ -519,61 +527,48 @@ def main(args):
         checkpoint_paths = [args.checkpoint_path]
 
     # Plot log p and KL for all checkpoints
-    fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+    for model_type in ["stacking", "stacking_top_down"]:
+        fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
 
-    colors = {0.0: "blue", 0.25: "C1", 0.5: "C2", 0.75: "C4", 1.0: "C5"}
-    linestyles = {10: "solid", 20: "dashed", 50: "dotted"}
-    for checkpoint_path in checkpoint_paths:
-        # Fix seed
-        util.set_seed(1)
+        colors = {"cmws": "C0", "rws": "C1"}
+        for checkpoint_path in checkpoint_paths:
+            # Fix seed
+            util.set_seed(1)
 
-        if os.path.exists(checkpoint_path):
-            # Load checkpoint
-            model, optimizer, stats, run_args = stacking_util.load_checkpoint(
-                checkpoint_path, device=device
-            )
-            generative_model, guide = model["generative_model"], model["guide"]
-            num_iterations = len(stats.losses)
-            # if run_args.insomnia != 0.75 and run_args.algorithm == "cmws":
-            #     continue
+            if os.path.exists(checkpoint_path):
+                # Load checkpoint
+                model, optimizer, stats, run_args = stacking_util.load_checkpoint(
+                    checkpoint_path, device=device
+                )
+                generative_model, guide = model["generative_model"], model["guide"]
+                num_iterations = len(stats.losses)
+                if run_args.model_type != model_type:
+                    continue
 
-            label = util.get_path_base_from_args(run_args)
-            linestyle = (
-                linestyles[run_args.num_particles] if run_args.algorithm == "cmws" else "solid"
-            )
-            color = colors[run_args.insomnia] if run_args.algorithm == "cmws" else "black"
+                label = run_args.algorithm if run_args.seed == 0 else None
+                color = colors[run_args.algorithm]
+                plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
 
-            # Logp
-            ax = axs[0]
-            ax.plot(
-                [x[0] for x in stats.log_ps],
-                [x[1] for x in stats.log_ps],
-                label=label,
-                linestyle=linestyle,
-                color=color,
-            )
+                # Logp
+                ax = axs[0]
+                ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps], **plot_kwargs)
 
-            # KL
-            ax = axs[1]
-            ax.plot(
-                [x[0] for x in stats.kls],
-                [x[1] for x in stats.kls],
-                label=label,
-                linestyle=linestyle,
-                color=color,
-            )
-    ax = axs[0]
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Log p")
+                # KL
+                ax = axs[1]
+                ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
+        ax = axs[0]
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Log p")
 
-    ax = axs[1]
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("KL")
-    ax.legend()
-    for ax in axs:
-        ax.set_xlim(0, 50000)
-        sns.despine(ax=ax, trim=True)
-    util.save_fig(fig, "save/losses.png", dpi=200)
+        ax = axs[1]
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("KL")
+        # ax.set_ylim(0, 2000)
+        ax.legend()
+        for ax in axs:
+            # ax.set_xlim(0, 20000)
+            sns.despine(ax=ax, trim=True)
+        util.save_fig(fig, f"save/losses_{model_type}.png", dpi=200)
     # return
 
     # Plot for all checkpoints
