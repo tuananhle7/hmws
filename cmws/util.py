@@ -1,6 +1,4 @@
 import scipy
-import subprocess
-import getpass
 import torch
 import imageio
 import logging
@@ -278,25 +276,6 @@ def pad_tensor(x, length, value):
     result[mask] = value
 
     return result
-
-
-def cancel_all_my_non_bash_jobs():
-    logging.info("Cancelling all non-bash jobs.")
-    jobs_status = (
-        subprocess.check_output(f"squeue -u {getpass.getuser()}", shell=True)
-        .decode()
-        .split("\n")[1:-1]
-    )
-    non_bash_job_ids = []
-    for job_status in jobs_status:
-        if not ("bash" in job_status.split() or "zsh" in job_status.split()):
-            non_bash_job_ids.append(job_status.split()[0])
-    if len(non_bash_job_ids) > 0:
-        cmd = "scancel {}".format(" ".join(non_bash_job_ids))
-        logging.info(cmd)
-        logging.info(subprocess.check_output(cmd, shell=True).decode())
-    else:
-        logging.info("No non-bash jobs to cancel.")
 
 
 def get_max_gpu_memory_allocated_MB(device):
