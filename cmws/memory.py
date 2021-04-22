@@ -341,6 +341,11 @@ def get_unique_and_top_k(x, scores, k):
     # [k, num_elements]
     scores_top_k = torch.stack(scores_top_k, dim=1)
 
+    # Check unique
+    # for element_id in range(num_elements):
+    #     if not len(torch.unique(x_top_k[:, element_id, :], dim=0)) == x_top_k.shape[0]:
+    #         raise RuntimeError("elements not unique")
+
     # Unflatten
     # --Unflatten x
     if torch.is_tensor(x):

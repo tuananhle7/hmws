@@ -318,6 +318,10 @@ def get_cmws_loss(
     # UPDATE MEMORY with d_{1:M}
     memory.update(obs_id, discrete_latent_selected)
 
+    # CHECK UNIQUE
+    # if not memory.is_unique(obs_id).all():
+    #     raise RuntimeError("memory not unique")
+
     # SAMPLE CONTINUOUS c_i ~ q(c | d_i, x) for i in {1, ..., M}
     # [memory_size, batch_size, ...]
     continuous_latent = guide.sample_continuous(obs, discrete_latent_selected)
