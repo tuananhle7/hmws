@@ -9,27 +9,27 @@ from cmws.examples.csg import run
 
 
 def get_sweep_argss():
-    insomnias = [0.0, 0.25, 0.5, 0.75, 1.0]
     model_type = "shape_program_pytorch"
     num_primitives = 10
 
-    # CMWS
-    for num_particles in [10, 20]:
-        for insomnia in insomnias:
-            args = run.get_args_parser().parse_args([])
-            args.algorithm = "cmws"
-            args.num_particles = num_particles
-            args.insomnia = insomnia
-            args.model_type = model_type
-            args.num_primitives = num_primitives
-            args.continue_training = True
-            yield args
-
-    # RWS
-    for insomnia in insomnias:
+    for seed in range(5):
+        # CMWS
         args = run.get_args_parser().parse_args([])
+        args.seed = seed
+        args.algorithm = "cmws"
+        args.num_particles = 10
+        args.insomnia = 0.25
+        args.model_type = model_type
+        args.num_primitives = num_primitives
+        args.continue_training = True
+        yield args
+
+        # RWS
+        args = run.get_args_parser().parse_args([])
+        args.seed = seed
         args.algorithm = "rws"
-        args.insomnia = insomnia
+        args.num_particles = 50
+        args.insomnia = 0.25
         args.model_type = model_type
         args.num_primitives = num_primitives
         args.continue_training = True

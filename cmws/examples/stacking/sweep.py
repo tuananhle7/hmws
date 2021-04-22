@@ -9,28 +9,26 @@ from cmws.examples.stacking import run
 
 
 def get_sweep_argss():
-    # CMWS
-    for num_particles in [10, 20, 50]:
-        for insomnia in [0.0, 0.25, 0.5, 0.75, 1.0]:
-            args = run.get_args_parser().parse_args([])
-            args.num_particles = num_particles
-            args.insomnia = insomnia
-            args.algorithm = "cmws"
-            args.model_type = "stacking"
-            args.num_primitives = 5
-            args.max_num_blocks = 3
-            args.continue_training = True
-            yield args
+    for seed in range(5):
+        # CMWS
+        args = run.get_args_parser().parse_args([])
+        args.seed = seed
+        args.num_particles = 10
+        args.insomnia = 0.75
+        args.algorithm = "cmws"
+        args.model_type = "stacking"
+        args.continue_training = True
+        yield args
 
-    # RWS
-    args = run.get_args_parser().parse_args([])
-    args.algorithm = "rws"
-    args.model_type = "stacking"
-    args.insomnia = 0.75
-    args.num_primitives = 5
-    args.max_num_blocks = 3
-    args.continue_training = True
-    yield args
+        # RWS
+        args = run.get_args_parser().parse_args([])
+        args.seed = seed
+        args.num_particles = 50
+        args.insomnia = 0.75
+        args.algorithm = "rws"
+        args.model_type = "stacking"
+        args.continue_training = True
+        yield args
 
 
 def args_to_str(args):
@@ -100,6 +98,7 @@ def main(args):
                 + "--ntasks=1 "
                 + f"--gres=gpu:1 "
                 # + "--constraint=high-capacity "
+                + f"-p tenenbaum "
                 + "--constraint=14GB "
                 + f'-J "{job_name}" '
                 + f'-o "{logs_dir}/%j.out" '
