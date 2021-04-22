@@ -4,6 +4,7 @@ import logging
 import time
 from pathlib import Path
 
+import cmws
 import pyro
 import torch
 from cmws.examples.stacking_3d.models import stacking
@@ -22,6 +23,15 @@ def init(run_args, device):
         guide = stacking.Guide(
             num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
         ).to(device)
+
+        # Memory
+        if "mws" in run_args.algorithm:
+            memory = cmws.memory.Memory(
+                10000,
+                run_args.memory_size,
+                [[], [run_args.max_num_blocks]],
+                [[1, run_args.max_num_blocks], [0, run_args.num_primitives]],
+            ).to(device)
 
     # Model tuple
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}

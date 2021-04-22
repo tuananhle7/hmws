@@ -99,7 +99,7 @@ def train(model, optimizer, stats, args):
         test_data_loader = cmws.examples.stacking.data.get_stacking_data_loader(
             "stacking", device, args.batch_size, test=True
         )
-    if "cmws.examples.stacking.models.stacking_top_down." in str(type(generative_model)):
+    elif "cmws.examples.stacking.models.stacking_top_down." in str(type(generative_model)):
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.stacking.data.get_stacking_data_loader(
@@ -115,6 +115,16 @@ def train(model, optimizer, stats, args):
             cmws.examples.csg.data.get_csg_data_loader(device, args.batch_size, test=False)
         )
         test_data_loader = cmws.examples.csg.data.get_csg_data_loader(
+            device, args.batch_size, test=True
+        )
+    elif "cmws.examples.stacking_3d.models.stacking." in str(type(generative_model)):
+        # Use a data loader
+        train_data_iterator = util.cycle(
+            cmws.examples.stacking_3d.data.get_stacking_data_loader(
+                device, args.batch_size, test=False
+            )
+        )
+        test_data_loader = cmws.examples.stacking_3d.data.get_stacking_data_loader(
             device, args.batch_size, test=True
         )
     else:
@@ -133,6 +143,7 @@ def train(model, optimizer, stats, args):
         if (
             "cmws.examples.stacking.models.stacking." in str(type(generative_model))
             or "cmws.examples.stacking.models.stacking_top_down." in str(type(generative_model))
+            or "cmws.examples.stacking_3d.models.stacking." in str(type(generative_model))
             or "cmws.examples.csg.models.shape_program_pytorch" in str(type(generative_model))
         ):
             obs, obs_id = next(train_data_iterator)
@@ -216,6 +227,7 @@ def train(model, optimizer, stats, args):
                     "cmws.examples.stacking.models.stacking." in str(type(generative_model))
                     or "cmws.examples.stacking.models.stacking_top_down."
                     in str(type(generative_model))
+                    or "cmws.examples.stacking_3d.models.stacking." in str(type(generative_model))
                     or "cmws.examples.csg.models.shape_program_pytorch"
                     in str(type(generative_model))
                 ):
