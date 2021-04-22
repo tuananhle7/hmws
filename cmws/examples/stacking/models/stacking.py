@@ -110,6 +110,28 @@ class GenerativeModel(nn.Module):
 
         return num_blocks, stacking_program, raw_locations
 
+    def discrete_latent_sample(self, sample_shape=[]):
+        """Sample from p(z_d)
+
+        Args
+            sample_shape
+
+        Returns
+            latent:
+                num_blocks [*sample_shape]
+                stacking_program [*sample_shape, max_num_blocks]
+        """
+        # Sample num_blocks
+        num_blocks = self.num_blocks_dist.sample(sample_shape)
+
+        # Sample stacking_program
+        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=logits).sample(sample_shape), num_blocks, 0
+        )
+
+        return num_blocks, stacking_program
+
     def get_obs_loc(self, latent):
         """Location parameter of p(x | z)
 

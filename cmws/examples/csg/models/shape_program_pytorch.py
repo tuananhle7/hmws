@@ -96,6 +96,30 @@ class GenerativeModel(nn.Module):
 
         return program_id, stacking_program, raw_locations
 
+    def discrete_latent_sample(self, sample_shape=[]):
+        """Sample from p(z_d)
+
+        Args
+            sample_shape
+
+        Returns
+            latent:
+                program_id [*sample_shape]
+                shape_ids [*sample_shape, max_num_shapes=2]
+        """
+        # Sample program_id
+        program_id = self.program_id_dist.sample(sample_shape)
+
+        # Sample stacking_program
+        num_shapes = self.get_num_shapes(program_id)
+        stacking_program = util.pad_tensor(
+            torch.distributions.Categorical(logits=self.shape_id_logits).sample(sample_shape),
+            num_shapes,
+            0,
+        )
+
+        return program_id, stacking_program
+
     def latent_log_prob(self, latent):
         """Prior log p(z)
 

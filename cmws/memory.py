@@ -5,41 +5,32 @@ from cmws import util
 import torch
 
 
-def init_memory_groups(num_obs, memory_size, event_shapes, event_ranges):
+def init_memory_groups(num_obs, memory_size, generative_model):
     """Initializes a latent variables, making sure it's unique.
 
     Args
         num_obs (int)
         memory_size (int)
-        event_shapes
-            list of lists
-                event_shapes[i] is the shape of the ith latent variable
-                group
-                (there is more than one group)
-        event_ranges
-            list of lists
-                event_ranges[i] = [min_i (inclusive), max_i (exclusive)]
-                    is the range of the ith latent variable group
+        generative_model -- only used for sampling from p(z_d)
 
     Returns list of
         [num_obs, memory_size, *event_shapes[i]]
     """
-    # Extract
-    num_groups = len(event_shapes)
-
     latent_groupss = []
     for _ in range(num_obs):
         while True:
-            latent_groups = []
-            for group_id in range(num_groups):
-                low, high = event_ranges[group_id]
-                latent_groups.append(
-                    torch.randint(low, high, [memory_size] + event_shapes[group_id])
-                )
+            latent_groups = generative_model.discrete_latent_sample([memory_size])
+
+            # Force latent_groups into a 1-element list if it is a tensor
+            if torch.is_tensor(latent_groups):
+                latent_groups = [latent_groups]
 
             if len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size:
                 latent_groupss.append(latent_groups)
                 break
+
+    # Extract
+    num_groups = len(latent_groupss[0])
 
     memory_groups = []
     for group_id in range(num_groups):
@@ -53,45 +44,14 @@ class Memory:
     Args
         num_obs (int)
         size (int)
-        event_shapes
-            list
-                shape of the latent variable group
-                (there is only one group)
-
-            OR
-
-            list of lists
-                event_shapes[i] is the shape of the ith latent variable
-                group
-                (there is more than one group)
-        event_ranges
-            list
-                min (int) inclusive
-                max (int) exclusive
-
-            OR
-
-            list of lists
-                event_ranges[i] = [min_i (inclusive), max_i (exclusive)]
-                    is the range of the ith latent variable group
+        generative_model - only used to initialize the memory by sampling from p(z_d)
     """
 
-    def __init__(self, num_obs, size, event_shapes, event_ranges):
+    def __init__(self, num_obs, size, generative_model):
         self.num_obs = num_obs
         self.size = size
-
-        # Determine number of groups
-        if isinstance(event_shapes[0], int):
-            self.num_groups = 1
-            self.event_shapes = [event_shapes]
-            self.event_ranges = [event_ranges]
-        else:
-            self.num_groups = len(event_shapes)
-            assert self.num_groups > 1
-            self.event_shapes = event_shapes
-            self.event_ranges = event_ranges
-
-        self.memory_groups = init_memory_groups(num_obs, size, event_shapes, event_ranges)
+        self.memory_groups = init_memory_groups(num_obs, size, generative_model)
+        self.num_groups = len(self.memory_groups)
 
     @property
     def device(self):

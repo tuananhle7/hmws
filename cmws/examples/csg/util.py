@@ -110,12 +110,7 @@ def init(run_args, device):
 
         # Memory
         if "mws" in run_args.algorithm:
-            memory = cmws.memory.Memory(
-                10000,
-                run_args.memory_size,
-                [[], [generative_model.max_num_shapes]],
-                [[0, 3], [0, generative_model.num_primitives]],
-            ).to(device)
+            memory = cmws.memory.Memory(10000, run_args.memory_size, generative_model).to(device)
 
     # Model tuple
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}

@@ -53,12 +53,7 @@ def init(run_args, device):
 
         # Memory
         if "mws" in run_args.algorithm:
-            memory = cmws.memory.Memory(
-                10000,
-                run_args.memory_size,
-                [[], [run_args.max_num_blocks]],
-                [[1, run_args.max_num_blocks], [0, run_args.num_primitives]],
-            ).to(device)
+            memory = cmws.memory.Memory(10000, run_args.memory_size, generative_model).to(device)
     elif run_args.model_type == "stacking_top_down":
         # Generative model
         generative_model = stacking_top_down.GenerativeModel(
@@ -72,12 +67,7 @@ def init(run_args, device):
 
         # Memory
         if "mws" in run_args.algorithm:
-            memory = cmws.memory.Memory(
-                10000,
-                run_args.memory_size,
-                [[], [run_args.max_num_blocks]],
-                [[1, run_args.max_num_blocks], [0, run_args.num_primitives]],
-            ).to(device)
+            memory = cmws.memory.Memory(10000, run_args.memory_size, generative_model).to(device)
     elif run_args.model_type == "stacking_with_attachment":
         # Generative model
         generative_model = stacking_with_attachment.GenerativeModel(
