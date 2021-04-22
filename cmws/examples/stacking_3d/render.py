@@ -343,6 +343,7 @@ def render(
 
     imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size)
     imgs = imgs.permute(0, 3, 1, 2)
+    imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])
 
     return imgs
 
