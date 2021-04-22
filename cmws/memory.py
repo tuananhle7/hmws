@@ -146,6 +146,27 @@ class Memory:
             for group_id in range(self.num_groups):
                 self.memory_groups[group_id][obs_id] = latent[group_id].transpose(0, 1)
 
+    def is_unique(self, obs_id=None):
+        """
+        Args
+            obs_id None or [batch_size]
+
+        Returns
+            [num_obs] or [batch_size]
+        """
+        if obs_id is None:
+            obs_id = torch.arange(self.num_obs, device=self.device)
+
+        latent_groups = self.select(obs_id)
+        if self.num_groups == 1:
+            latent_groups = [latent_groups]
+
+        latent_groups_flattened = flatten_tensors(latent_groups, 2)
+        result = []
+        for i in range(len(obs_id)):
+            result.append(len(torch.unique(latent_groups_flattened[:, i], dim=0)) == self.size)
+        return torch.tensor(result, device=self.device)
+
     def sample(self, obs_id, obs, generative_model, sample_shape=[]):
         """
         Args
