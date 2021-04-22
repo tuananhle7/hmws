@@ -17,8 +17,7 @@ class GenerativeModel(nn.Module):
         self.num_primitives = num_primitives
         self.max_num_blocks = max_num_blocks
         self.num_channels = 3
-        self.num_rows = im_size
-        self.num_cols = im_size
+        self.im_size = im_size
         self.obs_scale = obs_scale
         if obs_dist_type == "normal":
             self.obs_dist = torch.distributions.Normal
@@ -242,8 +241,7 @@ class Guide(nn.Module):
         self.num_primitives = num_primitives
         self.max_num_blocks = max_num_blocks
         self.num_channels = 3
-        self.num_rows = im_size
-        self.num_cols = im_size
+        self.im_size = im_size
 
         # Obs embedder
         self.obs_embedder = util.init_cnn(16, input_num_channels=3)
@@ -280,7 +278,7 @@ class Guide(nn.Module):
                 scale [*shape, max_num_blocks]
         """
         shape = obs.shape[:-3]
-        obs_flattened = obs.reshape(-1, self.num_channels, self.num_rows, self.num_cols)
+        obs_flattened = obs.reshape(-1, self.num_channels, self.im_size, self.im_size)
 
         # [num_elements, obs_embedding_dim]
         obs_embedding = self.obs_embedder(obs_flattened)
