@@ -177,7 +177,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
     device = sizes.device
 
     # Create camera
-    R, T = look_at_view_transform(2.7, 90, 180,
+    R, T = look_at_view_transform(1.0, 90, 180,
                                   up=((0.0, -1.0, 0.0),),
                                   at=((0, 1, -0.6),))  # view top to see stacking
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
