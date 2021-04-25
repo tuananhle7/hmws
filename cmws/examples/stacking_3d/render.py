@@ -16,7 +16,8 @@ from pytorch3d.renderer import (
     SoftPhongShader,
     HardPhongShader,
     TexturesUV,
-    TexturesVertex
+    TexturesVertex,
+    BlendParams
 )
 from pytorch3d.structures.meshes import (
     Meshes,
@@ -158,7 +159,7 @@ def render_cube(size, color, position, im_size=32):
     return imgs[0]
 
 
-def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
+def render_cubes(num_cubes, sizes, colors, positions, im_size=32, blur=1e-3):
     """Renders cubes given cube specs
 
     Args
@@ -179,19 +180,23 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
     # Create camera
     R, T = look_at_view_transform(1.0, 90, 180,
                                   up=((0.0, -1.0, 0.0),),
-                                  at=((0, 1, -0.6),))  # view top to see stacking
+                                  at=((0.0, 1, -0.2),))  # view top to see stacking
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
-                                    fov=45.0)
+                                    fov=60.0)
 
     # Settings for rasterizer (optional blur)
+    # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
+    # implements eqs from SoftRasterizer paper
+    blend_params = BlendParams(sigma=1e-4, gamma=1e-4, background_color=(0.0, 0.0, 0.0))
     raster_settings = RasterizationSettings(
-        image_size=im_size, # crisper objects + texture w/ higher resolution
-        blur_radius=0.0,
-        faces_per_pixel=2, # increase at cost of GPU memory
+        image_size=im_size,  # crisper objects + texture w/ higher resolution
+        blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
+        faces_per_pixel=1,  # increase at cost of GPU memory,
+        bin_size=0
     )
 
     # Add light from the front
-    lights = PointLights(device=device, location=[[0.0, 3.0, 0.0]]) # top light
+    lights = PointLights(device=device, location=[[0.0, 3.0, 0.0]])  # top light
 
     # Compose renderer and shader
     renderer = MeshRenderer(
@@ -202,7 +207,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
         shader=SoftPhongShader(
             device=device,
             cameras=cameras,
-            lights=lights
+            lights=lights,
+            blend_params=blend_params
         )
     )
 
