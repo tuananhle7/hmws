@@ -7,6 +7,7 @@ from cmws import util
 from cmws.examples.stacking_3d import data, render, run
 from cmws.examples.stacking_3d import util as stacking_3d_util
 import time
+import numpy as np
 
 
 def plot_stats(path, stats):
@@ -209,7 +210,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         if args.delay:
             # delay start to ensure checkpoints exist before plotting
-            time.sleep(3*60) # units of seconds
+            time.sleep(5*60) # units of seconds
 
         if args.repeat:
             while True:
