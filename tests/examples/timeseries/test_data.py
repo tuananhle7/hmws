@@ -7,13 +7,13 @@ def test_timeseries_dataset():
 
     # Train
     timeseries_dataset = TimeseriesDataset(device)
-    assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_train_data, 256]
-    assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_train_data]
+    assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_data, 256]
+    assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
 
     # Test
     timeseries_dataset = TimeseriesDataset(device, test=True)
-    assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_test_data, 256]
-    assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_test_data]
+    assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_data, 256]
+    assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
 
 
 def test_stacking_data_loader():
