@@ -455,7 +455,7 @@ def plot_reconstructions_stacking_with_attachment(path, generative_model, guide,
 
     # Sample latent
     latent = guide.sample(obs)
-    num_blocks, (stacking_order, attachment), raw_locations = latent
+    num_blocks, stacking_order, attachment, raw_locations = latent
 
     # Sample reconstructions
     # --Soft renders

@@ -176,9 +176,8 @@ def plot_samples(path, latent, obs, stability):
         path (str)
         latent:
             num_blocks [num_samples]
-            stacking_program
-                stacking_order [num_samples, max_num_blocks]
-                attachment [num_samples, max_num_blocks]
+            stacking_order [num_samples, max_num_blocks]
+            attachment [num_samples, max_num_blocks]
             raw_locations [num_samples, max_num_blocks]
         obs [num_samples, num_channels, im_size, im_size]
         stability [num_samples]
@@ -186,7 +185,7 @@ def plot_samples(path, latent, obs, stability):
     import matplotlib.pyplot as plt
 
     num_samples, num_channels, im_size, _ = obs.shape
-    num_blocks, (stacking_order, attachment), raw_locations = latent
+    num_blocks, stacking_order, attachment, raw_locations = latent
 
     # Plot
     num_rows = 1
@@ -235,14 +234,13 @@ def get_stability_of_latent(latent, primitives):
     Args
         latent:
             num_blocks [*shape]
-            stacking_program
-                stacking_order [*shape, max_num_blocks]
-                attachment [*shape, max_num_blocks]
+            stacking_order [*shape, max_num_blocks]
+            attachment [*shape, max_num_blocks]
             raw_locations [*shape, max_num_blocks]
 
     Returns [*shape]
     """
-    num_blocks, (stacking_order, attachment), raw_locations = latent
+    num_blocks, stacking_order, attachment, raw_locations = latent
     # [num_primitives]
     square_sizes = torch.stack([primitive.size for primitive in primitives])
     # [*shape, max_num_blocks]

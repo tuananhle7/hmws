@@ -23,8 +23,7 @@ class GenerativeModel(nn.Module):
         self.num_primitives = num_primitives
         self.max_num_blocks = max_num_blocks
         self.num_channels = 3
-        self.num_rows = im_size
-        self.num_cols = im_size
+        self.im_size = im_size
         self.obs_scale = obs_scale
         if obs_dist_type == "normal":
             self.obs_dist = torch.distributions.Normal
@@ -99,15 +98,14 @@ class GenerativeModel(nn.Module):
         Args:
             latent:
                 num_blocks [*shape]
-                stacking_program
-                    stacking_order [*shape, max_num_blocks]
-                    attachment [*shape, max_num_blocks]
+                stacking_order [*shape, max_num_blocks]
+                attachment [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
         Returns: [*shape]
         """
         # Extract
-        num_blocks, (stacking_order, attachment), raw_locations = latent
+        num_blocks, stacking_order, attachment, raw_locations = latent
 
         # Log prob of num_blocks
         num_blocks_log_prob = self.num_blocks_dist.log_prob(num_blocks)
@@ -153,22 +151,25 @@ class GenerativeModel(nn.Module):
         Returns
             latent:
                 num_blocks [*sample_shape]
-                stacking_program
-                    stacking_order [*sample_shape, max_num_blocks]
-                    attachment [*sample_shape, max_num_blocks]
+                stacking_order [*sample_shape, max_num_blocks]
+                attachment [*sample_shape, max_num_blocks]
                 raw_locations [*sample_shape, max_num_blocks]
         """
         # Sample num_blocks
         num_blocks = self.num_blocks_dist.sample(sample_shape)
 
         # Sample stacking_order
-        stacking_order = torch.distributions.Categorical(logits=self.stacking_order_logits).sample(
-            sample_shape
+        stacking_order = util.pad_tensor(
+            torch.distributions.Categorical(logits=self.stacking_order_logits).sample(sample_shape),
+            num_blocks,
+            0,
         )
 
         # Sample attachment
-        attachment = torch.distributions.Categorical(probs=self.attachment_probs).sample(
-            sample_shape
+        attachment = util.pad_tensor(
+            torch.distributions.Categorical(probs=self.attachment_probs).sample(sample_shape),
+            num_blocks,
+            0,
         )
 
         # Sample raw_locations
@@ -176,9 +177,42 @@ class GenerativeModel(nn.Module):
         loc = torch.zeros(self.max_num_blocks, device=self.device)
         scale = torch.ones(self.max_num_blocks, device=self.device)
         # --Compute log prob [*shape]
-        raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
+        raw_locations = util.pad_tensor(
+            torch.distributions.Normal(loc, scale).sample(sample_shape), num_blocks, 0
+        )
 
-        return num_blocks, (stacking_order, attachment), raw_locations
+        return num_blocks, stacking_order, attachment, raw_locations
+
+    def discrete_latent_sample(self, sample_shape=[]):
+        """Sample from p(z_d)
+
+        Args
+            sample_shape
+
+        Returns
+            latent:
+                num_blocks [*sample_shape]
+                stacking_order [*sample_shape, max_num_blocks]
+                attachment [*sample_shape, max_num_blocks]
+        """
+        # Sample num_blocks
+        num_blocks = self.num_blocks_dist.sample(sample_shape)
+
+        # Sample stacking_order
+        stacking_order = util.pad_tensor(
+            torch.distributions.Categorical(logits=self.stacking_order_logits).sample(sample_shape),
+            num_blocks,
+            0,
+        )
+
+        # Sample attachment
+        attachment = util.pad_tensor(
+            torch.distributions.Categorical(probs=self.attachment_probs).sample(sample_shape),
+            num_blocks,
+            0,
+        )
+
+        return num_blocks, stacking_order, attachment
 
     def get_obs_loc(self, latent):
         """Location parameter of p(x | z)
@@ -186,15 +220,14 @@ class GenerativeModel(nn.Module):
         Args:
             latent:
                 num_blocks [*shape]
-                stacking_program
-                    stacking_order [*shape, max_num_blocks]
-                    attachment [*shape, max_num_blocks]
+                stacking_order [*shape, max_num_blocks]
+                attachment [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
-        Returns: [*shape, num_channels, num_rows, num_cols]
+        Returns: [*shape, num_channels, im_size, im_size]
         """
         # Extract stuff
-        num_blocks, (stacking_order, attachment), raw_locations = latent
+        num_blocks, stacking_order, attachment, raw_locations = latent
 
         # Compute stuff
         return render.soft_render_variable_num_blocks(
@@ -212,15 +245,14 @@ class GenerativeModel(nn.Module):
         Args:
             latent:
                 num_blocks [*shape]
-                stacking_program
-                    stacking_order [*shape, max_num_blocks]
-                    attachment [*shape, max_num_blocks]
+                stacking_order [*shape, max_num_blocks]
+                attachment [*shape, max_num_blocks]
                 raw_locations [*shape, max_num_blocks]
 
-        Returns: [*shape, num_channels, num_rows, num_cols]
+        Returns: [*shape, num_channels, im_size, im_size]
         """
         # Extract stuff
-        num_blocks, (stacking_order, attachment), raw_locations = latent
+        num_blocks, stacking_order, attachment, raw_locations = latent
 
         # Compute stuff
         return render.render_batched(self.primitives, num_blocks, stacking_order, raw_locations,)
@@ -231,14 +263,13 @@ class GenerativeModel(nn.Module):
 
         Args:
             latent:
-                num_blocks [*shape]
-                stacking_program
-                    stacking_order [*shape, max_num_blocks]
-                    attachment [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
-            obs [*shape, num_channels, num_rows, num_cols]
+                num_blocks [*sample_shape, *shape]
+                stacking_order [*sample_shape, *shape, max_num_blocks]
+                attachment [*sample_shape, *shape, max_num_blocks]
+                raw_locations [*sample_shape, *shape, max_num_blocks]
+            obs [*sample_shape, *shape, num_channels, im_size, im_size]
 
-        Returns: [*shape]
+        Returns: [*sample_shape, *shape]
         """
         # Extract
         shape = latent[0].shape
@@ -269,11 +300,10 @@ class GenerativeModel(nn.Module):
         Returns
             latent:
                 num_blocks [*sample_shape]
-                stacking_program
-                    stacking_order [*sample_shape, max_num_blocks]
-                    attachment [*sample_shape, max_num_blocks]
+                stacking_order [*sample_shape, max_num_blocks]
+                attachment [*sample_shape, max_num_blocks]
                 raw_locations [*sample_shape, max_num_blocks]
-            obs [*sample_shape, num_channels, num_rows, num_cols]
+            obs [*sample_shape, num_channels, im_size, im_size]
         """
         # p(z)
         latent = self.latent_sample(sample_shape)
@@ -287,7 +317,7 @@ class GenerativeModel(nn.Module):
         # --Compute stability
         stability = physics.get_stability_of_latent(latent, self.primitives)
         # --Extract
-        num_blocks, (stacking_order, attachment), raw_locations = latent
+        num_blocks, stacking_order, attachment, raw_locations = latent
         # --Mask
         num_blocks[~stability] = 1
         stacking_order[~stability] = 0
@@ -295,7 +325,7 @@ class GenerativeModel(nn.Module):
         raw_locations[~stability] = 0.0
         obs[~stability] = 0.0
         # --Combine
-        latent = num_blocks, (stacking_order, attachment), raw_locations
+        latent = num_blocks, stacking_order, attachment, raw_locations
 
         return latent, obs
 
@@ -311,8 +341,7 @@ class Guide(nn.Module):
         self.num_primitives = num_primitives
         self.max_num_blocks = max_num_blocks
         self.num_channels = 3
-        self.num_rows = im_size
-        self.num_cols = im_size
+        self.im_size = im_size
 
         # Obs embedder
         self.obs_embedder = util.init_cnn(16, input_num_channels=3)
@@ -344,7 +373,7 @@ class Guide(nn.Module):
     def get_dist_params(self, obs):
         """
         Args
-            obs: [*shape, num_channels, num_rows, num_cols]
+            obs: [*shape, num_channels, im_size, im_size]
 
         Returns
             num_blocks_params [*shape, max_num_blocks]
@@ -355,7 +384,7 @@ class Guide(nn.Module):
                 scale [*shape, max_num_blocks]
         """
         shape = obs.shape[:-3]
-        obs_flattened = obs.reshape(-1, self.num_channels, self.num_rows, self.num_cols)
+        obs_flattened = obs.reshape(-1, self.num_channels, self.im_size, self.im_size)
 
         # [num_elements, obs_embedding_dim]
         obs_embedding = self.obs_embedder(obs_flattened)
@@ -391,18 +420,17 @@ class Guide(nn.Module):
     def log_prob(self, obs, latent):
         """
         Args
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
             latent:
-                num_blocks [*shape]
-                stacking_program
-                    stacking_order [*shape, max_num_blocks]
-                    attachment [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
+                num_blocks [*sample_shape, *shape]
+                stacking_order [*sample_shape, *shape, max_num_blocks]
+                attachment [*sample_shape, *shape, max_num_blocks]
+                raw_locations [*sample_shape, *shape, max_num_blocks]
 
-        Returns [*shape]
+        Returns [*sample_shape, *shape]
         """
         # Extract
-        num_blocks, (stacking_order, attachment), raw_locations = latent
+        num_blocks, stacking_order, attachment, raw_locations = latent
 
         # Compute params
         (
@@ -445,13 +473,12 @@ class Guide(nn.Module):
         """z ~ q(z | x)
 
         Args
-            obs [*shape, num_channels, num_rows, num_cols]
+            obs [*shape, num_channels, im_size, im_size]
 
         Returns
             num_blocks [*sample_shape, *shape]
-            stacking_program
-                stacking_order [*sample_shape, *shape, max_num_blocks]
-                attachment [*sample_shape, *shape, max_num_blocks]
+            stacking_order [*sample_shape, *shape, max_num_blocks]
+            attachment [*sample_shape, *shape, max_num_blocks]
             raw_locations [*sample_shape, *shape, max_num_blocks]
         """
         # Compute params
@@ -476,4 +503,4 @@ class Guide(nn.Module):
         # Sample from q(Raw locations | x)
         raw_locations = torch.distributions.Normal(loc, scale).sample(sample_shape)
 
-        return num_blocks, (stacking_order, attachment), raw_locations
+        return num_blocks, stacking_order, attachment, raw_locations
