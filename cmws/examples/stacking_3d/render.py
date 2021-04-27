@@ -16,13 +16,15 @@ from pytorch3d.renderer import (
     SoftPhongShader,
     HardPhongShader,
     TexturesUV,
-    TexturesVertex
+    TexturesVertex,
+    BlendParams
 )
 from pytorch3d.structures.meshes import (
     Meshes,
     join_meshes_as_batch,
     join_meshes_as_scene,
 )
+import numpy as np
 
 
 class Cube:
@@ -158,7 +160,7 @@ def render_cube(size, color, position, im_size=32):
     return imgs[0]
 
 
-def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
+def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6):
     """Renders cubes given cube specs
 
     Args
@@ -177,21 +179,25 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
     device = sizes.device
 
     # Create camera
-    R, T = look_at_view_transform(2.7, 90, 180,
+    R, T = look_at_view_transform(1.0, 90, 180,
                                   up=((0.0, -1.0, 0.0),),
-                                  at=((0, 1, -0.6),))  # view top to see stacking
+                                  at=((0.0, 1, -0.2),))  # view top to see stacking
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
-                                    fov=45.0)
+                                    fov=45.0)#60.0)
 
     # Settings for rasterizer (optional blur)
+    # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
+    # implements eqs from SoftRasterizer paper
+    blend_params = BlendParams(sigma=sigma, gamma=gamma, background_color=(0.0, 0.0, 0.0))#BlendParams(sigma=1e-4, gamma=1e-4, background_color=(0.0, 0.0, 0.0))
     raster_settings = RasterizationSettings(
-        image_size=im_size, # crisper objects + texture w/ higher resolution
-        blur_radius=0.0,
-        faces_per_pixel=2, # increase at cost of GPU memory
+        image_size=im_size,  # crisper objects + texture w/ higher resolution
+        blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma, #sigma=1e-3, gamma=1e-4
+        faces_per_pixel=1,  # increase at cost of GPU memory,
+        bin_size=0
     )
 
     # Add light from the front
-    lights = PointLights(device=device, location=[[0.0, 3.0, 0.0]]) # top light
+    lights = PointLights(device=device, location=[[0.0, 3.0, 0.0]])  # top light
 
     # Compose renderer and shader
     renderer = MeshRenderer(
@@ -202,7 +208,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32):
         shader=SoftPhongShader(
             device=device,
             cameras=cameras,
-            lights=lights
+            lights=lights,
+            blend_params=blend_params
         )
     )
 
@@ -308,9 +315,15 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
         )
     return torch.stack(locations_batched).view(*[*shape, num_blocks, 3])
 
+def convert_raw_gamma(gamma):
+    return np.abs(gamma)
+
+def convert_raw_sigma(sigma):
+    return sigma
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
+    sigma=1e-10, gamma=1e-6
 ):
     """
     Args
@@ -322,6 +335,10 @@ def render(
 
     Returns [*shape, num_channels=3, im_size, im_size]
     """
+
+    gamma = convert_raw_gamma(gamma)
+    sigma = convert_raw_sigma(sigma)
+
     # Extract
     shape = stacking_program.shape[:-1]
     max_num_blocks = stacking_program.shape[-1]
@@ -341,7 +358,8 @@ def render(
     stacking_program_flattened = stacking_program.reshape((num_elements, max_num_blocks))
     locations_flattened = locations.view((num_elements, max_num_blocks, 3))
 
-    imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size)
+    imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
+                        sigma,gamma)
     imgs = imgs.permute(0, 3, 1, 2)
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])
 

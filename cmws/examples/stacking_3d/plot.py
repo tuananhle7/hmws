@@ -6,6 +6,8 @@ import torch
 from cmws import util
 from cmws.examples.stacking_3d import data, render, run
 from cmws.examples.stacking_3d import util as stacking_3d_util
+import time
+import numpy as np
 
 
 def plot_stats(path, stats):
@@ -196,6 +198,7 @@ def get_parser():
     parser.add_argument("--experiment-name", type=str, default="", help=" ")
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
+    parser.add_argument("--delay", action="store_true", help="Whether to delay the start of execution")
 
     return parser
 
@@ -205,6 +208,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with torch.no_grad():
+        if args.delay:
+            # delay start to ensure checkpoints exist before plotting
+            time.sleep(5*60) # units of seconds
+
         if args.repeat:
             while True:
                 main(args)

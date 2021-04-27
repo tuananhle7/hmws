@@ -30,6 +30,10 @@ class GenerativeModel(nn.Module):
             [render.LearnableCube(f"{i}") for i in range(self.num_primitives)]
         )
 
+        # Rendering parameters
+        self.sigma = nn.Parameter(torch.randn(()))
+        self.gamma = nn.Parameter(torch.randn(()))
+
     @property
     def device(self):
         return self.primitives[0].device
@@ -145,7 +149,8 @@ class GenerativeModel(nn.Module):
 
         # Compute stuff
         return render.render(
-            self.primitives, num_blocks, stacking_program, raw_locations, im_size=self.im_size
+            self.primitives, num_blocks, stacking_program, raw_locations, im_size=self.im_size,
+            sigma=self.sigma, gamma=self.gamma
         )
 
     def log_prob(self, latent, obs):
