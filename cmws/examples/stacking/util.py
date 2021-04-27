@@ -78,6 +78,22 @@ def init(run_args, device):
         guide = stacking_with_attachment.Guide(
             num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
         ).to(device)
+    elif run_args.model_type == "stacking_fixed_color":
+        # Generative model
+        generative_model = stacking.GenerativeModel(
+            num_primitives=run_args.num_primitives,
+            max_num_blocks=run_args.max_num_blocks,
+            fixed_color=True,
+        ).to(device)
+
+        # Guide
+        guide = stacking.Guide(
+            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+        ).to(device)
+
+        # Memory
+        if "mws" in run_args.algorithm:
+            memory = cmws.memory.Memory(10000, run_args.memory_size, generative_model).to(device)
 
     # Model dict
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}

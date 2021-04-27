@@ -19,13 +19,15 @@ class Square:
 
 
 class LearnableSquare(nn.Module):
-    def __init__(self, name=None):
+    def __init__(self, name=None, fixed_color=False):
         super().__init__()
         if name is None:
             self.name = "LearnableSquare"
         else:
             self.name = name
-        self.raw_color = nn.Parameter(torch.randn((3,)))
+        self.fixed_color = fixed_color
+        if not self.fixed_color:
+            self.raw_color = nn.Parameter(torch.randn((3,)))
         self.raw_size = nn.Parameter(torch.randn(()))
 
     @property
@@ -40,7 +42,10 @@ class LearnableSquare(nn.Module):
 
     @property
     def color(self):
-        return self.raw_color.sigmoid()
+        if self.fixed_color:
+            return torch.zeros((3,), device=self.device)
+        else:
+            return self.raw_color.sigmoid()
 
     def __repr__(self):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"

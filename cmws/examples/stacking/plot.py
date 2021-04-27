@@ -624,7 +624,7 @@ def main(args):
                 plot_primitives_two_primitives(
                     f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
-            elif run_args.model_type == "stacking":
+            elif run_args.model_type == "stacking" or run_args.model_type == "stacking_fixed_color":
                 plot_reconstructions_stacking(
                     f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,

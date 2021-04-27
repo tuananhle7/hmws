@@ -55,6 +55,7 @@ def get_args_parser():
             "stacking_pyro",
             "stacking_top_down",
             "stacking_with_attachment",
+            "stacking_fixed_color",
         ],
         help=" ",
     )

@@ -40,6 +40,10 @@ def generate_obs(run_args, num_obs, device, seed=None):
             num_primitives=3, max_num_blocks=run_args.max_num_blocks, true_primitives=True,
         ).to(device)
         _, obs = true_generative_model.sample((num_obs,))
+    elif run_args.model_type == "stacking_fixed_color":
+        obs = stacking_pyro.generate_from_true_generative_model(
+            num_obs, num_primitives=3, device=device, fixed_color=True
+        )
 
     return obs
 
@@ -63,7 +67,11 @@ class StackingDataset(torch.utils.data.Dataset):
     """
 
     def __init__(self, dataset_type, device, test=False, force_regenerate=False, seed=1):
-        assert dataset_type == "stacking" or dataset_type == "stacking_top_down"
+        assert (
+            dataset_type == "stacking"
+            or dataset_type == "stacking_fixed_color"
+            or dataset_type == "stacking_top_down"
+        )
         self.dataset_type = dataset_type
         self.device = device
         self.test = test
@@ -92,6 +100,10 @@ class StackingDataset(torch.utils.data.Dataset):
             if self.dataset_type == "stacking":
                 self.obs = stacking_pyro.generate_from_true_generative_model(
                     self.num_data, num_primitives=3, device=device
+                )
+            if self.dataset_type == "stacking_fixed_color":
+                self.obs = stacking_pyro.generate_from_true_generative_model(
+                    self.num_data, num_primitives=3, device=device, fixed_color=True
                 )
             elif self.dataset_type == "stacking_top_down":
                 self.obs = stacking_pyro.generate_from_true_generative_model_top_down(
