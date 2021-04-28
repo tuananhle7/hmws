@@ -188,11 +188,11 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     # Settings for rasterizer (optional blur)
     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
     # implements eqs from SoftRasterizer paper
-    blend_params = BlendParams(sigma=sigma, gamma=gamma, background_color=(0.0, 0.0, 0.0))#BlendParams(sigma=1e-4, gamma=1e-4, background_color=(0.0, 0.0, 0.0))
+    blend_params = BlendParams(sigma=sigma, gamma=gamma, background_color=(0.0, 0.0, 0.0))
     raster_settings = RasterizationSettings(
         image_size=im_size,  # crisper objects + texture w/ higher resolution
-        blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma, #sigma=1e-3, gamma=1e-4
-        faces_per_pixel=1,  # increase at cost of GPU memory,
+        blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
+        faces_per_pixel=3,  # increase at cost of GPU memory,
         bin_size=0
     )
 
@@ -316,10 +316,10 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
     return torch.stack(locations_batched).view(*[*shape, num_blocks, 3])
 
 def convert_raw_gamma(gamma):
-    return np.abs(gamma)
+    return torch.abs(gamma* 1e-3)
 
 def convert_raw_sigma(sigma):
-    return sigma
+    return torch.abs(sigma * 1e-3)
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
@@ -336,8 +336,15 @@ def render(
     Returns [*shape, num_channels=3, im_size, im_size]
     """
 
-    gamma = convert_raw_gamma(gamma)
-    sigma = convert_raw_sigma(sigma)
+    if torch.is_tensor(gamma):
+        print("CURRENT GAMMA: ", gamma)
+        gamma = convert_raw_gamma(gamma)
+    if torch.is_tensor(sigma):
+        print("CURRENT SIGMA: ", sigma)
+        sigma = convert_raw_sigma(sigma)
+
+    if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
+    if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
 
     # Extract
     shape = stacking_program.shape[:-1]
