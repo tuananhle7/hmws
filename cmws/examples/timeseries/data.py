@@ -13,7 +13,8 @@ def lukes_make_data():
     https://github.com/insperatum/wsvae/blob/master/examples/timeseries/main-timeseries.py#L81
     """
     # Init
-    path = "/om/user/lbh/wsvae/examples/timeseries/UCR_TS_Archive_2015/data.p"
+    # path = "/om/user/lbh/wsvae/examples/timeseries/UCR_TS_Archive_2015/data.p"
+    path = str(pathlib.Path(__file__).parent.joinpath("data.p"))
     n_data = 2000
     n_timepoints = 256
     np.random.seed(0)
