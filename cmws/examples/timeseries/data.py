@@ -1,10 +1,11 @@
 import pathlib
+import pickle
+import random
 
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from cmws import util
-import numpy as np
-import random
-import pickle
 
 
 def lukes_make_data():
@@ -662,3 +663,42 @@ def get_timeseries_data_loader(device, batch_size, test=False):
     return torch.utils.data.DataLoader(
         TimeseriesDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
     )
+
+
+def plot_data():
+    device = torch.device("cuda")
+
+    timeseries_dataset = {}
+
+    # Train
+    timeseries_dataset["train"] = TimeseriesDataset(device)
+
+    # Test
+    timeseries_dataset["test"] = TimeseriesDataset(device, test=True)
+
+    for mode in ["train", "test"]:
+        start = 0
+        end = 100
+
+        while start < len(timeseries_dataset[mode]):
+            obs, obs_id = timeseries_dataset[mode][start:end]
+            path = f"./data/plots/{mode}/{start:04.0f}_{end:04.0f}.pdf"
+
+            fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
+
+            for i in range(len(obs)):
+                axss.flat[i].plot(obs[i].cpu().numpy(), color="black")
+
+            for ax in axss.flat:
+                ax.set_ylim(-4, 4)
+                ax.set_xticks([])
+                ax.set_yticks([-4, 4])
+
+            util.save_fig(fig, path)
+
+            start = end
+            end += 100
+
+
+if __name__ == "__main__":
+    plot_data()
