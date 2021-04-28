@@ -5,7 +5,7 @@ from cmws.examples.stacking.data import StackingDataset, get_stacking_data_loade
 def test_stacking_dataset():
     device = torch.device("cuda")
 
-    for dataset_type in ["stacking", "stacking_top_down"]:
+    for dataset_type in ["stacking", "stacking_top_down", "stacking_fixed_color"]:
         # Train
         stacking_dataset = StackingDataset(dataset_type, device)
         assert list(stacking_dataset.obs.shape) == [stacking_dataset.num_train_data, 3, 32, 32]
@@ -21,7 +21,7 @@ def test_stacking_data_loader():
     device = torch.device("cuda")
     batch_size = 7
 
-    for dataset_type in ["stacking", "stacking_top_down"]:
+    for dataset_type in ["stacking", "stacking_top_down", "stacking_fixed_color"]:
         # Train
         data_loader = get_stacking_data_loader(dataset_type, device, batch_size)
         obs, obs_id = next(iter(data_loader))

@@ -9,7 +9,13 @@ class GenerativeModel(nn.Module):
     """
 
     def __init__(
-        self, num_primitives=3, max_num_blocks=3, im_size=32, obs_scale=1.0, obs_dist_type="normal"
+        self,
+        num_primitives=3,
+        max_num_blocks=3,
+        im_size=32,
+        obs_scale=1.0,
+        obs_dist_type="normal",
+        fixed_color=False,
     ):
         super().__init__()
 
@@ -23,10 +29,14 @@ class GenerativeModel(nn.Module):
             self.obs_dist = torch.distributions.Normal
         elif obs_dist_type == "laplace":
             self.obs_dist = torch.distributions.Laplace
+        self.fixed_color = fixed_color
 
         # Primitive parameters (parameters of symbols)
         self.primitives = nn.ModuleList(
-            [render.LearnableSquare(f"{i}") for i in range(self.num_primitives)]
+            [
+                render.LearnableSquare(f"{i}", fixed_color=self.fixed_color)
+                for i in range(self.num_primitives)
+            ]
         )
 
         # Rendering parameters

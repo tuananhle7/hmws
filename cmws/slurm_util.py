@@ -82,7 +82,7 @@ def submit_slurm_jobs(
         cancel_all_my_non_bash_jobs()
 
     if rm:
-        dir_ = "save/"
+        dir_ = f"save/{next(iter(get_run_argss())).experiment_name}"
         if Path(dir_).exists():
             shutil.rmtree(dir_, ignore_errors=True)
 

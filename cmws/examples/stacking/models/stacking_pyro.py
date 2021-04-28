@@ -73,24 +73,28 @@ def sample_raw_locations(stacking_program, address_suffix=""):
 
 
 def generate_from_true_generative_model_single(
-    device, num_primitives, num_channels=3, num_rows=32, num_cols=32, fixed_num_blocks=False
+    device,
+    num_primitives,
+    num_channels=3,
+    num_rows=32,
+    num_cols=32,
+    fixed_num_blocks=False,
+    fixed_color=False,
 ):
     """Generate a synthetic observation
 
     Returns [num_channels, num_rows, num_cols]
     """
     assert num_primitives <= 3
+    if fixed_color:
+        colors = torch.zeros((3, 3), device=device)
+    else:
+        colors = torch.eye(3, device=device)
     # Define params
     primitives = [
-        render.Square(
-            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.3, device=device)
-        ),
-        render.Square(
-            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.4, device=device)
-        ),
-        render.Square(
-            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.5, device=device)
-        ),
+        render.Square("A", colors[0], torch.tensor(0.3, device=device)),
+        render.Square("B", colors[1], torch.tensor(0.4, device=device)),
+        render.Square("C", colors[2], torch.tensor(0.5, device=device)),
     ][:num_primitives]
     # num_primitives = len(primitives)
 
@@ -116,6 +120,7 @@ def generate_from_true_generative_model(
     num_rows=32,
     num_cols=32,
     fixed_num_blocks=False,
+    fixed_color=False,
 ):
     """Generate a batch of synthetic observations
 
@@ -129,6 +134,7 @@ def generate_from_true_generative_model(
                 num_rows=num_rows,
                 num_cols=num_cols,
                 fixed_num_blocks=fixed_num_blocks,
+                fixed_color=fixed_color,
             )
             for _ in range(batch_size)
         ]

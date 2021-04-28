@@ -455,7 +455,7 @@ def plot_reconstructions_stacking_with_attachment(path, generative_model, guide,
 
     # Sample latent
     latent = guide.sample(obs)
-    num_blocks, (stacking_order, attachment), raw_locations = latent
+    num_blocks, stacking_order, attachment, raw_locations = latent
 
     # Sample reconstructions
     # --Soft renders
@@ -624,7 +624,7 @@ def main(args):
                 plot_primitives_two_primitives(
                     f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
-            elif run_args.model_type == "stacking":
+            elif run_args.model_type == "stacking" or run_args.model_type == "stacking_fixed_color":
                 plot_reconstructions_stacking(
                     f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,

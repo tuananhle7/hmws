@@ -3,7 +3,7 @@ from cmws.examples.stacking import run
 
 
 def get_run_argss():
-    experiment_name = "cmws_vs_rws"
+    experiment_name = "cmws_vs_rws_fixed_color"
     for seed in range(5):
         # CMWS
         args = run.get_args_parser().parse_args([])
@@ -12,7 +12,7 @@ def get_run_argss():
         args.num_particles = 10
         args.insomnia = 0.75
         args.algorithm = "cmws"
-        args.model_type = "stacking"
+        args.model_type = "stacking_fixed_color"
         args.continue_training = True
         yield args
 
@@ -23,7 +23,7 @@ def get_run_argss():
         args.num_particles = 50
         args.insomnia = 0.75
         args.algorithm = "rws"
-        args.model_type = "stacking"
+        args.model_type = "stacking_fixed_color"
         args.continue_training = True
         yield args
 
