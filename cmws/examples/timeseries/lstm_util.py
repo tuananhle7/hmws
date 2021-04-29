@@ -74,7 +74,7 @@ class TimeseriesDistribution:
                 )
             max_num_timesteps = num_timesteps.max()
 
-        # [num_samples * batch_size, 2 * cluster_embedding_dim]
+        # [num_samples * batch_size, embedding_dim]
         embedding_expanded = (
             self.embedding[None]
             .expand(num_samples, self.batch_size, -1)
@@ -87,7 +87,7 @@ class TimeseriesDistribution:
         if num_timesteps is None:  # use EOS to end
             eos = []
 
-        # [num_samples * batch_size, 1 + 2 * cluster_embedding_dim]
+        # [num_samples * batch_size, 1 + embedding_dim]
         lstm_input = torch.cat(
             [torch.zeros((num_samples * self.batch_size, 1), device=device), embedding_expanded],
             dim=1,
@@ -131,7 +131,7 @@ class TimeseriesDistribution:
                 eos.append(torch.distributions.Bernoulli(logits=eos_logit).sample())
 
             # assemble lstm_input
-            # [num_samples * batch_size, 1 + 2 * cluster_embedding_dim]
+            # [num_samples * batch_size, 1 + embedding_dim]
             lstm_input = torch.cat([x[-1][:, None], embedding_expanded], dim=1)
 
             if num_timesteps is None:  # use EOS to end
