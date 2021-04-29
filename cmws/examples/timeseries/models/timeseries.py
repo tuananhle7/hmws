@@ -22,7 +22,7 @@ class GenerativeModel(nn.Module):
             latent:
                 raw_expression [*shape, max_num_chars]
                 eos [*shape, max_num_chars]
-                gp_raw_params [*shape, max_num_chars]
+                gp_raw_params [*shape, max_num_chars, gp_params_dim]
 
         Returns: [*shape]
         """
@@ -38,7 +38,7 @@ class GenerativeModel(nn.Module):
             latent:
                 raw_expression [*sample_shape, max_num_chars]
                 eos [*sample_shape, max_num_chars]
-                gp_raw_params [*sample_shape, max_num_chars]
+                gp_raw_params [*sample_shape, max_num_chars, gp_params_dim]
         """
         raise NotImplementedError()
 
@@ -63,7 +63,7 @@ class GenerativeModel(nn.Module):
             latent:
                 raw_expression [*sample_shape, *shape, max_num_chars]
                 eos [*sample_shape, *shape, max_num_chars]
-                gp_raw_params [*sample_shape, *shape, max_num_chars]
+                gp_raw_params [*sample_shape, *shape, max_num_chars, gp_params_dim]
 
             obs [*shape, num_timesteps]
 
@@ -80,7 +80,8 @@ class GenerativeModel(nn.Module):
                 raw_expression [*discrete_shape, *shape, max_num_chars]
                 eos [*discrete_shape, *shape, max_num_chars]
             continuous_latent
-                gp_raw_params [*continuous_shape, *discrete_shape, *shape, max_num_chars]
+                gp_raw_params
+                [*continuous_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
 
             obs [*shape, num_timesteps]
 
@@ -99,7 +100,7 @@ class GenerativeModel(nn.Module):
             latent:
                 raw_expression [*sample_shape, max_num_chars]
                 eos [*sample_shape, max_num_chars]
-                gp_raw_params [*sample_shape, max_num_chars]
+                gp_raw_params [*sample_shape, max_num_chars, gp_params_dim]
 
             obs [*sample_shape, num_timesteps]
         """
@@ -126,7 +127,7 @@ class Guide(nn.Module):
             latent:
                 raw_expression [*sample_shape, *shape, max_num_chars]
                 eos [*sample_shape, *shape, max_num_chars]
-                gp_raw_params [*sample_shape, *shape, max_num_chars]
+                gp_raw_params [*sample_shape, *shape, max_num_chars, gp_params_dim]
 
         Returns [*sample_shape, *shape]
         """
@@ -141,7 +142,7 @@ class Guide(nn.Module):
         Returns
             raw_expression [*sample_shape, *shape, max_num_chars]
             eos [*sample_shape, *shape, max_num_chars]
-            gp_raw_params [*sample_shape, *shape, max_num_chars]
+            gp_raw_params [*sample_shape, *shape, max_num_chars, gp_params_dim]
         """
         raise NotImplementedError()
 
@@ -169,7 +170,7 @@ class Guide(nn.Module):
             sample_shape
 
         Returns
-                gp_raw_params [*sample_shape, *discrete_shape, *shape, max_num_chars]
+                gp_raw_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
         """
         raise NotImplementedError()
 
@@ -195,7 +196,7 @@ class Guide(nn.Module):
                 raw_expression [*discrete_shape, *shape, max_num_chars]
                 eos [*discrete_shape, *shape, max_num_chars]
 
-            continuous_latent (gp_raw_params)
+            continuous_latent (gp_raw_params, gp_params_dim)
                 [*continuous_shape, *discrete_shape, *shape, max_num_chars]
 
         Returns [*continuous_shape, *discrete_shape, *shape]
