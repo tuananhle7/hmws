@@ -1,7 +1,43 @@
 import math
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
+num_to_char = dict([(v, k) for k, v in char_to_num.items()])
+vocabulary_size = len(char_to_num)
+
+
+def get_numeric(expression, device):
+    """
+    Args
+        expression (str)
+        device
+
+    Returns [num_chars, vocabulary_size]
+    """
+    numeric = []
+    for char in expression:
+        numeric.append(torch.tensor(char_to_num[char], device=device).long())
+    numeric = torch.stack(numeric)
+    return F.one_hot(numeric, num_classes=vocabulary_size)
+
+
+def get_expression(numeric):
+    """
+    Args
+        numeric [num_chars, vocabulary_size]
+
+    Returns string of length num_chars
+    """
+    device = numeric.device
+    num_chars, vocabulary_size = numeric.shape
+
+    expression = ""
+    for i in torch.mv(numeric, torch.arange(vocabulary_size, device=device)):
+        expression += num_to_char[i.item()]
+    return expression
 
 
 class Kernel(nn.Module):
