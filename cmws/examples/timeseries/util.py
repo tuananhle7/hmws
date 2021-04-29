@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+base_kernel_chars = {"W", "R", "E", "C"}
 char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
@@ -40,9 +41,24 @@ def get_expression(numeric):
     return expression
 
 
+def count_base_kernels(expression):
+    """How many base kernels are there in the expression?
+
+    Args
+        expression (str)
+
+    Returns int
+    """
+    result = 0
+    for char in expression:
+        result += int(char in base_kernel_chars)
+    return result
+
+
 class Kernel(nn.Module):
     """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | C
-    Adapted from https://github.com/insperatum/wsvae/blob/7dee0708587e6a33b7328206ce5edd8262d568b6/gp.py#L12
+    Adapted from
+    https://github.com/insperatum/wsvae/blob/7dee0708587e6a33b7328206ce5edd8262d568b6/gp.py#L12
 
     Args
         expression (str) consists of characters *, +, (, ) or
