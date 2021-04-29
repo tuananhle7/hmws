@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 class Kernel(nn.Module):
     """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | C
+    Adapted from https://github.com/insperatum/wsvae/blob/7dee0708587e6a33b7328206ce5edd8262d568b6/gp.py#L12
 
     Args
         expression (str) consists of characters *, +, (, ) or
