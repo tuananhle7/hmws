@@ -158,38 +158,38 @@ class Kernel(nn.Module):
         else:
             raise NotImplementedError("Cannot parse char: " + str(char))
 
-    def forward(self, x1, x2, kernel=None):
+    def forward(self, x_1, x_2, kernel=None):
         """
         Args
-            x1 [batch_size, num_timesteps_1]
-            x2 [batch_size, num_timesteps_2]
+            x_1 [batch_size, num_timesteps_1, 1]
+            x_2 [batch_size, 1, num_timesteps_2]
 
         Returns [batch_size, num_timesteps_1, num_timesteps_2]
         """
-        # batch_size = x1.size(0)
-        n = x1.size(1)
+        # batch_size = x_1.size(0)
+        n = x_1.size(1)
         if kernel is None:
             kernel = self.value
         if kernel["op"] == "+":
-            t = self.forward(x1, x2, kernel["values"][0])
+            t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t += self.forward(x1, x2, v)
+                t += self.forward(x_1, x_2, v)
             return t
         elif kernel["op"] == "*":
-            t = self.forward(x1, x2, kernel["values"][0])
+            t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t *= self.forward(x1, x2, v)
+                t *= self.forward(x_1, x_2, v)
             return t
         elif kernel["op"] == "Constant":
             return kernel["const"].repeat(1, n)
         elif kernel["op"] == "WhiteNoise":
-            return (x1 == x2).float() * kernel["scale_sq"]
+            return (x_1 == x_2).float() * kernel["scale_sq"]
         elif kernel["op"] == "RBF":
             l2 = kernel["lengthscale_sq"]
-            return (-((x1 - x2) ** 2) / (2 * l2)).exp()
+            return (-((x_1 - x_2) ** 2) / (2 * l2)).exp()
         elif kernel["op"] == "ExpSinSq":
             t = kernel["period"]
             l2 = kernel["lengthscale_sq"]
-            return (-2 * (math.pi * (x1 - x2).abs() / t).sin() ** 2 / l2).exp()
+            return (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp()
         else:
             raise NotImplementedError()

@@ -1,6 +1,7 @@
 import torch
 from cmws.examples.timeseries.models.timeseries import GenerativeModel
 import cmws.examples.timeseries.util as timeseries_util
+import cmws.examples.timeseries.data as timeseries_data
 
 
 def test_generative_model_latent_log_prob_dims():
@@ -41,3 +42,29 @@ def test_generative_model_discrete_latent_sample_dims():
 
     assert list(raw_expression.shape) == sample_shape + [max_num_chars]
     assert list(eos.shape) == sample_shape + [max_num_chars]
+
+
+def test_generative_model_log_prob_dims():
+    shape = [2, 3]
+    sample_shape = [4, 5]
+    max_num_chars, lstm_hidden_dim = 6, 7
+
+    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim)
+
+    # Create latent
+    raw_expression = torch.randint(
+        timeseries_util.vocabulary_size, size=sample_shape + shape + [max_num_chars]
+    )
+    eos = torch.randint(2, size=sample_shape + shape + [max_num_chars])
+    raw_gp_params = torch.randn(
+        *[*sample_shape, *shape, max_num_chars, timeseries_util.gp_params_dim]
+    )
+    latent = (raw_expression, eos, raw_gp_params)
+
+    # Create obs
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+
+    # Compute log prob
+    log_prob = generative_model.log_prob(latent, obs)
+
+    assert list(log_prob.shape) == sample_shape + shape

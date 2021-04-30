@@ -7,6 +7,8 @@ import numpy as np
 import torch
 from cmws import util
 
+num_timesteps = 256
+
 
 def lukes_make_data():
     """
@@ -16,7 +18,6 @@ def lukes_make_data():
     # path = "/om/user/lbh/wsvae/examples/timeseries/UCR_TS_Archive_2015/data.p"
     path = str(pathlib.Path(__file__).parent.joinpath("data.p"))
     n_data = 2000
-    n_timepoints = 256
     np.random.seed(0)
     random.seed(0)
 
@@ -30,13 +31,13 @@ def lukes_make_data():
     all_timeseries = [x for X in d_in for x in X["data"]]
     #     if args.shuffle: random.shuffle(all_timeseries)
     for x in all_timeseries:
-        # if len(x)<n_timepoints: continue
-        # lower = math.floor((len(x)-n_timepoints)/2)
-        # upper = len(x) - math.ceil((len(x)-n_timepoints)/2)
-        if len(x) < n_timepoints + 1:
+        # if len(x)<num_timesteps: continue
+        # lower = math.floor((len(x)-num_timesteps)/2)
+        # upper = len(x) - math.ceil((len(x)-num_timesteps)/2)
+        if len(x) < num_timesteps + 1:
             continue
         lower = 0
-        upper = n_timepoints
+        upper = num_timesteps
         x = np.array(x)
 
         # Centre the timeseries
@@ -349,8 +350,8 @@ def lukes_make_data():
     ).astype(np.float32)
     airlines = (airlines - airlines.mean()) / airlines.std()
     airlines = airlines.tolist()
-    data.append(airlines[:n_timepoints])
-    testdata.append(airlines[n_timepoints:])
+    data.append(airlines[:num_timesteps])
+    testdata.append(airlines[num_timesteps:])
 
     # -- Mauna
     mauna = np.array(
@@ -615,8 +616,8 @@ def lukes_make_data():
     )
     mauna = (mauna - mauna.mean()) / mauna.std()
     mauna = mauna.tolist()
-    data.append(mauna[:n_timepoints])
-    testdata.append(mauna[n_timepoints:])
+    data.append(mauna[:num_timesteps])
+    testdata.append(mauna[num_timesteps:])
 
     data_novel = data[n_data:]
     data = data[:n_data]

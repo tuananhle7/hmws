@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import cmws
 import cmws.examples.timeseries.util as timeseries_util
+import cmws.examples.timeseries.data as timeseries_data
 import cmws.examples.timeseries.lstm_util as lstm_util
 
 
@@ -235,7 +236,86 @@ class GenerativeModel(nn.Module):
 
         Returns: [*sample_shape, *shape]
         """
-        raise NotImplementedError()
+        # Extract
+        raw_expression, eos, raw_gp_params = latent
+        shape = obs.shape[:-1]
+        sample_shape = raw_expression.shape[: -(len(shape) + 1)]
+        num_elements = cmws.util.get_num_elements(shape)
+        num_samples = cmws.util.get_num_elements(sample_shape)
+
+        # Log p(z)
+        latent_log_prob = self.latent_log_prob(latent)
+
+        # Log p(x | z)
+        # -- Create x_1 and x_2
+        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+            None, :, None
+        ].expand(1, timeseries_data.num_timesteps, 1)
+        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+            None, None, :
+        ].expand(1, 1, timeseries_data.num_timesteps)
+
+        # -- Create identity matrix
+        identity_matrix = torch.eye(timeseries_data.num_timesteps, device=self.device).float()
+
+        # -- Flatten
+        raw_expression_flattened = raw_expression.view(num_samples, num_elements, -1)
+        eos_flattened = eos.view(num_samples, num_elements, -1)
+        raw_gp_params_flattened = raw_gp_params.view(
+            num_samples, num_elements, self.max_num_chars, -1
+        )
+        obs_flattened = obs.view(num_elements, -1)
+
+        # -- Compute num base kernels
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Compute covariance matrices
+        covariance_matrix = []
+        zero_obs_prob = torch.zeros(
+            (num_samples, num_elements), dtype=torch.bool, device=self.device
+        )
+        for sample_id in range(num_samples):
+            for element_id in range(num_elements):
+                try:
+                    covariance_matrix_se = timeseries_util.Kernel(
+                        timeseries_util.get_expression(raw_expression[sample_id, element_id]),
+                        raw_gp_params_flattened[
+                            sample_id,
+                            element_id,
+                            : num_base_kernels_flattened[sample_id, element_id],
+                        ],
+                    )(x_1, x_2)[0]
+                except Exception:
+                    covariance_matrix_se = identity_matrix
+                    zero_obs_prob[sample_id, element_id] = True
+
+                covariance_matrix.append(covariance_matrix_se)
+        covariance_matrix = torch.stack(covariance_matrix).view(
+            num_samples, num_elements, timeseries_data.num_timesteps, timeseries_data.num_timesteps
+        )
+
+        # -- Expand obs
+        obs_expanded = obs_flattened[None].expand(num_samples, num_elements, -1)
+
+        # -- Create mean
+        loc = torch.zeros(
+            (num_samples, num_elements, timeseries_data.num_timesteps), device=self.device
+        )
+
+        # -- Compute obs log prob
+        obs_log_prob = torch.distributions.MultivariateNormal(
+            loc, covariance_matrix=covariance_matrix
+        ).log_prob(obs_expanded)
+
+        # -- Mask out zero log probs
+        obs_log_prob[zero_obs_prob] = float("-inf")
+
+        # -- Reshape
+        obs_log_prob = obs_log_prob.view(*[*sample_shape, *shape])
+
+        return latent_log_prob + obs_log_prob
 
     def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
         """Log joint probability of the generative model
