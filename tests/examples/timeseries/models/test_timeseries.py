@@ -126,3 +126,41 @@ def test_guide_obs_embedding_dims():
     obs_embedding = guide.get_obs_embedding(obs)
 
     assert list(obs_embedding.shape) == shape + [lstm_hidden_dim]
+
+
+def test_guide_expression_embedding_dims():
+    shape = [2, 3]
+    max_num_chars, lstm_hidden_dim = 4, 5
+
+    guide = Guide(max_num_chars, lstm_hidden_dim)
+    raw_expression = torch.randint(timeseries_util.vocabulary_size, size=shape + [max_num_chars])
+    eos = torch.randint(2, size=shape + [max_num_chars])
+    expression_embedding = guide.get_expression_embedding(raw_expression, eos)
+
+    assert list(expression_embedding.shape) == shape + [lstm_hidden_dim]
+
+
+def test_guide_log_prob_dims():
+    shape = [2, 3]
+    sample_shape = [4, 5]
+    max_num_chars, lstm_hidden_dim = 6, 7
+
+    guide = Guide(max_num_chars, lstm_hidden_dim)
+
+    # Create latent
+    raw_expression = torch.randint(
+        timeseries_util.vocabulary_size, size=sample_shape + shape + [max_num_chars]
+    )
+    eos = torch.randint(2, size=sample_shape + shape + [max_num_chars])
+    raw_gp_params = torch.randn(
+        *[*sample_shape, *shape, max_num_chars, timeseries_util.gp_params_dim]
+    )
+    latent = (raw_expression, eos, raw_gp_params)
+
+    # Create obs
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+
+    # Compute log prob
+    log_prob = guide.log_prob(obs, latent)
+
+    assert list(log_prob.shape) == sample_shape + shape

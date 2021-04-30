@@ -477,6 +477,10 @@ class Guide(nn.Module):
         self.obs_embedder = nn.LSTM(1, self.lstm_hidden_dim)
         self.obs_embedding_dim = self.lstm_hidden_dim
 
+        # Expression embedder
+        self.expression_embedder = nn.LSTM(timeseries_util.vocabulary_size, self.lstm_hidden_dim)
+        self.expression_embedding_dim = self.lstm_hidden_dim
+
         # Recognition model for the expression (discrete)
         self.expression_lstm = nn.LSTM(
             self.obs_embedding_dim + timeseries_util.vocabulary_size, self.lstm_hidden_dim
@@ -515,6 +519,71 @@ class Guide(nn.Module):
         _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
         return h.view(*[*shape, self.obs_embedding_dim])
 
+    def get_expression_embedding(self, raw_expression, eos):
+        """
+        Args:
+            raw_expression [*shape, max_num_chars]
+            eos [*shape, max_num_chars]
+
+        Returns: [*shape, lstm_hidden_dim]
+        """
+        # Extract
+        shape = raw_expression.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+
+        # Flatten
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        # Compute num chars
+        # [num_elements]
+        num_chars_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+        lstm_input = []
+        for element_id in range(num_elements):
+            num_chars_b = num_chars_flattened[element_id]
+            lstm_input.append(
+                F.one_hot(
+                    raw_expression_flattened[element_id, :num_chars_b].long(),
+                    num_classes=timeseries_util.vocabulary_size,
+                ).float()
+            )
+        lstm_input = nn.utils.rnn.pack_sequence(lstm_input, enforce_sorted=False)
+
+        # Run LSTM
+        # [1, num_elements, lstm_hidden_size]
+        _, (h, _) = self.expression_embedder(lstm_input)
+        return h[0].view(*[*shape, self.lstm_hidden_dim])
+
+    def get_num_base_kernels(self, raw_expression, eos):
+        """
+        Args:
+            raw_expression [*shape, max_num_chars]
+            eos [*shape, max_num_chars]
+
+        Returns: [*shape]
+        """
+        # Extract
+        shape = raw_expression.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+
+        # Flatten
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        # Compute num timesteps
+        # [num_elements]
+        num_timesteps_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+        result = []
+        for element_id in range(num_elements):
+            result.append(
+                timeseries_util.count_base_kernels(
+                    raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
+                )
+            )
+        return torch.tensor(result, device=self.device).long().view(*shape)
+
     def log_prob(self, obs, latent):
         """
         Args
@@ -526,7 +595,77 @@ class Guide(nn.Module):
 
         Returns [*sample_shape, *shape]
         """
-        raise NotImplementedError()
+        # Extract
+        raw_expression, eos, raw_gp_params = latent
+        shape = obs.shape[:-1]
+        sample_shape = raw_expression.shape[: -(len(shape) + 1)]
+        num_elements = cmws.util.get_num_elements(shape)
+        num_samples = cmws.util.get_num_elements(sample_shape)
+
+        # Compute obs embedding
+        obs_embedding = self.get_obs_embedding(obs)
+
+        # Log prob of discrete
+        # -- Expand obs embedding
+        # [num_samples * num_elements, obs_embedding_dim]
+        obs_embedding_expanded = (
+            obs_embedding[None]
+            .expand(*[num_samples, *shape, -1])
+            .reshape(num_samples * num_elements, -1)
+        )
+        # -- Flatten discrete latents
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        discrete_log_prob = (
+            lstm_util.TimeseriesDistribution(
+                "discrete",
+                timeseries_util.vocabulary_size,
+                obs_embedding_expanded,
+                self.expression_lstm,
+                self.expression_extractor,
+                lstm_eos=True,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .log_prob(raw_expression_flattened, eos_flattened)
+            .view(*[*sample_shape, *shape])
+        )
+
+        # Log prob of continuous
+        # -- Compute num base kernels
+        # [num_samples * num_elements]
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Compute expression embedding
+        # [num_samples * num_elements, expression_embedding_dim]
+        expression_embedding_flattened = self.get_expression_embedding(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Flatten continuous latent
+        # [num_samples * num_elements, max_num_chars, gp_params_dim]
+        raw_gp_params_flattened = raw_gp_params.view(
+            -1, self.max_num_chars, timeseries_util.gp_params_dim
+        )
+
+        # -- Compute log prob
+        continuous_log_prob = (
+            lstm_util.TimeseriesDistribution(
+                "continuous",
+                timeseries_util.gp_params_dim,
+                torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
+                self.gp_params_lstm,
+                self.gp_params_extractor,
+                lstm_eos=False,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
+            .view(*[*sample_shape, *shape])
+        )
+
+        return discrete_log_prob + continuous_log_prob
 
     def sample(self, obs, sample_shape=[]):
         """z ~ q(z | x)
