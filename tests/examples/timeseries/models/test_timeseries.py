@@ -1,5 +1,5 @@
 import torch
-from cmws.examples.timeseries.models.timeseries import GenerativeModel
+from cmws.examples.timeseries.models.timeseries import GenerativeModel, Guide
 import cmws.examples.timeseries.util as timeseries_util
 import cmws.examples.timeseries.data as timeseries_data
 
@@ -115,3 +115,14 @@ def test_generative_model_sample_dims():
         timeseries_util.gp_params_dim,
     ]
     assert list(obs.shape) == sample_shape + [timeseries_data.num_timesteps]
+
+
+def test_guide_obs_embedding_dims():
+    shape = [2, 3]
+    max_num_chars, lstm_hidden_dim = 4, 5
+
+    guide = Guide(max_num_chars, lstm_hidden_dim)
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+    obs_embedding = guide.get_obs_embedding(obs)
+
+    assert list(obs_embedding.shape) == shape + [lstm_hidden_dim]

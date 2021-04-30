@@ -468,14 +468,52 @@ class Guide(nn.Module):
     """
     """
 
-    def __init__(self):
+    def __init__(self, max_num_chars, lstm_hidden_dim):
         super().__init__()
+        self.max_num_chars = max_num_chars
+        self.lstm_hidden_dim = lstm_hidden_dim
 
-        raise NotImplementedError()
+        # Obs embedder
+        self.obs_embedder = nn.LSTM(1, self.lstm_hidden_dim)
+        self.obs_embedding_dim = self.lstm_hidden_dim
+
+        # Recognition model for the expression (discrete)
+        self.expression_lstm = nn.LSTM(
+            self.obs_embedding_dim + timeseries_util.vocabulary_size, self.lstm_hidden_dim
+        )
+        self.expression_extractor = nn.Linear(
+            self.lstm_hidden_dim, timeseries_util.vocabulary_size + 1
+        )
+
+        # Recognition model for the gp params (continuous)
+        self.gp_params_lstm = nn.LSTM(
+            self.obs_embedding_dim + timeseries_util.gp_params_dim + self.lstm_hidden_dim,
+            self.lstm_hidden_dim,
+        )
+        self.gp_params_extractor = nn.Linear(
+            self.lstm_hidden_dim, 2 * timeseries_util.gp_params_dim
+        )
 
     @property
     def device(self):
-        raise NotImplementedError()
+        return next(iter(self.expression_lstm.parameters())).device
+
+    def get_obs_embedding(self, obs):
+        """
+        Args
+            obs [*shape, num_timesteps]
+
+        Returns [*shape, obs_embedding_dim]
+        """
+        # Extract
+        shape = obs.shape[:-1]
+        num_timesteps = obs.shape[-1]
+
+        # Flatten
+        obs_flattened = obs.view(-1, num_timesteps)
+
+        _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
+        return h.view(*[*shape, self.obs_embedding_dim])
 
     def log_prob(self, obs, latent):
         """
