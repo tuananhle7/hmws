@@ -252,3 +252,30 @@ def test_guide_log_prob_discrete_dims():
     log_prob = guide.log_prob_discrete(obs, discrete_latent)
 
     assert list(log_prob.shape) == discrete_shape + shape
+
+
+def test_guide_log_prob_continuous_dims():
+    shape = [2, 3]
+    discrete_shape = [4]
+    continuous_shape = [5]
+    max_num_chars, lstm_hidden_dim = 6, 7
+
+    guide = Guide(max_num_chars, lstm_hidden_dim)
+
+    # Create latent
+    raw_expression = torch.randint(
+        timeseries_util.vocabulary_size, size=discrete_shape + shape + [max_num_chars]
+    )
+    eos = torch.randint(2, size=discrete_shape + shape + [max_num_chars])
+    raw_gp_params = torch.randn(
+        *[*continuous_shape, *discrete_shape, *shape, max_num_chars, timeseries_util.gp_params_dim]
+    )
+    discrete_latent, continuous_latent = (raw_expression, eos), raw_gp_params
+
+    # Create obs
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+
+    # Compute log prob
+    log_prob = guide.log_prob_continuous(obs, discrete_latent, continuous_latent)
+
+    assert list(log_prob.shape) == continuous_shape + discrete_shape + shape

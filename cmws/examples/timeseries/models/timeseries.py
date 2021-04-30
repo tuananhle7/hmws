@@ -919,9 +919,75 @@ class Guide(nn.Module):
                 raw_expression [*discrete_shape, *shape, max_num_chars]
                 eos [*discrete_shape, *shape, max_num_chars]
 
-            continuous_latent (raw_gp_params, gp_params_dim)
-                [*continuous_shape, *discrete_shape, *shape, max_num_chars]
+            continuous_latent (raw_gp_params)
+                [*continuous_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
 
         Returns [*continuous_shape, *discrete_shape, *shape]
         """
-        raise NotImplementedError()
+        # Extract
+        raw_expression, eos = discrete_latent
+        raw_gp_params = continuous_latent
+        shape = obs.shape[:-1]
+        discrete_shape = raw_expression.shape[: -(len(shape) + 1)]
+        continuous_shape = raw_gp_params.shape[: -(len(discrete_shape) + len(shape) + 2)]
+        num_elements = cmws.util.get_num_elements(shape)
+        num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
+        num_continuous_elements = cmws.util.get_num_elements(continuous_shape)
+
+        # Compute obs embedding
+        obs_embedding = self.get_obs_embedding(obs)
+
+        # Log prob of continuous
+        # -- Expand obs embedding
+        # [num_continuous_elements * num_discrete_elements * num_elements, obs_embedding_dim]
+        obs_embedding_expanded = (
+            obs_embedding[None]
+            .expand(*[num_continuous_elements * num_discrete_elements, *shape, -1])
+            .reshape(num_continuous_elements * num_discrete_elements * num_elements, -1)
+        )
+        # -- Flatten discrete latents
+        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
+        raw_expression_flattened = (
+            raw_expression[None]
+            .expand(*[num_continuous_elements, *discrete_shape, *shape, -1])
+            .reshape(-1, self.max_num_chars)
+        )
+        eos_flattened = (
+            eos[None]
+            .expand(*[num_continuous_elements, *discrete_shape, *shape, -1])
+            .reshape(-1, self.max_num_chars)
+        )
+
+        # -- Compute num base kernels
+        # [num_continuous_elements * num_discrete_elements * num_elements]
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Compute expression embedding
+        # [num_continuous_elements * num_discrete_elements * num_elements, expression_embedding_dim]
+        expression_embedding_flattened = self.get_expression_embedding(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Flatten continuous latent
+        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars,
+        #  gp_params_dim]
+        raw_gp_params_flattened = raw_gp_params.view(
+            -1, self.max_num_chars, timeseries_util.gp_params_dim
+        )
+
+        # -- Compute log prob
+        return (
+            lstm_util.TimeseriesDistribution(
+                "continuous",
+                timeseries_util.gp_params_dim,
+                torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
+                self.gp_params_lstm,
+                self.gp_params_extractor,
+                lstm_eos=False,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
+            .view(*[*continuous_shape, *discrete_shape, *shape])
+        )
