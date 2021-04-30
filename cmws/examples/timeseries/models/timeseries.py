@@ -678,7 +678,75 @@ class Guide(nn.Module):
             eos [*sample_shape, *shape, max_num_chars]
             raw_gp_params [*sample_shape, *shape, max_num_chars, gp_params_dim]
         """
-        raise NotImplementedError()
+        # Extract
+        shape = obs.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+        num_samples = cmws.util.get_num_elements(sample_shape)
+
+        # Compute obs embedding
+        obs_embedding = self.get_obs_embedding(obs)
+
+        # Sample discrete
+        # -- Flatten obs embedding
+        # [num_elements, obs_embedding_dim]
+        obs_embedding_flattened = obs_embedding.view(num_elements, -1)
+
+        # -- Sample
+        raw_expression, eos = lstm_util.TimeseriesDistribution(
+            "discrete",
+            timeseries_util.vocabulary_size,
+            obs_embedding_flattened,
+            self.expression_lstm,
+            self.expression_extractor,
+            lstm_eos=True,
+            max_num_timesteps=self.max_num_chars,
+        ).sample(sample_shape)
+
+        # -- Reshape
+        raw_expression = raw_expression.view(*[*sample_shape, *shape, -1])
+        eos = eos.view(*[*sample_shape, *shape, -1])
+
+        # Sample continuous
+        # -- Flatten discrete latents
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        # -- Compute num base kernels
+        # [num_samples * num_elements]
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Compute expression embedding
+        # [num_samples * num_elements, expression_embedding_dim]
+        expression_embedding_flattened = self.get_expression_embedding(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Expand obs embedding
+        # [num_samples * num_elements, obs_embedding_dim]
+        obs_embedding_expanded = (
+            obs_embedding_flattened[None]
+            .expand(num_samples, num_elements, -1)
+            .reshape(-1, self.obs_embedding_dim)
+        )
+
+        # -- Sample
+        raw_gp_params = (
+            lstm_util.TimeseriesDistribution(
+                "continuous",
+                timeseries_util.gp_params_dim,
+                torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
+                self.gp_params_lstm,
+                self.gp_params_extractor,
+                lstm_eos=False,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .sample((), num_timesteps=num_base_kernels_flattened)
+            .view(*[*sample_shape, *shape, self.max_num_chars, timeseries_util.gp_params_dim])
+        )
+
+        return raw_expression, eos, raw_gp_params
 
     def sample_discrete(self, obs, sample_shape=[]):
         """z_d ~ q(z_d | x)
