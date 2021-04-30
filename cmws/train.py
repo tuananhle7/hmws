@@ -17,6 +17,8 @@ def train(model, optimizer, stats, args):
         config_name = cmws.examples.stacking_3d.run.get_config_name(args)
     elif "cmws.examples.csg.models" in str(type(generative_model)):
         config_name = cmws.examples.csg.run.get_config_name(args)
+    elif "cmws.examples.timeseries.models" in str(type(generative_model)):
+        config_name = cmws.examples.timeseries.run.get_config_name(args)
     checkpoint_path = util.get_checkpoint_path(args.experiment_name, config_name)
 
     # Initialize optimizer for pyro models
@@ -133,6 +135,16 @@ def train(model, optimizer, stats, args):
         test_data_loader = cmws.examples.stacking_3d.data.get_stacking_data_loader(
             device, args.batch_size, test=True
         )
+    elif "cmws.examples.timeseries.models.timeseries." in str(type(generative_model)):
+        # Use a data loader
+        train_data_iterator = util.cycle(
+            cmws.examples.timeseries.data.get_timeseries_data_loader(
+                device, args.batch_size, test=False
+            )
+        )
+        test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+            device, args.batch_size, test=True
+        )
     else:
         # Generate test data
         # NOTE: super weird but when this is put before sleep pretraining, sleep pretraining doesn't
@@ -151,6 +163,7 @@ def train(model, optimizer, stats, args):
             or "cmws.examples.stacking.models.stacking_top_down." in str(type(generative_model))
             or "cmws.examples.stacking_3d.models.stacking." in str(type(generative_model))
             or "cmws.examples.csg.models.shape_program_pytorch" in str(type(generative_model))
+            or "cmws.examples.timeseries.models.timeseries" in str(type(generative_model))
         ):
             obs, obs_id = next(train_data_iterator)
         else:
@@ -236,6 +249,7 @@ def train(model, optimizer, stats, args):
                     or "cmws.examples.stacking_3d.models.stacking." in str(type(generative_model))
                     or "cmws.examples.csg.models.shape_program_pytorch"
                     in str(type(generative_model))
+                    or "cmws.examples.timeseries.models.timeseries" in str(type(generative_model))
                 ):
                     log_p, kl = [], []
                     for test_obs, test_obs_id in test_data_loader:
@@ -278,6 +292,10 @@ def train(model, optimizer, stats, args):
                 cmws.examples.csg.util.save_checkpoint(
                     checkpoint_path, model, optimizer, stats, run_args=args
                 )
+            elif "cmws.examples.timeseries.models" in str(type(generative_model)):
+                cmws.examples.timeseries.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
 
         if iteration % args.checkpoint_interval == 0:
             checkpoint_path_iter = util.get_checkpoint_path(
@@ -293,5 +311,9 @@ def train(model, optimizer, stats, args):
                 )
             elif "cmws.examples.csg.models" in str(type(generative_model)):
                 cmws.examples.csg.util.save_checkpoint(
+                    checkpoint_path_iter, model, optimizer, stats, run_args=args,
+                )
+            elif "cmws.examples.timeseries.models" in str(type(generative_model)):
+                cmws.examples.timeseries.util.save_checkpoint(
                     checkpoint_path_iter, model, optimizer, stats, run_args=args,
                 )

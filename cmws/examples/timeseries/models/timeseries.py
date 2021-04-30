@@ -264,7 +264,7 @@ class GenerativeModel(nn.Module):
         raw_gp_params_flattened = raw_gp_params.view(
             num_samples, num_elements, self.max_num_chars, -1
         )
-        obs_flattened = obs.view(num_elements, -1)
+        obs_flattened = obs.reshape(num_elements, -1)
 
         # -- Compute num base kernels
         num_base_kernels_flattened = self.get_num_base_kernels(
@@ -310,7 +310,7 @@ class GenerativeModel(nn.Module):
         ).log_prob(obs_expanded)
 
         # -- Mask out zero log probs
-        obs_log_prob[zero_obs_prob] = float("-inf")
+        obs_log_prob[zero_obs_prob] = -1e6
 
         # -- Reshape
         obs_log_prob = obs_log_prob.view(*[*sample_shape, *shape])
@@ -514,7 +514,7 @@ class Guide(nn.Module):
         num_timesteps = obs.shape[-1]
 
         # Flatten
-        obs_flattened = obs.view(-1, num_timesteps)
+        obs_flattened = obs.reshape(-1, num_timesteps)
 
         _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
         return h.view(*[*shape, self.obs_embedding_dim])
