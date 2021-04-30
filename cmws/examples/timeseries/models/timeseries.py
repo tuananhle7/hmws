@@ -333,7 +333,61 @@ class GenerativeModel(nn.Module):
 
         Returns: [*continuous_shape, *discrete_shape, *shape]
         """
-        raise NotImplementedError()
+        # Extract
+        raw_expression, eos = discrete_latent
+        raw_gp_params = continuous_latent
+        shape = obs.shape[:-1]
+        discrete_shape = raw_expression.shape[: -(len(shape) + 1)]
+        continuous_shape = raw_gp_params.shape[: -(len(discrete_shape) + len(shape) + 2)]
+        # num_elements = cmws.util.get_num_elements(shape)
+        # num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
+        num_continuous_elements = cmws.util.get_num_elements(continuous_shape)
+
+        # Flatten
+        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
+        raw_expression_flattened = (
+            raw_expression.view(-1, self.max_num_chars)[None]
+            .expand(num_continuous_elements, -1, self.max_num_chars)
+            .reshape(-1, self.max_num_chars)
+        )
+        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
+        eos_flattened = (
+            eos.view(-1, self.max_num_chars)[None]
+            .expand(num_continuous_elements, -1, self.max_num_chars)
+            .reshape(-1, self.max_num_chars)
+        )
+        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars,
+        #  gp_params_dim]
+        raw_gp_params_flattened = raw_gp_params.view(
+            -1, self.max_num_chars, timeseries_util.gp_params_dim,
+        )
+
+        # GP params log prob
+        # -- Compute num base kernels
+        # [num_continuous_elements * num_discrete_elements * num_elements]
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Compute expression embedding
+        # [num_continuous_elements * num_discrete_elements * num_elements, expression_embedding_dim]
+        expression_embedding_flattened = self.get_expression_embedding(
+            raw_expression_flattened, eos_flattened
+        )
+
+        return (
+            lstm_util.TimeseriesDistribution(
+                "continuous",
+                timeseries_util.gp_params_dim,
+                expression_embedding_flattened,
+                self.gp_params_lstm,
+                self.gp_params_extractor,
+                lstm_eos=False,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
+            .view(*[*continuous_shape, *discrete_shape, *shape])
+        )
 
     @torch.no_grad()
     def sample(self, sample_shape=[]):
