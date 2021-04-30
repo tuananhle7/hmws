@@ -185,3 +185,20 @@ def test_guide_sample_dims():
         max_num_chars,
         timeseries_util.gp_params_dim,
     ]
+
+
+def test_guide_sample_discrete_dims():
+    shape = [2, 3]
+    sample_shape = [4, 5]
+    max_num_chars, lstm_hidden_dim = 6, 7
+
+    guide = Guide(max_num_chars, lstm_hidden_dim)
+
+    # Create obs
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+
+    # Sample
+    raw_expression, eos = guide.sample_discrete(obs, sample_shape)
+
+    assert list(raw_expression.shape) == sample_shape + shape + [max_num_chars]
+    assert list(eos.shape) == sample_shape + shape + [max_num_chars]

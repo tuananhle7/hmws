@@ -759,7 +759,34 @@ class Guide(nn.Module):
             raw_expression [*sample_shape, *shape, max_num_chars]
             eos [*sample_shape, *shape, max_num_chars]
         """
-        raise NotImplementedError()
+        # Extract
+        shape = obs.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+
+        # Compute obs embedding
+        obs_embedding = self.get_obs_embedding(obs)
+
+        # Sample discrete
+        # -- Flatten obs embedding
+        # [num_elements, obs_embedding_dim]
+        obs_embedding_flattened = obs_embedding.view(num_elements, -1)
+
+        # -- Sample
+        raw_expression, eos = lstm_util.TimeseriesDistribution(
+            "discrete",
+            timeseries_util.vocabulary_size,
+            obs_embedding_flattened,
+            self.expression_lstm,
+            self.expression_extractor,
+            lstm_eos=True,
+            max_num_timesteps=self.max_num_chars,
+        ).sample(sample_shape)
+
+        # -- Reshape
+        raw_expression = raw_expression.view(*[*sample_shape, *shape, -1])
+        eos = eos.view(*[*sample_shape, *shape, -1])
+
+        return raw_expression, eos
 
     def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
         """z_c ~ q(z_c | z_d, x)
