@@ -66,21 +66,21 @@ class Kernel(nn.Module):
             R = SquaredExponential
             E = Periodic
             C = Constant
-        params [num_base_kernels, 5]
-            params[i, 0] raw_scale (WhiteNoise)
-            params[i, 1] raw_lengthscale (SE)
-            params[i, 2] raw_period (Per)
-            params[i, 3] raw_lengthscale (Per)
-            params[i, 4] raw_const (Constant)
+        raw_params [num_base_kernels, raw_params_dim=5]
+            raw_params[i, 0] raw_scale (WhiteNoise)
+            raw_params[i, 1] raw_lengthscale (SE)
+            raw_params[i, 2] raw_period (Per)
+            raw_params[i, 3] raw_lengthscale (Per)
+            raw_params[i, 4] raw_const (Constant)
     """
 
-    def __init__(self, expression, params):
+    def __init__(self, expression, raw_params):
         super().__init__()
         self.expression = expression
         self.index = 0
 
-        self.params = params
-        self.params_index = 0
+        self.raw_params = raw_params
+        self.raw_params_index = 0
 
         self.value = self.getValue()
 
@@ -144,8 +144,8 @@ class Kernel(nn.Module):
     def parseValue(self):
         char = self.peek()
         self.index += 1
-        param = self.params[self.params_index]
-        self.params_index += 1
+        param = self.raw_params[self.raw_params_index]
+        self.raw_params_index += 1
         if char == "W":
             return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0])}
         elif char == "R":
