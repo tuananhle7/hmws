@@ -874,7 +874,41 @@ class Guide(nn.Module):
 
         Returns [*discrete_shape, *shape]
         """
-        raise NotImplementedError()
+        # Extract
+        raw_expression, eos = discrete_latent
+        shape = obs.shape[:-1]
+        discrete_shape = raw_expression.shape[: -(len(shape) + 1)]
+        num_elements = cmws.util.get_num_elements(shape)
+        num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
+
+        # Compute obs embedding
+        obs_embedding = self.get_obs_embedding(obs)
+
+        # Log prob of discrete
+        # -- Expand obs embedding
+        # [num_discrete_elements * num_elements, obs_embedding_dim]
+        obs_embedding_expanded = (
+            obs_embedding[None]
+            .expand(*[num_discrete_elements, *shape, -1])
+            .reshape(num_discrete_elements * num_elements, -1)
+        )
+        # -- Flatten discrete latents
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        return (
+            lstm_util.TimeseriesDistribution(
+                "discrete",
+                timeseries_util.vocabulary_size,
+                obs_embedding_expanded,
+                self.expression_lstm,
+                self.expression_extractor,
+                lstm_eos=True,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .log_prob(raw_expression_flattened, eos_flattened)
+            .view(*[*discrete_shape, *shape])
+        )
 
     def log_prob_continuous(self, obs, discrete_latent, continuous_latent):
         """log q(z_c | z_d, x)
