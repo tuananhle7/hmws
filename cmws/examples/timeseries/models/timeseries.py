@@ -35,7 +35,8 @@ class GenerativeModel(nn.Module):
 
     @property
     def expression_dist(self):
-        """p(z_d)"""
+        """p(z_d) distribution of batch_shape [] and event_shape ([max_num_chars], [max_num_chars])
+        """
         return lstm_util.TimeseriesDistribution(
             "discrete",
             timeseries_util.vocabulary_size,
@@ -175,7 +176,37 @@ class GenerativeModel(nn.Module):
                 eos [*sample_shape, max_num_chars]
                 raw_gp_params [*sample_shape, max_num_chars, gp_params_dim]
         """
-        raise NotImplementedError()
+        # Sample discrete
+        raw_expression, eos = self.expression_dist.sample(sample_shape)
+
+        # Flatten
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        # Sample continuous
+        # -- Compute embedding
+        expression_embedding_flattened = self.get_expression_embedding(
+            raw_expression_flattened, eos_flattened
+        )
+        # -- Compute num base kernels
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        raw_gp_params = (
+            lstm_util.TimeseriesDistribution(
+                "continuous",
+                timeseries_util.gp_params_dim,
+                expression_embedding_flattened,
+                self.gp_params_lstm,
+                self.gp_params_extractor,
+                lstm_eos=False,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .sample(num_timesteps=num_base_kernels_flattened)
+            .view(*[*sample_shape, self.max_num_chars, timeseries_util.gp_params_dim])
+        )
+        return raw_expression, eos, raw_gp_params
 
     def discrete_latent_sample(self, sample_shape=[]):
         """Sample from p(z_d)

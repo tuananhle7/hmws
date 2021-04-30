@@ -42,6 +42,13 @@ def get_num_timesteps(eos):
 
 class TimeseriesDistribution:
     """p(x_{1:T}, eos_{1:T} | embedding) where x_t ∈ Z or R^d
+    batch_shape [batch_size]
+                or
+                []
+    and
+    event_shape ([max_num_timesteps(, x_dim)], [max_num_timesteps])
+                or
+                [max_num_timesteps(, x_dim)]
 
     Args
         x_type (str) continuous or discrete
@@ -50,6 +57,7 @@ class TimeseriesDistribution:
         lstm: nn.Module object
         linear: nn.Module mapping from LSTM hidden state to per-timestep distribution params
         lstm_eos: bool; models length if True
+        max_num_timesteps (int; default 200)
     Returns distribution with batch_shape [batch_size] and event_shape [num_timesteps]
         where num_timesteps is variable
     """
