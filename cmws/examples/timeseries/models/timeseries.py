@@ -219,7 +219,7 @@ class GenerativeModel(nn.Module):
                 raw_expression [*sample_shape, max_num_chars]
                 eos [*sample_shape, max_num_chars]
         """
-        raise NotImplementedError()
+        return self.expression_dist.sample(sample_shape)
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model

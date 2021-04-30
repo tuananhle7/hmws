@@ -30,3 +30,14 @@ def test_generative_model_latent_sample_dims():
         max_num_chars,
         timeseries_util.gp_params_dim,
     ]
+
+
+def test_generative_model_discrete_latent_sample_dims():
+    sample_shape = [2, 3]
+    max_num_chars, lstm_hidden_dim = 4, 5
+
+    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim)
+    raw_expression, eos = generative_model.discrete_latent_sample(sample_shape)
+
+    assert list(raw_expression.shape) == sample_shape + [max_num_chars]
+    assert list(eos.shape) == sample_shape + [max_num_chars]
