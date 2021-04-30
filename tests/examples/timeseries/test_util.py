@@ -1,9 +1,10 @@
 import torch
 import cmws.examples.timeseries.util as util
+import cmws
 
 
 def test_kernel_shape():
-    device = torch.device("cpu")
+    device = cmws.util.get_device()
     batch_size, num_timesteps_1, num_timesteps_2 = 2, 3, 4
     x_1 = torch.linspace(0, 1, steps=num_timesteps_1, device=device)[None, :, None].expand(
         batch_size, num_timesteps_1, 1
@@ -19,7 +20,7 @@ def test_kernel_shape():
 
 
 def test_conversions():
-    device = torch.device("cpu")
+    device = cmws.util.get_device()
     expression = "W+R*E"
     assert expression == util.get_expression(util.get_numeric(expression, device=device))
 
