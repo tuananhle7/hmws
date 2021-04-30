@@ -98,3 +98,20 @@ def test_generative_model_log_prob_discrete_continuous_dims():
     )
 
     assert list(log_prob.shape) == continuous_shape + discrete_shape + shape
+
+
+def test_generative_model_sample_dims():
+    sample_shape = [2, 3]
+    max_num_chars, lstm_hidden_dim = 4, 5
+
+    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim)
+    latent, obs = generative_model.sample(sample_shape)
+    raw_expression, eos, raw_gp_params = latent
+
+    assert list(raw_expression.shape) == sample_shape + [max_num_chars]
+    assert list(eos.shape) == sample_shape + [max_num_chars]
+    assert list(raw_gp_params.shape) == sample_shape + [
+        max_num_chars,
+        timeseries_util.gp_params_dim,
+    ]
+    assert list(obs.shape) == sample_shape + [timeseries_data.num_timesteps]

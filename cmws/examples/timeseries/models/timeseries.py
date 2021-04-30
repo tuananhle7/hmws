@@ -404,7 +404,64 @@ class GenerativeModel(nn.Module):
 
             obs [*sample_shape, num_timesteps]
         """
-        raise NotImplementedError()
+        # Sample latent
+        latent = self.latent_sample(sample_shape)
+
+        # Sample obs
+        # -- Extract
+        raw_expression, eos, raw_gp_params = latent
+        num_samples = cmws.util.get_num_elements(sample_shape)
+
+        # -- Flatten
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_gp_params_flattened = raw_gp_params.view(
+            -1, self.max_num_chars, timeseries_util.gp_params_dim
+        )
+
+        # -- Compute num base kernels
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Create x_1 and x_2
+        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+            None, :, None
+        ].expand(1, timeseries_data.num_timesteps, 1)
+        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+            None, None, :
+        ].expand(1, 1, timeseries_data.num_timesteps)
+
+        # -- Create identity matrix
+        identity_matrix = torch.eye(timeseries_data.num_timesteps, device=self.device).float()
+
+        # -- Compute covariance matrices
+        covariance_matrix = []
+        for sample_id in range(num_samples):
+            try:
+                covariance_matrix_se = timeseries_util.Kernel(
+                    timeseries_util.get_expression(raw_expression[sample_id]),
+                    raw_gp_params_flattened[sample_id, : num_base_kernels_flattened[sample_id],],
+                )(x_1, x_2)[0]
+            except Exception:
+                covariance_matrix_se = identity_matrix
+
+            covariance_matrix.append(covariance_matrix_se)
+        covariance_matrix = torch.stack(covariance_matrix).view(
+            num_samples, timeseries_data.num_timesteps, timeseries_data.num_timesteps
+        )
+
+        # -- Create mean
+        loc = torch.zeros((num_samples, timeseries_data.num_timesteps), device=self.device)
+
+        # -- Sample obs
+        obs = (
+            torch.distributions.MultivariateNormal(loc, covariance_matrix=covariance_matrix)
+            .sample()
+            .view(*[*sample_shape, -1])
+        )
+
+        return latent, obs
 
 
 class Guide(nn.Module):
