@@ -28,18 +28,16 @@ class TimeseriesDistribution:
         lstm: nn.Module object
         linear: nn.Module mapping from LSTM hidden state to per-timestep distribution params
         lstm_eos: bool; models length if True
-        num_mixtures (int; default 1)
     Returns distribution with batch_shape [batch_size] and event_shape [num_timesteps]
         where num_timesteps is variable
     """
 
     def __init__(
-        self, embedding, lstm, linear, lstm_eos, num_mixtures=1, max_num_timesteps_sample=200,
+        self, embedding, lstm, linear, lstm_eos, max_num_timesteps_sample=200,
     ):
         self.lstm = lstm
         self.linear = linear
         self.lstm_eos = lstm_eos
-        self.num_mixtures = num_mixtures
         self.max_num_timesteps_sample = max_num_timesteps_sample
         self.embedding = embedding
         self.batch_size = self.embedding.shape[0]
@@ -97,30 +95,16 @@ class TimeseriesDistribution:
             # [num_samples * batch_size, lstm_hidden_size], ([...], [...])
             lstm_output, hc = step_lstm(self.lstm, lstm_input, hc)
 
-            # if num_mixtures == 1: [num_samples * batch_size, 2 + 1 or 2]
-            # else: [num_samples * batch_size, 3 * num_mixtures + 1 or 3 * num_mixtures]
+            # [num_samples * batch_size, 2 + 1 or 2]
             linear_out = self.linear(lstm_output)
 
-            if self.num_mixtures == 1:
-                # [num_samples * batch_size]
-                x_loc = linear_out[..., 0]
-                x_scale = linear_out[..., 1].exp()
+            # [num_samples * batch_size]
+            x_loc = linear_out[..., 0]
+            x_scale = linear_out[..., 1].exp()
 
-                # batch_shape [num_samples * batch_size], event_shape []
-                x_dist = torch.distributions.Normal(loc=x_loc, scale=x_scale)
-            else:
-                # [num_samples * batch_size, num_mixtures]
-                x_mixture_logits = linear_out[..., : self.num_mixtures]
-                # [num_samples * batch_size, num_mixtures]
-                x_loc = linear_out[..., self.num_mixtures : 2 * self.num_mixtures]
-                # [num_samples * batch_size, num_mixtures]
-                x_scale = linear_out[..., 2 * self.num_mixtures : 3 * self.num_mixtures].exp()
+            # batch_shape [num_samples * batch_size], event_shape []
+            x_dist = torch.distributions.Normal(loc=x_loc, scale=x_scale)
 
-                # batch_shape [num_samples * batch_size], event_shape []
-                x_dist = torch.distributions.MixtureSameFamily(
-                    torch.distributions.Categorical(logits=x_mixture_logits),
-                    torch.distributions.Normal(x_loc, scale=x_scale),
-                )
             # sample
             # [num_samples * batch_size]
             x.append(x_dist.sample())
@@ -211,33 +195,18 @@ class TimeseriesDistribution:
         max_num_timesteps = padded_output.shape[0]
 
         # Extract distribution params for x_t
-        # if num_mixtures == 1: [max_num_timesteps, batch_size, 2 + 1 or 2]
-        # else: [max_num_timesteps, batch_size, 3 * num_mixtures + 1 or 3 * num_mixtures]
+        # [max_num_timesteps, batch_size, 2 + 1 or 2]
         linear_out = self.linear(padded_output.view(max_num_timesteps * batch_size, -1)).view(
             max_num_timesteps, batch_size, -1
         )
 
-        if self.num_mixtures == 1:
-            # [max_num_timesteps, batch_size]
-            x_loc = linear_out[..., 0]
-            # [max_num_timesteps, batch_size]
-            x_scale = linear_out[..., 1].exp()
+        # [max_num_timesteps, batch_size]
+        x_loc = linear_out[..., 0]
+        # [max_num_timesteps, batch_size]
+        x_scale = linear_out[..., 1].exp()
 
-            # batch_shape [max_num_timesteps, batch_size], event_shape []
-            x_dist = torch.distributions.Normal(x_loc, scale=x_scale)
-        else:
-            # [max_num_timesteps, batch_size, num_mixtures]
-            x_mixture_logits = linear_out[..., : self.num_mixtures]
-            # [max_num_timesteps, batch_size, num_mixtures]
-            x_loc = linear_out[..., self.num_mixtures : 2 * self.num_mixtures]
-            # [max_num_timesteps, batch_size, num_mixtures]
-            x_scale = linear_out[..., 2 * self.num_mixtures : 3 * self.num_mixtures].exp()
-
-            # batch_shape [max_num_timesteps, batch_size], event_shape []
-            x_dist = torch.distributions.MixtureSameFamily(
-                torch.distributions.Categorical(logits=x_mixture_logits),
-                torch.distributions.Normal(x_loc, scale=x_scale),
-            )
+        # batch_shape [max_num_timesteps, batch_size], event_shape []
+        x_dist = torch.distributions.Normal(x_loc, scale=x_scale)
 
         # Evaluate log prob
         # [max_num_timesteps, batch_size]
