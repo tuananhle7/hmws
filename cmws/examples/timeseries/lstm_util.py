@@ -23,12 +23,12 @@ def step_lstm(lstm, input_, h_0_c_0=None):
 
 
 class TimeseriesDistribution:
-    """p(x_{1:T}, eos_{1:T} | embedding) where x_t ∈ Z
+    """p(x_{1:T}, eos_{1:T} | embedding) where x_t ∈ Z or R^d
 
     Args
         x_type (str) continuous or discrete
         num_classes_or_dim (int)
-        embedding: [batch_size, embedding_dim]
+        embedding: [batch_size, embedding_dim] or None
         lstm: nn.Module object
         linear: nn.Module mapping from LSTM hidden state to per-timestep distribution params
         lstm_eos: bool; models length if True
@@ -52,11 +52,12 @@ class TimeseriesDistribution:
         self.lstm_eos = lstm_eos
         self.max_num_timesteps = max_num_timesteps
         self.embedding = embedding
-        self.batch_size = self.embedding.shape[0]
+        if self.embedding is not None:
+            self.batch_size = self.embedding.shape[0]
 
     @property
     def device(self):
-        return self.embedding.device
+        return next(iter(self.lstm.parameters())).device
 
     def sample(self, sample_shape=torch.Size(), num_timesteps=None, warning_enabled=True):
         """
@@ -67,10 +68,10 @@ class TimeseriesDistribution:
                 lstm_eos is True or not. if not provided, the length will be dicated by
                 the end-of-signal indicator.
         Returns:
-            x [*sample_shape, batch_size, max_num_timesteps(, x_dim)]
+            x [*sample_shape(, batch_size), max_num_timesteps(, x_dim)]
 
             Optionally
-            eos [*sample_shape, batch_size, max_num_timesteps]
+            eos [*sample_shape(, batch_size), max_num_timesteps]
         """
         num_samples = cmws.util.get_num_elements(sample_shape)
         if num_timesteps is None:  # use EOS to end
@@ -88,74 +89,88 @@ class TimeseriesDistribution:
                 )
             max_num_timesteps = num_timesteps.max()
 
-        # [num_samples * batch_size, embedding_dim]
-        embedding_expanded = (
-            self.embedding[None]
-            .expand(num_samples, self.batch_size, -1)
-            .contiguous()
-            .view(num_samples * self.batch_size, -1)
-        )
+        if self.embedding is not None:
+            # [num_samples * batch_size, embedding_dim]
+            embedding_expanded = (
+                self.embedding[None]
+                .expand(num_samples, self.batch_size, -1)
+                .contiguous()
+                .view(num_samples * self.batch_size, -1)
+            )
 
         # will be a list of length max_num_timesteps
         x = []
         if num_timesteps is None:  # use EOS to end
             eos = []
 
-        # [num_samples * batch_size, num_classes_or_dim + embedding_dim]
-        lstm_input = torch.cat(
-            [
-                torch.zeros(
-                    (num_samples * self.batch_size, self.num_classes_or_dim), device=self.device,
-                ),
-                embedding_expanded,
-            ],
-            dim=1,
-        )
+        if self.embedding is not None:
+            # [num_samples * batch_size, num_classes_or_dim + embedding_dim]
+            lstm_input = torch.cat(
+                [
+                    torch.zeros(
+                        (num_samples * self.batch_size, self.num_classes_or_dim),
+                        device=self.device,
+                    ),
+                    embedding_expanded,
+                ],
+                dim=1,
+            )
+        else:
+            # [num_samples, num_classes_or_dim + embedding_dim]
+            lstm_input = torch.zeros((num_samples, self.num_classes_or_dim), device=self.device,)
         hc = None
         for timestep in range(max_num_timesteps):
-            # [num_samples * batch_size, lstm_hidden_size], ([...], [...])
+            # [num_samples( * batch_size), lstm_hidden_size], ([...], [...])
             lstm_output, hc = step_lstm(self.lstm, lstm_input, hc)
 
-            # [num_samples * batch_size, num_classes + 1 or num_classes]
+            # [num_samples( * batch_size), num_classes + 1 or num_classes]
             linear_out = self.linear(lstm_output)
 
             if self.x_type == "discrete":
-                # [num_samples * batch_size, num_classes]
+                # [num_samples( * batch_size), num_classes]
                 x_logits = linear_out[..., : self.num_classes]
 
-                # batch_shape [num_samples * batch_size], event_shape []
+                # batch_shape [num_samples( * batch_size)], event_shape []
                 x_dist = torch.distributions.Categorical(logits=x_logits)
             elif self.x_type == "continuous":
-                # [num_samples * batch_size, x_dim]
+                # [num_samples( * batch_size), x_dim]
                 x_loc = linear_out[..., : self.x_dim]
 
-                # [num_samples * batch_size, x_dim]
+                # [num_samples( * batch_size), x_dim]
                 x_scale = linear_out[..., self.x_dim : 2 * self.x_dim].exp()
 
-                # batch_shape [num_samples * batch_size], event_shape [x_dim]
+                # batch_shape [num_samples( * batch_size)], event_shape [x_dim]
                 x_dist = torch.distributions.Independent(
                     torch.distributions.Normal(loc=x_loc, scale=x_scale),
                     reinterpreted_batch_ndims=1,
                 )
 
             # sample
-            # [num_samples * batch_size] or [num_samples * batch_size, x_dim]
+            # [num_samples( * batch_size)] or [num_samples( * batch_size), x_dim]
             x.append(x_dist.sample())
 
             if num_timesteps is None:  # use EOS to end
                 eos_logit = linear_out[..., -1]
-                # [num_samples * batch_size]
+                # [num_samples( * batch_size)]
                 eos.append(torch.distributions.Bernoulli(logits=eos_logit).sample())
 
             # assemble lstm_input
             if self.x_type == "discrete":
-                # [num_samples * batch_size, num_classes + embedding_dim]
-                lstm_input = torch.cat(
-                    [F.one_hot(x[-1], num_classes=self.num_classes), embedding_expanded], dim=1
-                )
+                if self.embedding is not None:
+                    # [num_samples * batch_size, num_classes + embedding_dim]
+                    lstm_input = torch.cat(
+                        [F.one_hot(x[-1], num_classes=self.num_classes), embedding_expanded], dim=1
+                    )
+                else:
+                    # [num_samples, num_classes + embedding_dim]
+                    lstm_input = F.one_hot(x[-1], num_classes=self.num_classes).float()
             elif self.x_type == "continuous":
-                # [num_samples * batch_size, x_dim + embedding_dim]
-                lstm_input = torch.cat([x[-1], embedding_expanded], dim=1)
+                if self.embedding is not None:
+                    # [num_samples * batch_size, x_dim + embedding_dim]
+                    lstm_input = torch.cat([x[-1], embedding_expanded], dim=1)
+                else:
+                    # [num_samples, x_dim + embedding_dim]
+                    lstm_input = x[-1]
 
             if num_timesteps is None:  # use EOS to end
                 # end early if all eos are 1
@@ -163,25 +178,86 @@ class TimeseriesDistribution:
                     max_num_timesteps = timestep + 1
                     break
 
-        if self.x_type == "discrete":
-            # [max_num_timesteps, num_samples, batch_size]
-            x = torch.stack(x).view(max_num_timesteps, num_samples, self.batch_size)
-        elif self.x_type == "continuous":
-            # [max_num_timesteps, num_samples, batch_size, x_dim]
-            x = torch.stack(x).view(max_num_timesteps, num_samples, self.batch_size, self.x_dim)
+        if self.embedding is not None:
+            if self.x_type == "discrete":
+                # [max_num_timesteps, num_samples, batch_size]
+                x = torch.stack(x).view(max_num_timesteps, num_samples, self.batch_size)
+            elif self.x_type == "continuous":
+                # [max_num_timesteps, num_samples, batch_size, x_dim]
+                x = torch.stack(x).view(max_num_timesteps, num_samples, self.batch_size, self.x_dim)
 
-        if num_timesteps is None:  # use EOS to end
-            # [max_num_timesteps, num_samples, batch_size]
-            eos = torch.stack(eos).view(max_num_timesteps, num_samples, self.batch_size)
+            if num_timesteps is None:  # use EOS to end
+                # [max_num_timesteps, num_samples, batch_size]
+                eos = torch.stack(eos).view(max_num_timesteps, num_samples, self.batch_size)
 
-        # thing to be returned
-        x_final = []
-        eos_final = []
-        for sample_id in range(num_samples):
-            for batch_id in range(self.batch_size):
+            # thing to be returned
+            x_final = []
+            eos_final = []
+            for sample_id in range(num_samples):
+                for batch_id in range(self.batch_size):
+                    if num_timesteps is None:  # use EOS to end
+                        # [max_num_timesteps]
+                        eos_single = eos[:, sample_id, batch_id]
+                        if (eos_single == 0).all():
+                            num_timesteps_sb = len(eos_single)
+                        else:
+                            num_timesteps_sb = (eos_single == 1).nonzero(as_tuple=False)[
+                                0
+                            ].item() + 1
+
+                        eos_final.append(
+                            F.one_hot(
+                                torch.tensor(num_timesteps_sb - 1, device=self.device).long(),
+                                num_classes=self.max_num_timesteps,
+                            )
+                        )
+                    else:  # use num_timesteps to end
+                        num_timesteps_sb = num_timesteps.view(num_samples, self.batch_size)[
+                            sample_id, batch_id
+                        ]
+
+                    if self.x_type == "discrete":
+                        result = torch.zeros((self.max_num_timesteps,), device=self.device)
+                        result[:num_timesteps_sb] = x[:num_timesteps_sb, sample_id, batch_id]
+                    elif self.x_type == "continuous":
+                        result = torch.zeros(
+                            (self.max_num_timesteps, self.x_dim), device=self.device
+                        )
+                        result[:num_timesteps_sb] = x[:num_timesteps_sb, sample_id, batch_id]
+                    x_final.append(result)
+
+            if self.x_type == "discrete":
+                x_final = torch.stack(x_final).view(
+                    *[*sample_shape, self.batch_size, self.max_num_timesteps]
+                )
+            elif self.x_type == "continuous":
+                x_final = torch.stack(x_final).view(
+                    *[*sample_shape, self.batch_size, self.max_num_timesteps, self.x_dim]
+                )
+            if num_timesteps is None:
+                eos_final = torch.stack(eos_final).view(*[*sample_shape, self.batch_size, -1])
+                return x_final, eos_final
+            else:
+                return x_final
+        else:
+            if self.x_type == "discrete":
+                # [max_num_timesteps, num_samples]
+                x = torch.stack(x).view(max_num_timesteps, num_samples)
+            elif self.x_type == "continuous":
+                # [max_num_timesteps, num_samples, x_dim]
+                x = torch.stack(x).view(max_num_timesteps, num_samples, self.x_dim)
+
+            if num_timesteps is None:  # use EOS to end
+                # [max_num_timesteps, num_samples]
+                eos = torch.stack(eos).view(max_num_timesteps, num_samples)
+
+            # thing to be returned
+            x_final = []
+            eos_final = []
+            for sample_id in range(num_samples):
                 if num_timesteps is None:  # use EOS to end
                     # [max_num_timesteps]
-                    eos_single = eos[:, sample_id, batch_id]
+                    eos_single = eos[:, sample_id]
                     if (eos_single == 0).all():
                         num_timesteps_sb = len(eos_single)
                     else:
@@ -194,31 +270,27 @@ class TimeseriesDistribution:
                         )
                     )
                 else:  # use num_timesteps to end
-                    num_timesteps_sb = num_timesteps.view(num_samples, self.batch_size)[
-                        sample_id, batch_id
-                    ]
+                    num_timesteps_sb = num_timesteps.view(num_samples)[sample_id]
 
                 if self.x_type == "discrete":
                     result = torch.zeros((self.max_num_timesteps,), device=self.device)
-                    result[:num_timesteps_sb] = x[:num_timesteps_sb, sample_id, batch_id]
+                    result[:num_timesteps_sb] = x[:num_timesteps_sb, sample_id]
                 elif self.x_type == "continuous":
                     result = torch.zeros((self.max_num_timesteps, self.x_dim), device=self.device)
-                    result[:num_timesteps_sb] = x[:num_timesteps_sb, sample_id, batch_id]
+                    result[:num_timesteps_sb] = x[:num_timesteps_sb, sample_id]
                 x_final.append(result)
 
-        if self.x_type == "discrete":
-            x_final = torch.stack(x_final).view(
-                *[*sample_shape, self.batch_size, self.max_num_timesteps]
-            )
-        elif self.x_type == "continuous":
-            x_final = torch.stack(x_final).view(
-                *[*sample_shape, self.batch_size, self.max_num_timesteps, self.x_dim]
-            )
-        if num_timesteps is None:
-            eos_final = torch.stack(eos_final).view(*[*sample_shape, self.batch_size, -1])
-            return x_final, eos_final
-        else:
-            return x_final
+            if self.x_type == "discrete":
+                x_final = torch.stack(x_final).view(*[*sample_shape, self.max_num_timesteps])
+            elif self.x_type == "continuous":
+                x_final = torch.stack(x_final).view(
+                    *[*sample_shape, self.max_num_timesteps, self.x_dim]
+                )
+            if num_timesteps is None:
+                eos_final = torch.stack(eos_final).view(*[*sample_shape, -1])
+                return x_final, eos_final
+            else:
+                return x_final
 
     def log_prob(self, x, eos):
         """
@@ -229,7 +301,8 @@ class TimeseriesDistribution:
         Returns: tensor [batch_size]
         """
         batch_size = len(x)
-        assert batch_size == self.batch_size
+        if self.embedding is not None:
+            assert batch_size == self.batch_size
         num_timesteps = []
         for batch_id in range(batch_size):
             num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
@@ -256,8 +329,9 @@ class TimeseriesDistribution:
 
             x_seq.append(x_b)
 
-            # [num_timesteps_b, embedding_dim]
-            embedding_expanded = self.embedding[batch_id][None].expand(num_timesteps_b, -1)
+            if self.embedding is not None:
+                # [num_timesteps_b, embedding_dim]
+                embedding_expanded = self.embedding[batch_id][None].expand(num_timesteps_b, -1)
             if self.x_type == "discrete":
                 # [num_timesteps_b, num_classes]
                 shifted_x = torch.cat(
@@ -270,8 +344,12 @@ class TimeseriesDistribution:
                 # [num_timesteps_b, x_dim]
                 shifted_x = torch.cat([torch.zeros((1, self.x_dim), device=self.device), x_b[:-1]])
 
-            # [num_timesteps_b, num_classes_or_dim + embedding_dim]
-            lstm_input.append(torch.cat([shifted_x, embedding_expanded], dim=1))
+            if self.embedding is not None:
+                # [num_timesteps_b, num_classes_or_dim + embedding_dim]
+                lstm_input.append(torch.cat([shifted_x, embedding_expanded], dim=1))
+            else:
+                # [num_timesteps_b, num_classes_or_dim]
+                lstm_input.append(shifted_x)
         lstm_input = nn.utils.rnn.pack_sequence(lstm_input, enforce_sorted=False)
 
         # Run LSTM

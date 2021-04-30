@@ -39,6 +39,41 @@ def test_timeseries_distribution_discrete_shape():
     assert list(lp.shape) == [batch_size]
 
 
+def test_timeseries_distribution_discrete_shape_no_embedding():
+    device = cmws.util.get_device()
+    batch_size, hidden_dim, num_classes = 2, 3, 4
+    input_dim = num_classes
+    linear_out_dim = num_classes + 1
+    sample_shape = [6, 7]
+    max_num_timesteps = 8
+    x_type = "discrete"
+
+    # Timeseries Distribution args
+    lstm = nn.LSTM(input_dim, hidden_dim).to(device)
+    linear = nn.Linear(hidden_dim, linear_out_dim).to(device)
+    lstm_eos = True
+
+    # Sample
+    embedding = None
+    timeseries_distribution = lstm_util.TimeseriesDistribution(
+        x_type, num_classes, embedding, lstm, linear, lstm_eos, max_num_timesteps
+    )
+    x, eos = timeseries_distribution.sample(sample_shape)
+    assert list(x.shape) == sample_shape + [max_num_timesteps]
+    assert list(eos.shape) == sample_shape + [max_num_timesteps]
+
+    # Log prob
+    x = x.view(-1, max_num_timesteps)
+    eos = eos.view(-1, max_num_timesteps)
+    batch_size = x.shape[0]
+    embedding = None
+    timeseries_distribution = lstm_util.TimeseriesDistribution(
+        x_type, num_classes, embedding, lstm, linear, lstm_eos, max_num_timesteps
+    )
+    lp = timeseries_distribution.log_prob(x, eos)
+    assert list(lp.shape) == [batch_size]
+
+
 def test_timeseries_distribution_continuous_shape():
     device = cmws.util.get_device()
     batch_size, embedding_dim, hidden_dim, x_dim = 2, 3, 4, 5
@@ -67,6 +102,41 @@ def test_timeseries_distribution_continuous_shape():
     eos = eos.view(-1, max_num_timesteps)
     batch_size = x.shape[0]
     embedding = torch.randn(batch_size, embedding_dim, device=device)
+    timeseries_distribution = lstm_util.TimeseriesDistribution(
+        x_type, x_dim, embedding, lstm, linear, lstm_eos, max_num_timesteps
+    )
+    lp = timeseries_distribution.log_prob(x, eos)
+    assert list(lp.shape) == [batch_size]
+
+
+def test_timeseries_distribution_continuous_shape_no_embedding():
+    device = cmws.util.get_device()
+    batch_size, hidden_dim, x_dim = 2, 3, 4
+    input_dim = x_dim
+    linear_out_dim = 2 * x_dim + 1
+    sample_shape = [6, 7]
+    max_num_timesteps = 8
+    x_type = "continuous"
+
+    # Timeseries Distribution args
+    lstm = nn.LSTM(input_dim, hidden_dim).to(device)
+    linear = nn.Linear(hidden_dim, linear_out_dim).to(device)
+    lstm_eos = True
+
+    # Sample
+    embedding = None
+    timeseries_distribution = lstm_util.TimeseriesDistribution(
+        x_type, x_dim, embedding, lstm, linear, lstm_eos, max_num_timesteps
+    )
+    x, eos = timeseries_distribution.sample(sample_shape)
+    assert list(x.shape) == sample_shape + [max_num_timesteps, x_dim]
+    assert list(eos.shape) == sample_shape + [max_num_timesteps]
+
+    # Log prob
+    x = x.view(-1, max_num_timesteps, x_dim)
+    eos = eos.view(-1, max_num_timesteps)
+    batch_size = x.shape[0]
+    embedding = None
     timeseries_distribution = lstm_util.TimeseriesDistribution(
         x_type, x_dim, embedding, lstm, linear, lstm_eos, max_num_timesteps
     )
