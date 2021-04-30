@@ -202,3 +202,30 @@ def test_guide_sample_discrete_dims():
 
     assert list(raw_expression.shape) == sample_shape + shape + [max_num_chars]
     assert list(eos.shape) == sample_shape + shape + [max_num_chars]
+
+
+def test_guide_sample_continuou_dims():
+    shape = [2, 3]
+    discrete_shape = [4]
+    sample_shape = [5]
+    max_num_chars, lstm_hidden_dim = 6, 7
+
+    guide = Guide(max_num_chars, lstm_hidden_dim)
+
+    # Create obs
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+
+    # Create latent
+    raw_expression = torch.randint(
+        timeseries_util.vocabulary_size, size=discrete_shape + shape + [max_num_chars]
+    )
+    eos = torch.randint(2, size=discrete_shape + shape + [max_num_chars])
+    discrete_latent = (raw_expression, eos)
+
+    # Sample
+    raw_gp_params = guide.sample_continuous(obs, discrete_latent, sample_shape)
+
+    assert list(raw_gp_params.shape) == sample_shape + discrete_shape + shape + [
+        max_num_chars,
+        timeseries_util.gp_params_dim,
+    ]

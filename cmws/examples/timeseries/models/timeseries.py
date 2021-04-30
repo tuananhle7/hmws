@@ -801,7 +801,67 @@ class Guide(nn.Module):
         Returns
                 raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
         """
-        raise NotImplementedError()
+        # Extract
+        shape = obs.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+        raw_expression, eos = discrete_latent
+        discrete_shape = raw_expression.shape[: -(len(shape) + 1)]
+        num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
+        num_samples = cmws.util.get_num_elements(sample_shape)
+
+        # Compute obs embedding
+        obs_embedding = self.get_obs_embedding(obs)
+
+        # Sample continuous
+        # -- Flatten discrete latents
+        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
+        eos_flattened = eos.view(-1, self.max_num_chars)
+
+        # -- Compute num base kernels
+        # [num_discrete_elements * num_elements]
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Expand num base kernels
+        num_base_kernels_expanded = num_base_kernels_flattened[None].expand(num_samples, -1)
+
+        # -- Compute expression embedding
+        # [num_discrete_elements * num_elements, expression_embedding_dim]
+        expression_embedding_flattened = self.get_expression_embedding(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # -- Expand obs embedding
+        # [num_discrete_elements * num_elements, obs_embedding_dim]
+        obs_embedding_expanded = (
+            obs_embedding.view(1, num_elements, -1)
+            .expand(num_discrete_elements, num_elements, -1)
+            .reshape(-1, self.obs_embedding_dim)
+        )
+
+        # -- Sample
+        return (
+            lstm_util.TimeseriesDistribution(
+                "continuous",
+                timeseries_util.gp_params_dim,
+                torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
+                self.gp_params_lstm,
+                self.gp_params_extractor,
+                lstm_eos=False,
+                max_num_timesteps=self.max_num_chars,
+            )
+            .sample((num_samples,), num_timesteps=num_base_kernels_expanded)
+            .view(
+                *[
+                    *sample_shape,
+                    *discrete_shape,
+                    *shape,
+                    self.max_num_chars,
+                    timeseries_util.gp_params_dim,
+                ]
+            )
+        )
 
     def log_prob_discrete(self, obs, discrete_latent):
         """log q(z_d | x)
