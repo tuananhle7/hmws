@@ -292,21 +292,26 @@ class TimeseriesDistribution:
             else:
                 return x_final
 
-    def log_prob(self, x, eos):
+    def log_prob(self, x, eos=None, num_timesteps=None):
         """
         Args:
             x [batch_size, max_num_timesteps(, x_dim)]
+
+            Optional
             eos [batch_size, max_num_timesteps]
+            num_timesteps [batch_size]
 
         Returns: tensor [batch_size]
         """
         batch_size = len(x)
         if self.embedding is not None:
             assert batch_size == self.batch_size
-        num_timesteps = []
-        for batch_id in range(batch_size):
-            num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
-        num_timesteps = torch.tensor(num_timesteps, device=self.device)
+
+        if num_timesteps is None:
+            num_timesteps = []
+            for batch_id in range(batch_size):
+                num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
+            num_timesteps = torch.tensor(num_timesteps, device=self.device)
 
         # Downsample x
         x_seq = []
