@@ -22,6 +22,24 @@ def step_lstm(lstm, input_, h_0_c_0=None):
     return output[0], h_1_c_1
 
 
+def get_num_timesteps(eos):
+    """
+    Args
+        eos [batch_size, max_num_timesteps]
+
+    Returns [batch_size]
+    """
+    batch_size, max_num_timesteps = eos.shape
+    device = eos.device
+    num_timesteps = []
+    for batch_id in range(batch_size):
+        if torch.all(eos[batch_id] == 0):
+            num_timesteps.append(max_num_timesteps)
+        else:
+            num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
+    return torch.tensor(num_timesteps, device=device)
+
+
 class TimeseriesDistribution:
     """p(x_{1:T}, eos_{1:T} | embedding) where x_t ∈ Z or R^d
 
@@ -308,10 +326,7 @@ class TimeseriesDistribution:
             assert batch_size == self.batch_size
 
         if num_timesteps is None:
-            num_timesteps = []
-            for batch_id in range(batch_size):
-                num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
-            num_timesteps = torch.tensor(num_timesteps, device=self.device)
+            num_timesteps = get_num_timesteps(eos)
 
         # Downsample x
         x_seq = []
@@ -327,7 +342,8 @@ class TimeseriesDistribution:
                 if self.x_type == "discrete":
                     x_b = torch.tensor([0.0], device=self.device)
                 elif self.x_type == "continuous":
-                    x_b = torch.zeros((self.x_dim,), device=self.device)
+                    x_b = torch.zeros((1, self.x_dim), device=self.device)
+                num_timesteps_b += 1
                 # print(f"Warning: x[{batch_id}] has length 0. Setting its log_prob to 0.")
             else:
                 x_b = x[batch_id, :num_timesteps_b]

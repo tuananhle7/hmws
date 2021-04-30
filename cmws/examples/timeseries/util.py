@@ -8,9 +8,10 @@ base_kernel_chars = {"W", "R", "E", "C"}
 char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
+gp_params_dim = 5
 
 
-def get_numeric(expression, device):
+def get_raw_expression(expression, device):
     """
     Args
         expression (str)
@@ -18,39 +19,35 @@ def get_numeric(expression, device):
 
     Returns [num_chars, vocabulary_size]
     """
-    numeric = []
+    raw_expression = []
     for char in expression:
-        numeric.append(torch.tensor(char_to_num[char], device=device).long())
-    numeric = torch.stack(numeric)
-    return F.one_hot(numeric, num_classes=vocabulary_size)
+        raw_expression.append(torch.tensor(char_to_num[char], device=device).long())
+    return torch.stack(raw_expression)
 
 
-def get_expression(numeric):
+def get_expression(raw_expression):
     """
     Args
-        numeric [num_chars, vocabulary_size]
+        raw_expression [num_chars]
 
     Returns string of length num_chars
     """
-    device = numeric.device
-    num_chars, vocabulary_size = numeric.shape
-
     expression = ""
-    for i in torch.mv(numeric, torch.arange(vocabulary_size, device=device)):
-        expression += num_to_char[i.item()]
+    for raw_char in raw_expression:
+        expression += num_to_char[raw_char.item()]
     return expression
 
 
-def count_base_kernels(expression):
-    """How many base kernels are there in the expression?
+def count_base_kernels(raw_expression):
+    """How many base kernels are there in the raw_expression?
 
     Args
-        expression (str)
+        raw_expression [num_chars]
 
     Returns int
     """
     result = 0
-    for char in expression:
+    for char in get_expression(raw_expression):
         result += int(char in base_kernel_chars)
     return result
 
@@ -66,7 +63,7 @@ class Kernel(nn.Module):
             R = SquaredExponential
             E = Periodic
             C = Constant
-        raw_params [num_base_kernels, raw_params_dim=5]
+        raw_params [num_base_kernels, gp_params_dim=5]
             raw_params[i, 0] raw_scale (WhiteNoise)
             raw_params[i, 1] raw_lengthscale (SE)
             raw_params[i, 2] raw_period (Per)
