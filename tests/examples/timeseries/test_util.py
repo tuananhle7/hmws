@@ -22,9 +22,10 @@ def test_kernel_shape():
 def test_conversions():
     device = cmws.util.get_device()
     expression = "W+R*E"
-    assert expression == util.get_expression(util.get_numeric(expression, device=device))
+    assert expression == util.get_expression(util.get_raw_expression(expression, device=device))
 
 
 def test_count_base_kernels():
+    device = cmws.util.get_device()
     expression = "W+R*E"
-    assert util.count_base_kernels(expression) == 3
+    assert util.count_base_kernels(util.get_raw_expression(expression, device)) == 3
