@@ -179,25 +179,27 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     device = sizes.device
 
     # Create camera
-    R, T = look_at_view_transform(1.0, 90, 180,
-                                  up=((0.0, -1.0, 0.0),),
-                                  at=((0.0, 1, -0.2),))  # view top to see stacking
+    R, T = look_at_view_transform(1.7, 0, 180,
+                                  at=((0.0, 0.0, -0.5),))
+    # R, T = look_at_view_transform(3.5, 0, 0,
+    #                               up=((0.0, 0.0, 0.0),),
+    #                               at=((0.0, 0.0, -0.5),))
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
-                                    fov=45.0)#60.0)
+                                    )  # fov=45.0)
 
     # Settings for rasterizer (optional blur)
     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
     # implements eqs from SoftRasterizer paper
-    blend_params = BlendParams(sigma=sigma, gamma=gamma, background_color=(0.0, 0.0, 0.0))
+    blend_params = BlendParams(sigma=sigma, gamma=gamma) #,background_color=(0.0, 0.0, 0.0))
     raster_settings = RasterizationSettings(
         image_size=im_size,  # crisper objects + texture w/ higher resolution
         blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
-        faces_per_pixel=3,  # increase at cost of GPU memory,
-        bin_size=0
+        faces_per_pixel=1,  # increase at cost of GPU memory,
+        bin_size=None
     )
 
     # Add light from the front
-    lights = PointLights(device=device, location=[[0.0, 3.0, 0.0]])  # top light
+    lights = PointLights(device=device, location=[[0.0, 0.0, 3.0]])  
 
     # Compose renderer and shader
     renderer = MeshRenderer(
@@ -254,6 +256,36 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     return img
 
 
+# def convert_raw_locations(raw_locations, stacking_program, primitives):
+#     """
+#     Args
+#         raw_locations (tensor [num_blocks])
+#         stacking_program (tensor [num_blocks])
+#         primitives (list [num_primitives])
+#
+#     Returns [num_blocks, 3]
+#     """
+#     # Extract
+#     device = primitives[0].device
+#
+#     # Sample the bottom
+#     y = torch.tensor(0.0, device=device)
+#     z = torch.tensor(-1.0, device=device)
+#     min_x = -0.8
+#     max_x = 0.8
+#     locations = []
+#     for primitive_id, raw_location in zip(stacking_program, raw_locations):
+#         size = primitives[primitive_id].size
+#
+#         min_x = min_x - size
+#         x = raw_location.sigmoid() * (max_x - min_x) + min_x
+#         locations.append(torch.stack([x, y, z]))
+#
+#         z = z + size
+#         min_x = x
+#         max_x = min_x + size
+#     return torch.stack(locations)
+
 def convert_raw_locations(raw_locations, stacking_program, primitives):
     """
     Args
@@ -267,8 +299,8 @@ def convert_raw_locations(raw_locations, stacking_program, primitives):
     device = primitives[0].device
 
     # Sample the bottom
-    y = torch.tensor(0.0, device=device)
-    z = torch.tensor(-1.0, device=device)
+    y = torch.tensor(-1.0, device=device)
+    z = torch.tensor(0.0, device=device)
     min_x = -0.8
     max_x = 0.8
     locations = []
@@ -279,7 +311,7 @@ def convert_raw_locations(raw_locations, stacking_program, primitives):
         x = raw_location.sigmoid() * (max_x - min_x) + min_x
         locations.append(torch.stack([x, y, z]))
 
-        z = z + size
+        y = y + size
         min_x = x
         max_x = min_x + size
     return torch.stack(locations)
@@ -316,10 +348,10 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
     return torch.stack(locations_batched).view(*[*shape, num_blocks, 3])
 
 def convert_raw_gamma(gamma):
-    return torch.abs(gamma* 1e-3)
+    return torch.abs(gamma* 1e-2)
 
 def convert_raw_sigma(sigma):
-    return torch.abs(sigma * 1e-3)
+    return torch.abs(sigma * 1e-2)
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
@@ -337,10 +369,8 @@ def render(
     """
 
     if torch.is_tensor(gamma):
-        print("CURRENT GAMMA: ", gamma)
         gamma = convert_raw_gamma(gamma)
     if torch.is_tensor(sigma):
-        print("CURRENT SIGMA: ", sigma)
         sigma = convert_raw_sigma(sigma)
 
     if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
