@@ -106,14 +106,12 @@ class TimeseriesDistribution:
                     "num_timesteps is not given and LSTM doesn't support end-of-signal indicator "
                     "sampling. Don't know how end sampling."
                 )
-            max_num_timesteps = self.max_num_timesteps
         else:  # use num_timesteps to end
             if self.lstm_eos and warning_enabled:
                 print(
                     "WARNING: num_timesteps is given and LSTM supports end-of-signal indicator."
                     " Sampling will ignore EOS and end based on num_timesteps."
                 )
-            max_num_timesteps = num_timesteps.max()
 
         if self.embedding is not None:
             # [num_samples * batch_size, embedding_dim]
@@ -145,7 +143,7 @@ class TimeseriesDistribution:
             # [num_samples, num_classes_or_dim + embedding_dim]
             lstm_input = torch.zeros((num_samples, self.num_classes_or_dim), device=self.device,)
         hc = None
-        for timestep in range(max_num_timesteps):
+        for timestep in range(self.max_num_timesteps):
             # [num_samples( * batch_size), lstm_hidden_size], ([...], [...])
             lstm_output, hc = step_lstm(self.lstm, lstm_input, hc)
 
@@ -198,23 +196,25 @@ class TimeseriesDistribution:
                     # [num_samples, x_dim + embedding_dim]
                     lstm_input = x[-1]
 
-            if num_timesteps is None:  # use EOS to end
-                # end early if all eos are 1
-                if (torch.stack(eos).sum(0) > 0).all():
-                    max_num_timesteps = timestep + 1
-                    break
+            # if num_timesteps is None:  # use EOS to end
+            #     # end early if all eos are 1
+            #     if (torch.stack(eos).sum(0) > 0).all():
+            #         # max_num_timesteps = timestep + 1
+            #         break
 
         if self.embedding is not None:
             if self.x_type == "discrete":
                 # [max_num_timesteps, num_samples, batch_size]
-                x = torch.stack(x).view(max_num_timesteps, num_samples, self.batch_size)
+                x = torch.stack(x).view(self.max_num_timesteps, num_samples, self.batch_size)
             elif self.x_type == "continuous":
                 # [max_num_timesteps, num_samples, batch_size, x_dim]
-                x = torch.stack(x).view(max_num_timesteps, num_samples, self.batch_size, self.x_dim)
+                x = torch.stack(x).view(
+                    self.max_num_timesteps, num_samples, self.batch_size, self.x_dim
+                )
 
             if num_timesteps is None:  # use EOS to end
                 # [max_num_timesteps, num_samples, batch_size]
-                eos = torch.stack(eos).view(max_num_timesteps, num_samples, self.batch_size)
+                eos = torch.stack(eos).view(self.max_num_timesteps, num_samples, self.batch_size)
 
             # thing to be returned
             x_final = []
@@ -268,14 +268,14 @@ class TimeseriesDistribution:
         else:
             if self.x_type == "discrete":
                 # [max_num_timesteps, num_samples]
-                x = torch.stack(x).view(max_num_timesteps, num_samples)
+                x = torch.stack(x).view(self.max_num_timesteps, num_samples)
             elif self.x_type == "continuous":
                 # [max_num_timesteps, num_samples, x_dim]
-                x = torch.stack(x).view(max_num_timesteps, num_samples, self.x_dim)
+                x = torch.stack(x).view(self.max_num_timesteps, num_samples, self.x_dim)
 
             if num_timesteps is None:  # use EOS to end
                 # [max_num_timesteps, num_samples]
-                eos = torch.stack(eos).view(max_num_timesteps, num_samples)
+                eos = torch.stack(eos).view(self.max_num_timesteps, num_samples)
 
             # thing to be returned
             x_final = []
