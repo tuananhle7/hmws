@@ -253,15 +253,19 @@ class TimeseriesDistribution:
                     x_final.append(result)
 
             if self.x_type == "discrete":
-                x_final = torch.stack(x_final).view(
-                    *[*sample_shape, self.batch_size, self.max_num_timesteps]
+                x_final = (
+                    torch.stack(x_final)
+                    .view(*[*sample_shape, self.batch_size, self.max_num_timesteps])
+                    .long()
                 )
             elif self.x_type == "continuous":
                 x_final = torch.stack(x_final).view(
                     *[*sample_shape, self.batch_size, self.max_num_timesteps, self.x_dim]
                 )
             if num_timesteps is None:
-                eos_final = torch.stack(eos_final).view(*[*sample_shape, self.batch_size, -1])
+                eos_final = (
+                    torch.stack(eos_final).view(*[*sample_shape, self.batch_size, -1]).long()
+                )
                 return x_final, eos_final
             else:
                 return x_final
@@ -307,13 +311,13 @@ class TimeseriesDistribution:
                 x_final.append(result)
 
             if self.x_type == "discrete":
-                x_final = torch.stack(x_final).view(*[*sample_shape, self.max_num_timesteps])
+                x_final = torch.stack(x_final).view(*[*sample_shape, self.max_num_timesteps]).long()
             elif self.x_type == "continuous":
                 x_final = torch.stack(x_final).view(
                     *[*sample_shape, self.max_num_timesteps, self.x_dim]
                 )
             if num_timesteps is None:
-                eos_final = torch.stack(eos_final).view(*[*sample_shape, -1])
+                eos_final = torch.stack(eos_final).view(*[*sample_shape, -1]).long()
                 return x_final, eos_final
             else:
                 return x_final
