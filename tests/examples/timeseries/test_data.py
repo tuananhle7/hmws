@@ -1,9 +1,9 @@
-import torch
+import cmws.util
 from cmws.examples.timeseries.data import TimeseriesDataset, get_timeseries_data_loader
 
 
 def test_timeseries_dataset():
-    device = torch.device("cuda")
+    device = cmws.util.get_device()
 
     # Train
     timeseries_dataset = TimeseriesDataset(device)
@@ -17,7 +17,7 @@ def test_timeseries_dataset():
 
 
 def test_stacking_data_loader():
-    device = torch.device("cuda")
+    device = cmws.util.get_device()
     batch_size = 7
 
     # Train

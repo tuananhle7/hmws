@@ -3,6 +3,7 @@ Helper functions for the memory used in memoised wake sleep
 """
 from cmws import util
 import torch
+from tqdm import tqdm
 
 
 def init_memory_groups(num_obs, memory_size, generative_model):
@@ -16,8 +17,9 @@ def init_memory_groups(num_obs, memory_size, generative_model):
     Returns list of
         [num_obs, memory_size, *event_shapes[i]]
     """
+    util.logging.info("Initializing memory")
     latent_groupss = []
-    for _ in range(num_obs):
+    for _ in tqdm(range(num_obs)):
         while True:
             latent_groups = generative_model.discrete_latent_sample([memory_size])
 
