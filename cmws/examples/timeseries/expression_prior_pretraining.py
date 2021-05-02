@@ -14,15 +14,17 @@ def generate_data(batch_size, max_num_chars, device):
     eos = torch.zeros((batch_size, max_num_chars), device=device).long()
 
     for batch_id in range(batch_size):
-        while False:
+        done = False
+        while not done:
             raw_expression = timeseries_util.get_raw_expression(
                 pcfg_util.sample_expression(pcfg), device
             )
             expression_len = len(raw_expression)
             if expression_len > max_num_chars:
-                break
+                continue
             x[batch_id, :expression_len] = raw_expression
             eos[batch_id, expression_len - 1] = 1
+            done = True
     return x, eos
 
 
