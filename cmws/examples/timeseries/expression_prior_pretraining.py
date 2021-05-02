@@ -5,6 +5,7 @@ import torch
 import itertools
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import cmws.examples.timeseries.lstm_util as lstm_util
 
 
 def generate_data(batch_size, max_num_chars, device):
@@ -47,3 +48,12 @@ def pretrain_expression_prior(generative_model, batch_size, num_iterations):
 
         losses.append(loss.item())
     plt.plot(losses)
+
+
+def sample_expression(generative_model, num_samples):
+    x, eos = generative_model.expression_dist.sample([num_samples])
+    num_timesteps = lstm_util.get_num_timesteps(eos)
+    expression = []
+    for i in range(num_samples):
+        expression.append(timeseries_util.get_expression(x[i, : num_timesteps[i]]))
+    return expression
