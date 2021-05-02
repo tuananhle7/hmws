@@ -212,11 +212,6 @@ def init(run_args, device):
             max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
         ).to(device)
 
-        # Pretrain the prior
-        cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-            generative_model, batch_size=10, num_iterations=2000
-        )
-
         # Guide
         guide = timeseries.Guide(
             max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
@@ -225,6 +220,11 @@ def init(run_args, device):
         # Memory
         if "mws" in run_args.algorithm:
             memory = cmws.memory.Memory(2000, run_args.memory_size, generative_model).to(device)
+
+        # Pretrain the prior
+        cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
+            generative_model, batch_size=10, num_iterations=2000
+        )
 
     # Model dict
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
