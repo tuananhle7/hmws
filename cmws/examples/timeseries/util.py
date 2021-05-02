@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from cmws.examples.timeseries.models import timeseries
 from cmws.util import logging
+import cmws.examples.timeseries.expression_prior_pretraining
 
 base_kernel_chars = {"W", "R", "E", "C"}
 char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
@@ -210,6 +211,11 @@ def init(run_args, device):
         generative_model = timeseries.GenerativeModel(
             max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
         ).to(device)
+
+        # Pretrain the prior
+        cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
+            generative_model, batch_size=10, num_iterations=2000
+        )
 
         # Guide
         guide = timeseries.Guide(
