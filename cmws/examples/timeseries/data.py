@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from cmws import util
+import cmws.examples.timeseries.plot
 
 num_timesteps = 256
 
@@ -54,7 +55,7 @@ def lukes_make_data():
         if len(data) > n_data * 2:
             break
 
-    print("Loaded", len(data), "timeseries")
+    util.logging.info("Loaded", len(data), "timeseries")
 
     # Add more datasets
     # -- Airlines
@@ -688,13 +689,12 @@ def plot_data():
 
             fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
 
-            for i in range(len(obs)):
-                axss.flat[i].plot(obs[i].cpu().numpy(), color="black")
-
             for ax in axss.flat:
-                ax.set_ylim(-4, 4)
-                ax.set_xticks([])
-                ax.set_yticks([-4, 4])
+                ax.set_axis_off()
+
+            for i in range(len(obs)):
+                ax.set_axis_on()
+                cmws.examples.timeseries.plot.plot_obs(axss.flat[i])
 
             util.save_fig(fig, path)
 
