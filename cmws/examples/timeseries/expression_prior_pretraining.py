@@ -28,6 +28,7 @@ def generate_data(batch_size, max_num_chars, device):
     return x, eos
 
 
+@torch.enable_grad()
 def pretrain_expression_prior(generative_model, batch_size, num_iterations):
     cmws.util.logging.info("Pretraining the expression prior")
     optimizer = torch.optim.Adam(
