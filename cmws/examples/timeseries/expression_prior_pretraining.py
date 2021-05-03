@@ -47,7 +47,7 @@ def pretrain_expression_prior(generative_model, batch_size, num_iterations):
         optimizer.step()
 
         losses.append(loss.item())
-    plt.plot(losses)
+    # plt.plot(losses)
 
 
 def sample_expression(generative_model, num_samples):
