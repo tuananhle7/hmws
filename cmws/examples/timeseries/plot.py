@@ -16,7 +16,7 @@ def plot_obs(ax, obs):
         ax
         obs [num_timesteps]
     """
-    ax.plot(obs.cpu().numpy(), color="black")
+    ax.plot(obs.cpu().numpy(), color="C0")
     ax.set_ylim(-4, 4)
     ax.set_xticks([])
     ax.set_yticks([-4, 4])
@@ -119,6 +119,64 @@ def plot_reconstructions_timeseries(path, generative_model, guide, obs):
     util.save_fig(fig, path)
 
 
+def plot_predictions_timeseries(path, generative_model, guide, obs):
+    """
+    Args:
+        path (str)
+        generative_model
+        guide
+        obs: [num_test_obs, num_timesteps]
+    """
+    num_samples = 5
+    num_test_obs, num_timesteps = obs.shape
+
+    # Sample latent
+    latent = guide.sample(obs, [])
+    x, eos, _ = latent
+    num_chars = lstm_util.get_num_timesteps(eos)
+
+    # Sample reconstructions
+    obs_predictions = generative_model.sample_obs_predictions(latent, obs, [num_samples])
+
+    # Plot
+    num_rows = 1
+    num_cols = num_test_obs
+    fig, axss = plt.subplots(
+        num_rows,
+        num_cols,
+        figsize=(3 * num_cols, 2 * num_rows),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for test_obs_id in range(num_test_obs):
+        # Plot obs
+        ax = axss[0, test_obs_id]
+        plot_obs(ax, obs[test_obs_id])
+
+        expression = timeseries_util.get_expression(x[test_obs_id][: num_chars[test_obs_id]])
+        ax.text(
+            0.95,
+            0.95,
+            f"Inferred kernel: {expression}",
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="gray",
+        )
+        for sample_id in range(num_samples):
+            ax.plot(
+                torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                obs_predictions[sample_id, test_obs_id].cpu().detach(),
+                color="C1",
+                alpha=0.5,
+            )
+
+    util.save_fig(fig, path)
+
+
 def main(args):
     # Cuda
     device = util.get_device()
@@ -209,6 +267,9 @@ def main(args):
                     generative_model,
                     guide,
                     obs,
+                )
+                plot_predictions_timeseries(
+                    f"{save_dir}/predictions/{num_iterations}.pdf", generative_model, guide, obs,
                 )
 
         else:
