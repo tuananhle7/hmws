@@ -7,6 +7,7 @@ import torch
 from cmws import util
 from cmws.examples.timeseries import data, run
 from cmws.examples.timeseries import util as timeseries_util
+from cmws.examples.timeseries import lstm_util
 
 
 def plot_obs(ax, obs):
@@ -74,6 +75,8 @@ def plot_reconstructions_timeseries(path, generative_model, guide, obs):
 
     # Sample latent
     latent = guide.sample(obs, [num_samples])
+    x, eos, _ = latent
+    num_chars = lstm_util.get_num_timesteps(eos)
 
     # Sample reconstructions
     reconstructed_obs = generative_model.sample_obs(latent)
@@ -82,7 +85,7 @@ def plot_reconstructions_timeseries(path, generative_model, guide, obs):
     num_rows = 1 + num_samples
     num_cols = num_test_obs
     fig, axss = plt.subplots(
-        num_rows, num_cols, figsize=(4 * num_cols, 3 * num_rows), sharex=True, sharey=True
+        num_rows, num_cols, figsize=(3 * num_cols, 2 * num_rows), sharex=True, sharey=True
     )
 
     for test_obs_id in range(num_test_obs):
@@ -94,6 +97,19 @@ def plot_reconstructions_timeseries(path, generative_model, guide, obs):
             # Plot probs
             ax = axss[1 + sample_id, test_obs_id]
             plot_obs(ax, reconstructed_obs[sample_id, test_obs_id])
+            expression = timeseries_util.get_expression(
+                x[sample_id, test_obs_id][: num_chars[sample_id, test_obs_id]]
+            )
+            ax.text(
+                0.95,
+                0.95,
+                f"Inferred kernel: {expression}",
+                transform=ax.transAxes,
+                fontsize=7,
+                va="top",
+                ha="right",
+                color="gray",
+            )
 
     # Set labels
     axss[0, 0].set_ylabel("Observed signal")
@@ -136,14 +152,14 @@ def main(args):
 
             # Plot reconstructions and other things
             # Test data
-            num_test_data = 50
+            # num_test_data = 50
             timeseries_dataset = data.TimeseriesDataset(device, test=True)
-            obs, _ = timeseries_dataset[:num_test_data]  # data.generate_test_obs(run_args, device)
+            obs, _ = timeseries_dataset[700:750]
 
             # Plot
             if run_args.model_type == "timeseries":
                 plot_reconstructions_timeseries(
-                    f"{save_dir}/reconstructions/{num_iterations}.png",
+                    f"{save_dir}/reconstructions/{num_iterations}.pdf",
                     generative_model,
                     guide,
                     obs,
