@@ -237,48 +237,47 @@ def condition_mvn(multivariate_normal_dist, y):
     https://www.robots.ox.ac.uk/~mosb/teaching/AIMS_CDT/Gaussian_identities.pdf
 
     Args
-        multivariate_normal_dist: distribution with batch_shape [batch_size] and event_shape [dim]
-            with
-            mean[batch_id]
+        multivariate_normal_dist: distribution with batch_shape [*shape] and event_shape [dim]
+            with per element
+            mean
                 [mean_y
                  mean_x]
-            and cov[batch_id]
+            and cov
                 [cov_yy, cov_yx
                  cov_xy, cov_xx]
 
-        y [batch_size, dim_y]
+        y [*shape, dim_y]
 
-    Returns distribution with batch_shape [batch_size] and event_shape [dim - dim_y]
+    Returns distribution with batch_shape [*shape] and event_shape [dim - dim_y]
     """
     # Extract
-    batch_size, dim_y = y.shape
-    # y = y[None].repeat(batch_size, 1)
+    dim_y = y.shape[-1]
     loc, cov = multivariate_normal_dist.mean, multivariate_normal_dist.covariance_matrix
 
     # Extract component locs and covs
-    loc_y = loc[:, :dim_y]
-    loc_x = loc[:, dim_y:]
-    cov_yy = cov[:, :dim_y, :dim_y]
-    cov_yx = cov[:, :dim_y, dim_y:]
-    cov_xx = cov[:, dim_y:, dim_y:]
-    cov_xy = cov[:, dim_y:, :dim_y]
+    loc_y = loc[..., :dim_y]
+    loc_x = loc[..., dim_y:]
+    cov_yy = cov[..., :dim_y, :dim_y]
+    cov_yx = cov[..., :dim_y, dim_y:]
+    cov_xx = cov[..., dim_y:, dim_y:]
+    cov_xy = cov[..., dim_y:, :dim_y]
 
     # Compute new params
     # -- Compute matmul(inv(cov_yy), y - loc_y)
-    # [batch_size, dim_y]
+    # [*shape, dim_y]
     temp_1 = torch.solve((y - loc_y)[..., None], cov_yy)[0][..., 0]
 
     # -- Compute matmul(inv(cov_yy), cov_yx)
-    # [batch_size, dim_y, dim_x]
+    # [*shape, dim_y, dim_x]
     temp_2 = torch.solve(cov_yx, cov_yy)[0]
 
     # -- Compute new loc
-    # [batch_size, dim_x]
-    loc_new = loc_x + torch.einsum("bxy,by->bx", cov_xy, temp_1)
+    # [*shape, dim_x]
+    loc_new = loc_x + torch.einsum("...xy,...y->...x", cov_xy, temp_1)
 
     # -- Compute new cov
-    # [batch_size, dim_x, dim_x]
-    cov_new = cov_xx - torch.einsum("bzy,byx->bzx", cov_xy, temp_2)
+    # [*shape, dim_x, dim_x]
+    cov_new = cov_xx - torch.einsum("...zy,...yx->...zx", cov_xy, temp_2)
 
     return get_multivariate_normal_dist(loc_new, covariance_matrix=cov_new)
 
