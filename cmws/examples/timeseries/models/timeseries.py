@@ -489,11 +489,7 @@ class GenerativeModel(nn.Module):
 
         # Create x_1 and x_2
         x_old = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)
-        x_new = (
-            torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)
-            + x_old[0]
-            + (x_old[1] - x_old[0])
-        )
+        x_new = x_old + (x_old[-1] - x_old[0]) + (x_old[1] - x_old[0])
         x = torch.cat([x_old, x_new])
         joint_num_timesteps = len(x)
         x_1 = x[None, :, None].expand(1, joint_num_timesteps, 1)
