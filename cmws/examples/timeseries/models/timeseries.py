@@ -129,8 +129,8 @@ class GenerativeModel(nn.Module):
         shape = raw_expression.shape[:-1]
 
         # Flatten
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_expression_flattened = raw_expression.reshape(-1, self.max_num_chars)
+        eos_flattened = eos.reshape(-1, self.max_num_chars)
         raw_gp_params_flattened = raw_gp_params.view(
             -1, self.max_num_chars, timeseries_util.gp_params_dim
         )
@@ -248,10 +248,10 @@ class GenerativeModel(nn.Module):
 
         # Log p(x | z)
         # -- Create x_1 and x_2
-        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_1 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
             None, :, None
         ].expand(1, timeseries_data.num_timesteps, 1)
-        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_2 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
             None, None, :
         ].expand(1, 1, timeseries_data.num_timesteps)
 
@@ -259,12 +259,15 @@ class GenerativeModel(nn.Module):
         identity_matrix = torch.eye(timeseries_data.num_timesteps, device=self.device).float()
 
         # -- Flatten
-        raw_expression_flattened = raw_expression.view(num_samples, num_elements, -1)
-        eos_flattened = eos.view(num_samples, num_elements, -1)
+        raw_expression_flattened = raw_expression.reshape(num_samples, num_elements, -1)
+        eos_flattened = eos.reshape(num_samples, num_elements, -1)
         raw_gp_params_flattened = raw_gp_params.view(
             num_samples, num_elements, self.max_num_chars, -1
         )
         obs_flattened = obs.reshape(num_elements, -1)
+
+        # -- Compute num timesteps
+        num_timesteps_flattened = lstm_util.get_num_timesteps(eos_flattened)
 
         # -- Compute num base kernels
         num_base_kernels_flattened = self.get_num_base_kernels(
@@ -279,15 +282,21 @@ class GenerativeModel(nn.Module):
         for sample_id in range(num_samples):
             for element_id in range(num_elements):
                 try:
-                    covariance_matrix_se = timeseries_util.Kernel(
-                        timeseries_util.get_expression(raw_expression[sample_id, element_id]),
-                        raw_gp_params_flattened[
-                            sample_id,
-                            element_id,
-                            : num_base_kernels_flattened[sample_id, element_id],
-                        ],
-                    )(x_1, x_2)[0]
-                except Exception:
+                    raw_expression_se = raw_expression_flattened[sample_id, element_id][
+                        : num_timesteps_flattened[sample_id, element_id]
+                    ]
+                    covariance_matrix_se = (
+                        timeseries_util.Kernel(
+                            timeseries_util.get_expression(raw_expression_se),
+                            raw_gp_params_flattened[
+                                sample_id,
+                                element_id,
+                                : num_base_kernels_flattened[sample_id, element_id],
+                            ],
+                        )(x_1, x_2)[0]
+                        + identity_matrix * 1e-3
+                    )
+                except timeseries_util.ParsingError:
                     covariance_matrix_se = identity_matrix
                     zero_obs_prob[sample_id, element_id] = True
 
@@ -305,9 +314,13 @@ class GenerativeModel(nn.Module):
         )
 
         # -- Compute obs log prob
-        obs_log_prob = torch.distributions.MultivariateNormal(
-            loc, covariance_matrix=covariance_matrix
-        ).log_prob(obs_expanded)
+        try:
+            obs_log_prob = torch.distributions.MultivariateNormal(
+                loc, covariance_matrix=covariance_matrix
+            ).log_prob(obs_expanded)
+        except Exception as e:
+            cmws.util.logging.info(f"MVN error: {e}")
+            obs_log_prob = torch.ones((num_samples, num_elements), device=self.device) * -1e6
 
         # -- Mask out zero log probs
         obs_log_prob[zero_obs_prob] = -1e6
@@ -343,51 +356,20 @@ class GenerativeModel(nn.Module):
         # num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
         num_continuous_elements = cmws.util.get_num_elements(continuous_shape)
 
-        # Flatten
-        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
-        raw_expression_flattened = (
+        # Expand discrete
+        # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
+        raw_expression_expanded = (
             raw_expression.view(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
-            .reshape(-1, self.max_num_chars)
+            .view(*[*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
-        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
-        eos_flattened = (
+        # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
+        eos_expanded = (
             eos.view(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
-            .reshape(-1, self.max_num_chars)
+            .view(*[*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
-        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars,
-        #  gp_params_dim]
-        raw_gp_params_flattened = raw_gp_params.view(
-            -1, self.max_num_chars, timeseries_util.gp_params_dim,
-        )
-
-        # GP params log prob
-        # -- Compute num base kernels
-        # [num_continuous_elements * num_discrete_elements * num_elements]
-        num_base_kernels_flattened = self.get_num_base_kernels(
-            raw_expression_flattened, eos_flattened
-        )
-
-        # -- Compute expression embedding
-        # [num_continuous_elements * num_discrete_elements * num_elements, expression_embedding_dim]
-        expression_embedding_flattened = self.get_expression_embedding(
-            raw_expression_flattened, eos_flattened
-        )
-
-        return (
-            lstm_util.TimeseriesDistribution(
-                "continuous",
-                timeseries_util.gp_params_dim,
-                expression_embedding_flattened,
-                self.gp_params_lstm,
-                self.gp_params_extractor,
-                lstm_eos=False,
-                max_num_timesteps=self.max_num_chars,
-            )
-            .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*[*continuous_shape, *discrete_shape, *shape])
-        )
+        return self.log_prob((raw_expression_expanded, eos_expanded, raw_gp_params), obs)
 
     @torch.no_grad()
     def sample(self, sample_shape=[]):
