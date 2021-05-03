@@ -3,7 +3,6 @@ import cmws
 import cmws.examples.timeseries.util as timeseries_util
 import torch
 import itertools
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import cmws.examples.timeseries.lstm_util as lstm_util
 
@@ -37,7 +36,6 @@ def pretrain_expression_prior(generative_model, batch_size, num_iterations):
             generative_model.expression_extractor.parameters(),
         )
     )
-    losses = []
     for i in tqdm(range(num_iterations)):
         x, eos = generate_data(batch_size, generative_model.max_num_chars, generative_model.device)
 
@@ -45,9 +43,6 @@ def pretrain_expression_prior(generative_model, batch_size, num_iterations):
         loss = -generative_model.expression_dist.log_prob(x, eos).mean()
         loss.backward()
         optimizer.step()
-
-        losses.append(loss.item())
-    # plt.plot(losses)
 
 
 def sample_expression(generative_model, num_samples):
