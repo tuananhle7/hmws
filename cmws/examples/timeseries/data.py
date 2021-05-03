@@ -55,7 +55,7 @@ def lukes_make_data():
         if len(data) > n_data * 2:
             break
 
-    util.logging.info("Loaded", len(data), "timeseries")
+    util.logging.info(f"Loaded {len(data)} timeseries")
 
     # Add more datasets
     # -- Airlines
