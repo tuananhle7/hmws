@@ -393,7 +393,7 @@ class GenerativeModel(nn.Module):
 
     @torch.no_grad()
     def sample_obs(self, latent, sample_shape=[]):
-        """Sample from p(z, x)
+        """Sample from p(x | z)
 
         Args
             latent:
@@ -466,6 +466,89 @@ class GenerativeModel(nn.Module):
             raise e
 
         return obs
+
+    @torch.no_grad()
+    def sample_obs_predictions(self, latent, obs, sample_shape=[]):
+        """Sample from p(x' | z, x)
+
+        Args
+            latent:
+                raw_expression [*shape, max_num_chars]
+                eos [*shape, max_num_chars]
+                raw_gp_params [*shape, max_num_chars, gp_params_dim]
+            obs [*shape, num_timesteps]
+            sample_shape
+
+        Returns
+            obs_predictions [*sample_shape, *shape, num_timesteps]
+        """
+        # Extract
+        raw_expression, eos, raw_gp_params = latent
+        shape = raw_expression.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+
+        # Create x_1 and x_2
+        x_old = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)
+        x_new = (
+            torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)
+            + x_old[0]
+            + (x_old[1] - x_old[0])
+        )
+        x = torch.cat([x_old, x_new])
+        joint_num_timesteps = len(x)
+        x_1 = x[None, :, None].expand(1, joint_num_timesteps, 1)
+        x_2 = x[None, None, :].expand(1, 1, joint_num_timesteps)
+
+        # Create identity matrix
+        identity_matrix = torch.eye(joint_num_timesteps, device=self.device).float()
+
+        # Flatten
+        raw_expression_flattened = raw_expression.reshape(num_elements, -1)
+        eos_flattened = eos.reshape(num_elements, -1)
+        raw_gp_params_flattened = raw_gp_params.view(num_elements, self.max_num_chars, -1)
+
+        # Compute num chars
+        num_chars_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+        # Compute num base kernels
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
+        )
+
+        # Compute covariance matrices
+        covariance_matrix = []
+        for element_id in range(num_elements):
+            try:
+                raw_expression_se = raw_expression_flattened[element_id][
+                    : num_chars_flattened[element_id]
+                ]
+                covariance_matrix_se = timeseries_util.Kernel(
+                    timeseries_util.get_expression(raw_expression_se),
+                    raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                )(x_1, x_2)[0]
+            except timeseries_util.ParsingError:
+                covariance_matrix_se = identity_matrix * 1e-6
+
+            covariance_matrix.append(covariance_matrix_se)
+        covariance_matrix = torch.stack(covariance_matrix).view(
+            *[*shape, joint_num_timesteps, joint_num_timesteps]
+        )
+
+        # Create mean
+        loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)
+
+        # Sample obs
+        try:
+            joint_dist = cmws.util.get_multivariate_normal_dist(
+                loc, covariance_matrix=covariance_matrix
+            )
+            predictive_dist = cmws.util.condition_mvn(joint_dist, obs)
+            obs_predictions = predictive_dist.sample(sample_shape)
+        except Exception as e:
+            cmws.util.logging.info(f"MVN error: {e}")
+            raise e
+
+        return obs_predictions
 
 
 class Guide(nn.Module):

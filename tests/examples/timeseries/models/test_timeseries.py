@@ -117,6 +117,28 @@ def test_generative_model_sample_dims():
     assert list(obs.shape) == sample_shape + [timeseries_data.num_timesteps]
 
 
+def test_generative_model_sample_obs_predictions_dims():
+    shape = [2, 3]
+    sample_shape = [4, 5]
+    max_num_chars, lstm_hidden_dim = 6, 7
+
+    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim)
+
+    # Create latent
+    raw_expression = torch.randint(timeseries_util.vocabulary_size, size=shape + [max_num_chars])
+    eos = torch.randint(2, size=shape + [max_num_chars])
+    raw_gp_params = torch.randn(*[*shape, max_num_chars, timeseries_util.gp_params_dim])
+    latent = (raw_expression, eos, raw_gp_params)
+
+    # Create obs
+    obs = torch.randn(*[*shape, timeseries_data.num_timesteps])
+
+    # Compute log prob
+    obs_predictions = generative_model.sample_obs_predictions(latent, obs, sample_shape)
+
+    assert list(obs_predictions.shape) == sample_shape + shape + [timeseries_data.num_timesteps]
+
+
 def test_guide_obs_embedding_dims():
     shape = [2, 3]
     max_num_chars, lstm_hidden_dim = 4, 5
