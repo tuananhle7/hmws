@@ -196,8 +196,6 @@ def main(args):
         # Fix seed
         util.set_seed(1)
 
-        util.logging.info(f"Start {checkpoint_path}")
-
         if os.path.exists(checkpoint_path):
             # Load checkpoint
             model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
@@ -217,7 +215,7 @@ def main(args):
             # KL
             ax = axs[1]
             ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
-        util.logging.info(f"End {checkpoint_path}")
+
     ax = axs[0]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
@@ -231,7 +229,7 @@ def main(args):
         # ax.set_xlim(0, 20000)
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, f"save/{args.experiment_name}/stats.png", dpi=200)
-    return
+    # return
 
     # Plot for all checkpoints
     for checkpoint_path in checkpoint_paths:
