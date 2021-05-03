@@ -129,6 +129,52 @@ def main(args):
     else:
         checkpoint_paths = [args.checkpoint_path]
 
+    # Plot log p and KL for all checkpoints
+    util.logging.info(f"Plotting stats for all runs in the experiment: {checkpoint_paths}")
+    fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+
+    colors = {"cmws": "C0", "rws": "C1"}
+    for checkpoint_path in checkpoint_paths:
+        # Fix seed
+        util.set_seed(1)
+
+        util.logging.info(f"Start {checkpoint_path}")
+
+        if os.path.exists(checkpoint_path):
+            # Load checkpoint
+            model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
+                checkpoint_path, device=device
+            )
+            generative_model, guide = model["generative_model"], model["guide"]
+            num_iterations = len(stats.losses)
+
+            label = run_args.algorithm if run_args.seed == 1 else None
+            color = colors[run_args.algorithm]
+            plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
+
+            # Logp
+            ax = axs[0]
+            ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps], **plot_kwargs)
+
+            # KL
+            ax = axs[1]
+            ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
+        util.logging.info(f"End {checkpoint_path}")
+    ax = axs[0]
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Log p")
+    ax.set_ylim(-45000, -10000)
+
+    ax = axs[1]
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("KL")
+    ax.legend()
+    for ax in axs:
+        # ax.set_xlim(0, 20000)
+        sns.despine(ax=ax, trim=True)
+    util.save_fig(fig, f"save/{args.experiment_name}/stats.png", dpi=200)
+    return
+
     # Plot for all checkpoints
     for checkpoint_path in checkpoint_paths:
         # Fix seed
