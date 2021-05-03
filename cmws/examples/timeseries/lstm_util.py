@@ -25,19 +25,28 @@ def step_lstm(lstm, input_, h_0_c_0=None):
 def get_num_timesteps(eos):
     """
     Args
-        eos [batch_size, max_num_timesteps]
+        eos [*shape, max_num_timesteps]
 
-    Returns [batch_size]
+    Returns [*shape]
     """
-    batch_size, max_num_timesteps = eos.shape
+    # Extract
+    shape = eos.shape[:-1]
+    max_num_timesteps = eos.shape[-1]
+    num_elements = cmws.util.get_num_elements(shape)
     device = eos.device
+
+    # Flatten
+    eos_flattened = eos.view(-1, max_num_timesteps)
+
     num_timesteps = []
-    for batch_id in range(batch_size):
-        if torch.all(eos[batch_id] == 0):
+    for element_id in range(num_elements):
+        if torch.all(eos_flattened[element_id] == 0):
             num_timesteps.append(max_num_timesteps)
         else:
-            num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
-    return torch.tensor(num_timesteps, device=device)
+            num_timesteps.append(
+                (eos_flattened[element_id] == 1).nonzero(as_tuple=False)[0].item() + 1
+            )
+    return torch.tensor(num_timesteps, device=device).view(*shape)
 
 
 class TimeseriesDistribution:
