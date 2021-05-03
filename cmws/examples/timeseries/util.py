@@ -216,7 +216,7 @@ class Kernel(nn.Module):
 
 
 # Init, saving, etc
-def init(run_args, device):
+def init(run_args, device, fast=False):
     memory = None
     if run_args.model_type == "timeseries":
         # Generative model
@@ -229,14 +229,17 @@ def init(run_args, device):
             max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
         ).to(device)
 
-        # Pretrain the prior
-        cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-            generative_model, batch_size=10, num_iterations=2000
-        )
+        if not fast:
+            # Pretrain the prior
+            cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
+                generative_model, batch_size=10, num_iterations=2000
+            )
 
         # Memory
         if "mws" in run_args.algorithm:
-            memory = cmws.memory.Memory(2000, run_args.memory_size, generative_model).to(device)
+            memory = cmws.memory.Memory(
+                2000, run_args.memory_size, generative_model, check_unique=not fast
+            ).to(device)
 
     # Model dict
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
@@ -281,7 +284,7 @@ def load_checkpoint(path, device, num_tries=3):
             logging.info(f"Waiting for {wait_time} seconds")
             time.sleep(wait_time)
     run_args = checkpoint["run_args"]
-    model, optimizer, stats = init(run_args, device)
+    model, optimizer, stats = init(run_args, device, fast=True)
 
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
     guide.load_state_dict(checkpoint["guide_state_dict"])

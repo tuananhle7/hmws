@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 
-def init_memory_groups(num_obs, memory_size, generative_model):
+def init_memory_groups(num_obs, memory_size, generative_model, check_unique=True):
     """Initializes a latent variables, making sure it's unique.
 
     Args
@@ -27,7 +27,10 @@ def init_memory_groups(num_obs, memory_size, generative_model):
             if torch.is_tensor(latent_groups):
                 latent_groups = [latent_groups]
 
-            if len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size:
+            latent_groups_are_unique = (
+                len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size
+            )
+            if not check_unique or latent_groups_are_unique:
                 latent_groupss.append(latent_groups)
                 break
 
@@ -49,10 +52,12 @@ class Memory:
         generative_model - only used to initialize the memory by sampling from p(z_d)
     """
 
-    def __init__(self, num_obs, size, generative_model):
+    def __init__(self, num_obs, size, generative_model, check_unique=True):
         self.num_obs = num_obs
         self.size = size
-        self.memory_groups = init_memory_groups(num_obs, size, generative_model)
+        self.memory_groups = init_memory_groups(
+            num_obs, size, generative_model, check_unique=check_unique
+        )
         self.num_groups = len(self.memory_groups)
 
     @property
