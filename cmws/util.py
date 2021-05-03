@@ -176,6 +176,57 @@ class CategoricalPlusOne(torch.distributions.Categorical):
         return super().log_prob(value - 1)
 
 
+def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
+    """Numerically stable multivariate normal distribution
+
+    Args
+        loc [*shape, dim]
+        covariance_matrix [*shape, dim, dim]
+
+    Returns distribution with batch_shape [*shape] and event_shape [dim]
+    """
+    # Extract
+    shape = loc.shape[:-1]
+    dim = loc.shape[-1]
+    device = loc.device
+    num_elements = get_num_elements(shape)
+
+    # Extracting bad batch id
+    def get_bad_batch_id(error_str):
+        end = error_str.find("U(") - 2
+        start = error_str.find("batch ") + len("batch ")
+        return int(error_str[start:end])
+
+    try:
+        return torch.distributions.MultivariateNormal(loc, covariance_matrix)
+    except RuntimeError as error_1:
+        bad_batch_id = get_bad_batch_id(str(error_1))
+        jitter = 1e-6 * torch.ones(num_elements, device=device)
+        jitter_prev = torch.zeros(num_elements, device=device)
+        exponents = torch.zeros(num_elements, device=device)
+
+        while True:
+            jitter_new = jitter[bad_batch_id] * (10 ** exponents[bad_batch_id])
+            exponents[bad_batch_id] += 1
+            if exponents[bad_batch_id].item() == 100:
+                raise error_1
+            covariance_matrix.view((num_elements, dim, dim))[bad_batch_id].diagonal(
+                dim1=-2, dim2=-1
+            ).add_(jitter_new - jitter_prev[bad_batch_id])
+            jitter_prev[bad_batch_id] = jitter_new
+            try:
+                if verbose:
+                    logging.warn(
+                        f"WARNING: cov not p.d., added jitter of {jitter_new} to batch "
+                        f"{bad_batch_id} of the diagonal"
+                    )
+                return torch.distributions.MultivariateNormal(loc, covariance_matrix)
+            except RuntimeError as error_2:
+                bad_batch_id = get_bad_batch_id(str(error_2))
+                continue
+        raise error_1
+
+
 # Plotting
 def save_fig(fig, path, dpi=100, tight_layout_kwargs={}):
     Path(path).parent.mkdir(parents=True, exist_ok=True)

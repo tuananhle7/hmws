@@ -285,17 +285,14 @@ class GenerativeModel(nn.Module):
                     raw_expression_se = raw_expression_flattened[sample_id, element_id][
                         : num_timesteps_flattened[sample_id, element_id]
                     ]
-                    covariance_matrix_se = (
-                        timeseries_util.Kernel(
-                            timeseries_util.get_expression(raw_expression_se),
-                            raw_gp_params_flattened[
-                                sample_id,
-                                element_id,
-                                : num_base_kernels_flattened[sample_id, element_id],
-                            ],
-                        )(x_1, x_2)[0]
-                        + identity_matrix * 1e-3
-                    )
+                    covariance_matrix_se = timeseries_util.Kernel(
+                        timeseries_util.get_expression(raw_expression_se),
+                        raw_gp_params_flattened[
+                            sample_id,
+                            element_id,
+                            : num_base_kernels_flattened[sample_id, element_id],
+                        ],
+                    )(x_1, x_2)[0]
                 except timeseries_util.ParsingError:
                     covariance_matrix_se = identity_matrix
                     zero_obs_prob[sample_id, element_id] = True
@@ -315,7 +312,7 @@ class GenerativeModel(nn.Module):
 
         # -- Compute obs log prob
         try:
-            obs_log_prob = torch.distributions.MultivariateNormal(
+            obs_log_prob = cmws.util.get_multivariate_normal_dist(
                 loc, covariance_matrix=covariance_matrix
             ).log_prob(obs_expanded)
         except Exception as e:
@@ -444,17 +441,12 @@ class GenerativeModel(nn.Module):
                 raw_expression_se = raw_expression_flattened[element_id][
                     : num_timesteps_flattened[element_id]
                 ]
-                covariance_matrix_se = (
-                    timeseries_util.Kernel(
-                        timeseries_util.get_expression(raw_expression_se),
-                        raw_gp_params_flattened[
-                            element_id, : num_base_kernels_flattened[element_id],
-                        ],
-                    )(x_1, x_2)[0]
-                    + identity_matrix * 1e-3
-                )
+                covariance_matrix_se = timeseries_util.Kernel(
+                    timeseries_util.get_expression(raw_expression_se),
+                    raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                )(x_1, x_2)[0]
             except timeseries_util.ParsingError:
-                covariance_matrix_se = identity_matrix * 1e-3
+                covariance_matrix_se = identity_matrix * 1e-6
 
             covariance_matrix.append(covariance_matrix_se)
         covariance_matrix = torch.stack(covariance_matrix).view(
@@ -464,9 +456,9 @@ class GenerativeModel(nn.Module):
         # Create mean
         loc = torch.zeros(*[*shape, timeseries_data.num_timesteps], device=self.device)
 
-        # Compute obs log prob
+        # Sample obs
         try:
-            obs = torch.distributions.MultivariateNormal(
+            obs = cmws.util.get_multivariate_normal_dist(
                 loc, covariance_matrix=covariance_matrix
             ).sample(sample_shape)
         except Exception as e:
