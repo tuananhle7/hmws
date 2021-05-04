@@ -226,7 +226,7 @@ def test_guide_sample_discrete_dims():
     assert list(eos.shape) == sample_shape + shape + [max_num_chars]
 
 
-def test_guide_sample_continuou_dims():
+def test_guide_sample_continuous_dims():
     shape = [2, 3]
     discrete_shape = [4]
     sample_shape = [5]

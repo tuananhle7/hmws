@@ -875,10 +875,11 @@ class Guide(nn.Module):
 
         return raw_expression, eos
 
-    def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
+    def _sample_continuous(self, reparam, obs, discrete_latent, sample_shape=[]):
         """z_c ~ q(z_c | z_d, x)
 
         Args
+            reparam (bool)
             obs [*shape, num_timesteps]
             discrete_latent
                 raw_expression [*discrete_shape, *shape, max_num_chars]
@@ -886,7 +887,7 @@ class Guide(nn.Module):
             sample_shape
 
         Returns
-                raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
+            raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
         """
         # Extract
         shape = obs.shape[:-1]
@@ -928,27 +929,62 @@ class Guide(nn.Module):
         )
 
         # -- Sample
-        return (
-            lstm_util.TimeseriesDistribution(
-                "continuous",
-                timeseries_util.gp_params_dim,
-                torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
-                self.gp_params_lstm,
-                self.gp_params_extractor,
-                lstm_eos=False,
-                max_num_timesteps=self.max_num_chars,
-            )
-            .sample((num_samples,), num_timesteps=num_base_kernels_expanded)
-            .view(
-                *[
-                    *sample_shape,
-                    *discrete_shape,
-                    *shape,
-                    self.max_num_chars,
-                    timeseries_util.gp_params_dim,
-                ]
-            )
+        raw_gp_params_dist = lstm_util.TimeseriesDistribution(
+            "continuous",
+            timeseries_util.gp_params_dim,
+            torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
+            self.gp_params_lstm,
+            self.gp_params_extractor,
+            lstm_eos=False,
+            max_num_timesteps=self.max_num_chars,
         )
+        if reparam:
+            raw_gp_params = raw_gp_params_dist.rsample(
+                (num_samples,), num_timesteps=num_base_kernels_expanded
+            )
+        else:
+            raw_gp_params = raw_gp_params_dist.sample(
+                (num_samples,), num_timesteps=num_base_kernels_expanded
+            )
+        return raw_gp_params.view(
+            *[
+                *sample_shape,
+                *discrete_shape,
+                *shape,
+                self.max_num_chars,
+                timeseries_util.gp_params_dim,
+            ]
+        )
+
+    def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x) (NOT reparameterized)
+
+        Args
+            obs [*shape, num_timesteps]
+            discrete_latent
+                raw_expression [*discrete_shape, *shape, max_num_chars]
+                eos [*discrete_shape, *shape, max_num_chars]
+            sample_shape
+
+        Returns
+            raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
+        """
+        return self._sample_continuous(False, obs, discrete_latent, sample_shape=sample_shape)
+
+    def rsample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x) (reparameterized)
+
+        Args
+            obs [*shape, num_timesteps]
+            discrete_latent
+                raw_expression [*discrete_shape, *shape, max_num_chars]
+                eos [*discrete_shape, *shape, max_num_chars]
+            sample_shape
+
+        Returns
+            raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
+        """
+        return self._sample_continuous(True, obs, discrete_latent, sample_shape=sample_shape)
 
     def log_prob_discrete(self, obs, discrete_latent):
         """log q(z_d | x)
