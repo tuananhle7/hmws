@@ -63,63 +63,6 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_reconstructions_timeseries(path, generative_model, guide, obs):
-    """
-    Args:
-        path (str)
-        generative_model
-        guide
-        obs: [num_test_obs, num_timesteps]
-    """
-    num_samples = 5
-    num_test_obs, num_timesteps = obs.shape
-
-    # Sample latent
-    latent = guide.sample(obs, [num_samples])
-    x, eos, _ = latent
-    num_chars = lstm_util.get_num_timesteps(eos)
-
-    # Sample reconstructions
-    reconstructed_obs = generative_model.sample_obs(latent)
-
-    # Plot
-    num_rows = 1 + num_samples
-    num_cols = num_test_obs
-    fig, axss = plt.subplots(
-        num_rows, num_cols, figsize=(3 * num_cols, 2 * num_rows), sharex=True, sharey=True
-    )
-
-    for test_obs_id in range(num_test_obs):
-        # Plot obs
-        ax = axss[0, test_obs_id]
-        plot_obs(ax, obs[test_obs_id])
-
-        for sample_id in range(num_samples):
-            # Plot probs
-            ax = axss[1 + sample_id, test_obs_id]
-            plot_obs(ax, reconstructed_obs[sample_id, test_obs_id])
-            expression = timeseries_util.get_expression(
-                x[sample_id, test_obs_id][: num_chars[sample_id, test_obs_id]]
-            )
-            ax.text(
-                0.95,
-                0.95,
-                f"Inferred kernel: {expression}",
-                transform=ax.transAxes,
-                fontsize=7,
-                va="top",
-                ha="right",
-                color="gray",
-            )
-
-    # Set labels
-    axss[0, 0].set_ylabel("Observed signal")
-    for sample_id in range(num_samples):
-        axss[1 + sample_id, 0].set_ylabel(f"Reconstruction {sample_id}")
-
-    util.save_fig(fig, path)
-
-
 def plot_predictions_timeseries(path, generative_model, guide, obs):
     """
     Args:
@@ -293,12 +236,6 @@ def main(args):
 
             # Plot
             if run_args.model_type == "timeseries":
-                plot_reconstructions_timeseries(
-                    f"{save_dir}/reconstructions/{num_iterations}.png",
-                    generative_model,
-                    guide,
-                    obs,
-                )
                 plot_predictions_timeseries(
                     f"{save_dir}/predictions/{num_iterations}.png", generative_model, guide, obs,
                 )
