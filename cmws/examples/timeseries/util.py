@@ -59,7 +59,7 @@ def get_long_expression(expression):
         if char in base_kernel_chars:
             long_expression += char_to_long_char[char]
         elif char == "*":
-            long_expression += " ⨉ "
+            long_expression += " × "
         elif char == "+":
             long_expression += " + "
         else:
