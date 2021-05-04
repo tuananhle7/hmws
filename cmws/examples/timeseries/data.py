@@ -646,6 +646,7 @@ class TimeseriesDataset(torch.utils.data.Dataset):
 
         if self.test:
             self.obs = torch.tensor(test_obs, device=self.device).float()
+            self.obs = torch.cat([self.obs[-2:], self.obs[700:748]])
         else:
             self.obs = torch.tensor(train_obs, device=self.device).float()
         self.num_data = len(self.obs)
@@ -679,7 +680,7 @@ def plot_data():
     # Test
     timeseries_dataset["test"] = TimeseriesDataset(device, test=True)
 
-    for mode in ["train", "test"]:
+    for mode in ["test", "train"]:
         start = 0
         end = 100
 
@@ -689,12 +690,8 @@ def plot_data():
 
             fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
 
-            for ax in axss.flat:
-                ax.set_axis_off()
-
             for i in range(len(obs)):
-                ax.set_axis_on()
-                cmws.examples.timeseries.plot.plot_obs(axss.flat[i])
+                cmws.examples.timeseries.plot.plot_obs(axss.flat[i], obs[i])
 
             util.save_fig(fig, path)
 
