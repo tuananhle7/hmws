@@ -54,7 +54,7 @@ def submit_slurm_job(run_args, logs_dir, job_name, no_repeat=False):
         python_cmd = f'--wrap="MKL_THREADING_LAYER=INTEL=1 python -u run.py {args_str}""'
     else:
         sbatch_cmd = "om-repeat sbatch"
-        time_option = "2:0:0"
+        time_option = "4:0:0"
         python_cmd = f"MKL_THREADING_LAYER=INTEL=1 python -u run.py {args_str}"
 
     # SBATCH OPTIONS
@@ -66,6 +66,7 @@ def submit_slurm_job(run_args, logs_dir, job_name, no_repeat=False):
         # + "--constraint=high-capacity "
         # + f"-p tenenbaum "
         + "--constraint=14GB "
+        + "-x node093 "
         + f'-J "{job_name}" '
         + f'-o "{logs_dir}/%j.out" '
         + f'-e "{logs_dir}/%j.err" '
