@@ -3,6 +3,7 @@ SVI and IS inference for the timeseries model
 """
 import copy
 import itertools
+import math
 from tqdm import tqdm
 import torch
 import cmws
@@ -109,8 +110,8 @@ def svi(num_iterations, obs, discrete_latent, generative_model, guide):
 
     # Flatten
     obs_flattened = obs.reshape(-1, timeseries_data.num_timesteps)
-    raw_expression_flattened = raw_expression.view(-1, generative_model.max_num_chars)
-    eos_flattened = eos.view(-1, generative_model.max_num_chars)
+    raw_expression_flattened = raw_expression.reshape(-1, generative_model.max_num_chars)
+    eos_flattened = eos.reshape(-1, generative_model.max_num_chars)
 
     # Compute in a loop
     continuous_latent, log_prob = [], []
@@ -175,6 +176,61 @@ def svi_importance_sampling(num_particles, num_svi_iterations, obs, generative_m
     # Score q
     # [num_particles, *shape]
     guide_log_prob = guide.log_prob_discrete(obs, discrete_latent) + continuous_latent_log_prob
+
+    # Compute weight
+    log_weight = generative_model_log_prob - guide_log_prob
+
+    return latent, log_weight
+
+
+def svi_memory(num_svi_iterations, obs, obs_id, generative_model, guide, memory):
+    """Do stochastic VI on continuous latents and use the optimized distribution to do
+    importance sampling.
+
+    Args
+        num_svi_iterations (int)
+        obs [batch_size, num_timesteps]
+        obs_id [batch_size]
+        generative_model
+        guide
+        memory
+
+    Returns
+        latent
+            raw_expression [memory_size, batch_size, max_num_chars]
+            eos [memory_size, batch_size, max_num_chars]
+            raw_gp_params [memory_size, batch_size, max_num_chars, gp_params_dim]
+        log_weight [memory_size, batch_size]
+    """
+    # Extract
+    batch_size = obs.shape[0]
+    memory_size = memory.size
+
+    # Sample discrete latent
+    # [memory_size, batch_size, ...]
+    discrete_latent = memory.select(obs_id)
+
+    # Sample and score svi-optimized q(z_c | z_d, x)
+    # -- Expand obs
+    # [memory_size, batch_size, num_timesteps]
+    obs_expanded = obs[None].expand([memory_size, batch_size, timeseries_data.num_timesteps])
+
+    # -- Sample and score q(z_c | z_d, x)
+    # [memory_size, batch_size, ...], [memory_size, batch_size]
+    continuous_latent, continuous_latent_log_prob = svi(
+        num_svi_iterations, obs_expanded, discrete_latent, generative_model, guide
+    )
+
+    # Combine latents
+    latent = discrete_latent[0], discrete_latent[1], continuous_latent
+
+    # Score p
+    # [memory_size, batch_size]
+    generative_model_log_prob = generative_model.log_prob(latent, obs)
+
+    # Score q
+    # [memory_size, batch_size]
+    guide_log_prob = -math.log(memory_size) + continuous_latent_log_prob
 
     # Compute weight
     log_weight = generative_model_log_prob - guide_log_prob
