@@ -463,7 +463,9 @@ class GenerativeModel(nn.Module):
             ).sample(sample_shape)
         except Exception as e:
             cmws.util.logging.info(f"MVN error: {e}")
-            raise e
+            obs = torch.zeros(
+                *[*sample_shape, *shape, timeseries_data.num_timesteps], device=self.device
+            )
 
         return obs
 
@@ -542,7 +544,9 @@ class GenerativeModel(nn.Module):
             obs_predictions = predictive_dist.sample(sample_shape)
         except Exception as e:
             cmws.util.logging.info(f"MVN error: {e}")
-            raise e
+            obs_predictions = torch.zeros(
+                *[*sample_shape, *shape, timeseries_data.num_timesteps], device=self.device
+            )
 
         return obs_predictions
 
