@@ -40,7 +40,7 @@ def get_args_parser():
     parser.add_argument("--num-particles", default=50, type=int, help=" ")
     parser.add_argument("--memory-size", default=10, type=int, help=" ")
     parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
-    parser.add_argument("--test-num-particles", default=500, type=int, help=" ")
+    parser.add_argument("--test-num-particles", default=100, type=int, help=" ")
 
     # Model
     parser.add_argument("--max-num-chars", default=20, type=int, help=" ")
