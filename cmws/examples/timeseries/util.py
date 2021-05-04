@@ -13,6 +13,7 @@ from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
 base_kernel_chars = {"W", "R", "E", "C"}
+char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "C": "C"}
 char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
@@ -46,6 +47,26 @@ def get_expression(raw_expression):
     return expression
 
 
+def get_long_expression(expression):
+    """
+    Args
+        expression (str)
+
+    Returns (str)
+    """
+    long_expression = ""
+    for char in expression:
+        if char in base_kernel_chars:
+            long_expression += char_to_long_char[char]
+        elif char == "*":
+            long_expression += " ✖️ "
+        elif char == "+":
+            long_expression += " + "
+        else:
+            long_expression += char
+    return long_expression
+
+
 def count_base_kernels(raw_expression):
     """How many base kernels are there in the raw_expression?
 
@@ -71,7 +92,7 @@ class Kernel(nn.Module):
 
     Args
         expression (str) consists of characters *, +, (, ) or
-            W = WhiteNoie
+            W = WhiteNoise
             R = SquaredExponential
             E = Periodic
             C = Constant

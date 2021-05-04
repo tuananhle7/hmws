@@ -155,16 +155,18 @@ def plot_predictions_timeseries(path, generative_model, guide, obs):
         ax = axss[0, test_obs_id]
         plot_obs(ax, obs[test_obs_id])
 
-        expression = timeseries_util.get_expression(x[test_obs_id][: num_chars[test_obs_id]])
+        long_expression = timeseries_util.get_long_expression(
+            timeseries_util.get_expression(x[test_obs_id][: num_chars[test_obs_id]])
+        )
         ax.text(
+            0.05,
             0.95,
-            0.95,
-            f"Inferred kernel: {expression}",
+            f"{long_expression}",
             transform=ax.transAxes,
             fontsize=7,
             va="top",
-            ha="right",
-            color="gray",
+            ha="left",
+            color="black",
         )
         for sample_id in range(num_samples):
             ax.plot(
@@ -219,7 +221,7 @@ def main(args):
     ax = axs[0]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
-    ax.set_ylim(-45000, -10000)
+    ax.set_ylim(-5000, 1000)
 
     ax = axs[1]
     ax.set_xlabel("Iteration")
@@ -261,13 +263,13 @@ def main(args):
             # Plot
             if run_args.model_type == "timeseries":
                 plot_reconstructions_timeseries(
-                    f"{save_dir}/reconstructions/{num_iterations}.pdf",
+                    f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
                 plot_predictions_timeseries(
-                    f"{save_dir}/predictions/{num_iterations}.pdf", generative_model, guide, obs,
+                    f"{save_dir}/predictions/{num_iterations}.png", generative_model, guide, obs,
                 )
 
         else:
