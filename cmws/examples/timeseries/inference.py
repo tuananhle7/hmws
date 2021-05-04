@@ -62,10 +62,10 @@ def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
     # Initialize optimizer
     optimizer = torch.optim.Adam(
         itertools.chain(
-            guide_copy.gp_params_lstm,
-            guide_copy.gp_params_extractor,
-            guide_copy.obs_embedder,
-            guide_copy.expression_embedder,
+            guide_copy.gp_params_lstm.parameters(),
+            guide_copy.gp_params_extractor.parameters(),
+            guide_copy.obs_embedder.parameters(),
+            guide_copy.expression_embedder.parameters(),
         )
     )
 
@@ -107,12 +107,12 @@ def svi(num_iterations, obs, discrete_latent, generative_model, guide):
     raw_expression, eos = discrete_latent
 
     # Flatten
-    obs_flattened = obs.view(-1, timeseries_data.num_timesteps)
+    obs_flattened = obs.reshape(-1, timeseries_data.num_timesteps)
     raw_expression_flattened = raw_expression.view(-1, generative_model.max_num_chars)
     eos_flattened = eos.view(-1, generative_model.max_num_chars)
 
     # Compute in a loop
-    continuous_latent, log_prob = [], [], []
+    continuous_latent, log_prob = [], []
     for element_id in range(num_elements):
         obs_e = obs_flattened[element_id]
         discrete_latent_e = (raw_expression_flattened[element_id], eos_flattened[element_id])
@@ -123,8 +123,8 @@ def svi(num_iterations, obs, discrete_latent, generative_model, guide):
         log_prob.append(log_prob_e)
 
     return (
-        torch.stack(continuous_latent).view(*[*shape, generative_model.max_num_chars, -1]),
-        torch.stack(log_prob).view(*shape),
+        torch.stack(continuous_latent).view([*shape, generative_model.max_num_chars, -1]),
+        torch.stack(log_prob).view(shape),
     )
 
 
@@ -156,7 +156,7 @@ def svi_importance_sampling(num_particles, num_svi_iterations, obs, generative_m
     # Sample and score svi-optimized q(z_c | z_d, x)
     # -- Expand obs
     # [num_particles, *shape, num_timesteps]
-    obs_expanded = obs[None].view(*[num_particles, *shape, timeseries_data.num_timesteps])
+    obs_expanded = obs[None].expand([num_particles, *shape, timeseries_data.num_timesteps])
 
     # -- Sample and score q(z_c | z_d, x)
     # [num_particles, *shape, ...], [num_particles, *shape]
