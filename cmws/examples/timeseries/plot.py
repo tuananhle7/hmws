@@ -229,16 +229,26 @@ def main(args):
             plot_stats(f"{save_dir}/stats.png", stats)
 
             # Plot reconstructions and other things
-            # Test data
-            # num_test_data = 50
-            timeseries_dataset = data.TimeseriesDataset(device, test=True)
-            obs, _ = timeseries_dataset[700:750]
+            # Load data
+            obs = {}
+
+            # -- Test
+            test_timeseries_dataset = data.TimeseriesDataset(device, test=True)
+            obs["test"], _ = test_timeseries_dataset[700:750]
+
+            # -- Train
+            train_timeseries_dataset = data.TimeseriesDataset(device, test=False)
+            obs["train"], obs_id = train_timeseries_dataset[300:350]
 
             # Plot
             if run_args.model_type == "timeseries":
-                plot_predictions_timeseries(
-                    f"{save_dir}/predictions/{num_iterations}.png", generative_model, guide, obs,
-                )
+                for mode in ["train", "test"]:
+                    plot_predictions_timeseries(
+                        f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
+                        generative_model,
+                        guide,
+                        obs[mode],
+                    )
 
         else:
             # Checkpoint doesn't exist
