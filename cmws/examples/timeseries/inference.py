@@ -4,7 +4,6 @@ SVI and IS inference for the timeseries model
 import copy
 import itertools
 import math
-from tqdm import tqdm
 import torch
 import cmws
 import cmws.examples.timeseries.data as timeseries_data
@@ -56,8 +55,6 @@ def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
             raw_gp_params [max_num_chars, gp_params_dim]
         log_prob [] the value of the svi-optimized log q(z_c | z_d, x)
     """
-    cmws.util.logging.info("SVI optimization")
-
     # Copy guide
     guide_copy = copy.deepcopy(guide)
 
@@ -72,7 +69,7 @@ def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
     )
 
     # Optimization loop
-    for iteration in tqdm(range(num_iterations)):
+    for iteration in range(num_iterations):
         optimizer.zero_grad()
         loss = get_elbo_single(discrete_latent, obs, generative_model, guide_copy)
         loss.backward()
