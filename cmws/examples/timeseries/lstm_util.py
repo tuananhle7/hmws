@@ -36,7 +36,7 @@ def get_num_timesteps(eos):
     device = eos.device
 
     # Flatten
-    eos_flattened = eos.view(-1, max_num_timesteps)
+    eos_flattened = eos.reshape(-1, max_num_timesteps)
 
     num_timesteps = []
     for element_id in range(num_elements):

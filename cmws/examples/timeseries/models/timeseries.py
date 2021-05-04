@@ -82,7 +82,7 @@ class GenerativeModel(nn.Module):
         # Run LSTM
         # [1, num_elements, lstm_hidden_size]
         _, (h, _) = self.expression_lstm(lstm_input)
-        return h[0].view(*[*shape, self.lstm_hidden_dim])
+        return h[0].view([*shape, self.lstm_hidden_dim])
 
     def get_num_base_kernels(self, raw_expression, eos):
         """
@@ -97,8 +97,8 @@ class GenerativeModel(nn.Module):
         num_elements = cmws.util.get_num_elements(shape)
 
         # Flatten
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_expression_flattened = raw_expression.reshape(-1, self.max_num_chars)
+        eos_flattened = eos.reshape(-1, self.max_num_chars)
 
         # Compute num timesteps
         # [num_elements]
@@ -111,7 +111,7 @@ class GenerativeModel(nn.Module):
                     raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
                 )
             )
-        return torch.tensor(result, device=self.device).long().view(*shape)
+        return torch.tensor(result, device=self.device).long().view(shape)
 
     def latent_log_prob(self, latent):
         """Prior log p(z)
@@ -138,7 +138,7 @@ class GenerativeModel(nn.Module):
         # Expression log prob
         expression_log_prob = self.expression_dist.log_prob(
             raw_expression_flattened, eos=eos_flattened
-        ).view(*shape)
+        ).view(shape)
 
         # GP params log prob
         num_base_kernels_flattened = self.get_num_base_kernels(
@@ -160,7 +160,7 @@ class GenerativeModel(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*shape)
+            .view(shape)
         )
 
         return expression_log_prob + gp_params_log_prob
@@ -205,7 +205,7 @@ class GenerativeModel(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .sample(num_timesteps=num_base_kernels_flattened)
-            .view(*[*sample_shape, self.max_num_chars, timeseries_util.gp_params_dim])
+            .view([*sample_shape, self.max_num_chars, timeseries_util.gp_params_dim])
         )
         return raw_expression, eos, raw_gp_params
 
@@ -323,7 +323,7 @@ class GenerativeModel(nn.Module):
         obs_log_prob[zero_obs_prob] = -1e6
 
         # -- Reshape
-        obs_log_prob = obs_log_prob.view(*[*sample_shape, *shape])
+        obs_log_prob = obs_log_prob.view([*sample_shape, *shape])
 
         return latent_log_prob + obs_log_prob
 
@@ -358,13 +358,13 @@ class GenerativeModel(nn.Module):
         raw_expression_expanded = (
             raw_expression.view(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
-            .view(*[*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
+            .view([*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
         # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
         eos_expanded = (
             eos.view(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
-            .view(*[*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
+            .view([*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
         return self.log_prob((raw_expression_expanded, eos_expanded, raw_gp_params), obs)
 
@@ -604,7 +604,7 @@ class Guide(nn.Module):
         obs_flattened = obs.reshape(-1, num_timesteps)
 
         _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
-        return h.view(*[*shape, self.obs_embedding_dim])
+        return h.view([*shape, self.obs_embedding_dim])
 
     def get_expression_embedding(self, raw_expression, eos):
         """
@@ -640,7 +640,7 @@ class Guide(nn.Module):
         # Run LSTM
         # [1, num_elements, lstm_hidden_size]
         _, (h, _) = self.expression_embedder(lstm_input)
-        return h[0].view(*[*shape, self.lstm_hidden_dim])
+        return h[0].view([*shape, self.lstm_hidden_dim])
 
     def get_num_base_kernels(self, raw_expression, eos):
         """
@@ -669,7 +669,7 @@ class Guide(nn.Module):
                     raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
                 )
             )
-        return torch.tensor(result, device=self.device).long().view(*shape)
+        return torch.tensor(result, device=self.device).long().view(shape)
 
     def log_prob(self, obs, latent):
         """
@@ -715,7 +715,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_expression_flattened, eos_flattened)
-            .view(*[*sample_shape, *shape])
+            .view([*sample_shape, *shape])
         )
 
         # Log prob of continuous
@@ -749,7 +749,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*[*sample_shape, *shape])
+            .view([*sample_shape, *shape])
         )
 
         return discrete_log_prob + continuous_log_prob
@@ -790,8 +790,8 @@ class Guide(nn.Module):
         ).sample(sample_shape)
 
         # -- Reshape
-        raw_expression = raw_expression.view(*[*sample_shape, *shape, -1])
-        eos = eos.view(*[*sample_shape, *shape, -1])
+        raw_expression = raw_expression.view([*sample_shape, *shape, -1])
+        eos = eos.view([*sample_shape, *shape, -1])
 
         # Sample continuous
         # -- Flatten discrete latents
@@ -830,7 +830,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .sample((), num_timesteps=num_base_kernels_flattened)
-            .view(*[*sample_shape, *shape, self.max_num_chars, timeseries_util.gp_params_dim])
+            .view([*sample_shape, *shape, self.max_num_chars, timeseries_util.gp_params_dim])
         )
 
         return raw_expression, eos, raw_gp_params
@@ -870,8 +870,8 @@ class Guide(nn.Module):
         ).sample(sample_shape)
 
         # -- Reshape
-        raw_expression = raw_expression.view(*[*sample_shape, *shape, -1])
-        eos = eos.view(*[*sample_shape, *shape, -1])
+        raw_expression = raw_expression.view([*sample_shape, *shape, -1])
+        eos = eos.view([*sample_shape, *shape, -1])
 
         return raw_expression, eos
 
@@ -1030,7 +1030,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_expression_flattened, eos_flattened)
-            .view(*[*discrete_shape, *shape])
+            .view([*discrete_shape, *shape])
         )
 
     def log_prob_continuous(self, obs, discrete_latent, continuous_latent):
@@ -1112,5 +1112,5 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*[*continuous_shape, *discrete_shape, *shape])
+            .view([*continuous_shape, *discrete_shape, *shape])
         )
