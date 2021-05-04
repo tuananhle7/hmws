@@ -8,6 +8,7 @@ from cmws import util
 from cmws.examples.timeseries import data, run
 from cmws.examples.timeseries import util as timeseries_util
 from cmws.examples.timeseries import lstm_util
+import cmws.examples.timeseries.inference
 
 
 def plot_obs(ax, obs):
@@ -127,19 +128,30 @@ def plot_predictions_timeseries(path, generative_model, guide, obs):
         guide
         obs: [num_test_obs, num_timesteps]
     """
-    num_samples = 5
+    num_samples = 2
     num_test_obs, num_timesteps = obs.shape
 
     # Sample latent
-    latent = guide.sample(obs, [])
+    num_particles, num_svi_iterations = 10, 10
+    latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
+        num_particles, num_svi_iterations, obs, generative_model, guide
+    )
     x, eos, _ = latent
     num_chars = lstm_util.get_num_timesteps(eos)
 
-    # Sample reconstructions
-    obs_predictions = generative_model.sample_obs_predictions(latent, obs, [num_samples])
+    # Sort by log weight
+    # [num_test_obs, num_particles], [num_test_obs, num_particles]
+    _, sorted_indices = torch.sort(log_weight.T, descending=True)
+
+    # Sample predictions
+    # -- Expand obs
+    obs_expanded = obs[None].expand(num_particles, num_test_obs, num_timesteps)
+
+    # -- Sample predictions
+    obs_predictions = generative_model.sample_obs_predictions(latent, obs_expanded, [num_samples])
 
     # Plot
-    num_rows = 1
+    num_rows = num_particles
     num_cols = num_test_obs
     fig, axss = plt.subplots(
         num_rows,
@@ -151,30 +163,49 @@ def plot_predictions_timeseries(path, generative_model, guide, obs):
     )
 
     for test_obs_id in range(num_test_obs):
-        # Plot obs
-        ax = axss[0, test_obs_id]
-        plot_obs(ax, obs[test_obs_id])
+        for particle_id in range(num_particles):
+            # Plot obs
+            ax = axss[particle_id, test_obs_id]
+            plot_obs(ax, obs[test_obs_id])
 
-        long_expression = timeseries_util.get_long_expression(
-            timeseries_util.get_expression(x[test_obs_id][: num_chars[test_obs_id]])
-        )
-        ax.text(
-            0.05,
-            0.95,
-            f"{long_expression}",
-            transform=ax.transAxes,
-            fontsize=7,
-            va="top",
-            ha="left",
-            color="black",
-        )
-        for sample_id in range(num_samples):
-            ax.plot(
-                torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
-                obs_predictions[sample_id, test_obs_id].cpu().detach(),
-                color="C1",
-                alpha=0.5,
+            # Compute sorted particle id
+            sorted_particle_id = sorted_indices[test_obs_id, particle_id]
+
+            long_expression = timeseries_util.get_long_expression(
+                timeseries_util.get_expression(
+                    x[sorted_particle_id, test_obs_id][: num_chars[sorted_particle_id, test_obs_id]]
+                )
             )
+            ax.text(
+                0.05,
+                0.95,
+                f"{long_expression}",
+                transform=ax.transAxes,
+                fontsize=7,
+                va="top",
+                ha="left",
+                color="black",
+            )
+            ax.text(
+                0.95,
+                0.95,
+                f"{log_weight[sorted_particle_id, test_obs_id].item():.0f}",
+                transform=ax.transAxes,
+                fontsize=7,
+                va="top",
+                ha="right",
+                color="black",
+            )
+            for sample_id in range(num_samples):
+                ax.plot(
+                    torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                    obs_predictions[sample_id, sorted_particle_id, test_obs_id].cpu().detach(),
+                    color="C1",
+                    alpha=0.5,
+                )
+
+    for particle_id in range(num_particles):
+        axss[particle_id, 0].set_ylabel(f"Particle {particle_id}")
 
     util.save_fig(fig, path)
 

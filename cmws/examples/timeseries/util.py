@@ -59,7 +59,7 @@ def get_long_expression(expression):
         if char in base_kernel_chars:
             long_expression += char_to_long_char[char]
         elif char == "*":
-            long_expression += " ✖️ "
+            long_expression += " ⨉ "
         elif char == "+":
             long_expression += " + "
         else:
@@ -209,12 +209,12 @@ class Kernel(nn.Module):
         if kernel["op"] == "+":
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t += self.forward(x_1, x_2, v)
+                t = t + self.forward(x_1, x_2, v)
             return t
         elif kernel["op"] == "*":
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t *= self.forward(x_1, x_2, v)
+                t = t * self.forward(x_1, x_2, v)
             return t
         elif kernel["op"] == "Constant":
             batch_size, num_timesteps_1 = x_1.shape[:2]

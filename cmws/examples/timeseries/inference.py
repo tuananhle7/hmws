@@ -38,6 +38,7 @@ def get_elbo_single(discrete_latent, obs, generative_model, guide):
     return generative_model_log_prob - guide_log_prob
 
 
+@torch.enable_grad()
 def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
     """
     Args
@@ -82,7 +83,7 @@ def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
     # Log prob
     log_prob = guide_copy.log_prob_continuous(obs, discrete_latent, continuous_latent)
 
-    return continuous_latent, log_prob
+    return continuous_latent.detach(), log_prob.detach()
 
 
 def svi(num_iterations, obs, discrete_latent, generative_model, guide):
