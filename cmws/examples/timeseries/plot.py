@@ -3,6 +3,7 @@ import os
 import cmws
 import matplotlib.pyplot as plt
 import seaborn as sns
+import textwrap
 import torch
 from cmws import util
 from cmws.examples.timeseries import data, run
@@ -132,7 +133,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
             ax.text(
                 0.05,
                 0.95,
-                f"{long_expression}",
+                "\n".join(textwrap.wrap(long_expression, 20)),
                 transform=ax.transAxes,
                 fontsize=7,
                 va="top",
@@ -244,7 +245,7 @@ def main(args):
 
             # -- Test
             test_timeseries_dataset = data.TimeseriesDataset(device, test=True)
-            obs["test"], _ = test_timeseries_dataset[700:750]
+            obs["test"], _ = test_timeseries_dataset
 
             # -- Train
             train_timeseries_dataset = data.TimeseriesDataset(device, test=False)
