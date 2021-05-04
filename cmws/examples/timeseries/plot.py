@@ -63,22 +63,32 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_predictions_timeseries(path, generative_model, guide, obs):
+def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None):
     """
     Args:
         path (str)
         generative_model
         guide
         obs: [num_test_obs, num_timesteps]
+        memory
+        obs_id
     """
     num_samples = 2
     num_test_obs, num_timesteps = obs.shape
 
     # Sample latent
-    num_particles, num_svi_iterations = 10, 10
-    latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
-        num_particles, num_svi_iterations, obs, generative_model, guide
-    )
+    num_svi_iterations = 10
+    if memory is None:
+        num_particles = 10
+        latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
+            num_particles, num_svi_iterations, obs, generative_model, guide
+        )
+    else:
+        assert obs_id is not None
+        num_particles = memory.size
+        latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
+            num_svi_iterations, obs, obs_id, generative_model, guide, memory
+        )
     x, eos, _ = latent
     num_chars = lstm_util.get_num_timesteps(eos)
 
@@ -242,6 +252,14 @@ def main(args):
 
             # Plot
             if run_args.model_type == "timeseries":
+                plot_predictions_timeseries(
+                    f"{save_dir}/predictions/train/memory/{num_iterations}.png",
+                    generative_model,
+                    guide,
+                    obs["train"],
+                    memory,
+                    obs_id,
+                )
                 for mode in ["train", "test"]:
                     plot_predictions_timeseries(
                         f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
