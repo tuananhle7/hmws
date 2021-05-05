@@ -1,5 +1,6 @@
 import os
 
+import time
 import cmws
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -18,7 +19,9 @@ def plot_obs(ax, obs):
         ax
         obs [num_timesteps]
     """
-    ax.plot(obs.cpu().numpy(), color="C0")
+    if torch.is_tensor(obs):
+        obs = obs.cpu().numpy()
+    ax.plot(obs, color="C0")
     ax.set_ylim(-4, 4)
     ax.set_xticks([])
     ax.set_yticks([-4, 4])
@@ -74,7 +77,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
         memory
         obs_id
     """
-    num_samples = 2
+    num_samples = 1
     num_test_obs, num_timesteps = obs.shape
 
     # Sample latent
@@ -178,7 +181,8 @@ def main(args):
     util.logging.info(f"Plotting stats for all runs in the experiment: {checkpoint_paths}")
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
 
-    colors = {"cmws": "C0", "rws": "C1"}
+    # colors = {"cmws": "C0", "rws": "C1"}
+    colors = {0.0: "C0", 0.25: "C1", 0.5: "C2", 0.75: "C3", 1.0: "C4"}
     for checkpoint_path in checkpoint_paths:
         # Fix seed
         util.set_seed(1)
@@ -191,9 +195,22 @@ def main(args):
             generative_model, guide = model["generative_model"], model["guide"]
             num_iterations = len(stats.losses)
 
-            label = run_args.algorithm if run_args.seed == 1 else None
-            color = colors[run_args.algorithm]
-            plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
+            label = run.get_config_name(run_args)
+            if run_args.algorithm == "rws":
+                linestyle = "solid"
+            else:
+                if run_args.num_particles == 5:
+                    linestyle = "dotted"
+                else:
+                    linestyle = "dashed"
+            color = colors[run_args.insomnia]
+            plot_kwargs = {
+                "label": label,
+                "color": color,
+                "linestyle": linestyle,
+                "alpha": 0.8,
+                "linewidth": 1.5,
+            }
 
             # Logp
             ax = axs[0]
@@ -206,16 +223,20 @@ def main(args):
     ax = axs[0]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
-    ax.set_ylim(-5000, 1000)
+    # ax.set_ylim(-5000, 1000)
 
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
+    ax.set_ylim(0, 1000000)
     ax.legend()
     for ax in axs:
         # ax.set_xlim(0, 20000)
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, f"save/{args.experiment_name}/stats.png", dpi=200)
+    util.logging.info(
+        f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
+    )
     # return
 
     # Plot for all checkpoints
@@ -245,11 +266,11 @@ def main(args):
 
             # -- Test
             test_timeseries_dataset = data.TimeseriesDataset(device, test=True)
-            obs["test"], _ = test_timeseries_dataset
+            obs["test"], _ = test_timeseries_dataset[[99, 906, 920, 957, 697, 901, 1584]]
 
             # -- Train
             train_timeseries_dataset = data.TimeseriesDataset(device, test=False)
-            obs["train"], obs_id = train_timeseries_dataset[300:350]
+            obs["train"], obs_id = train_timeseries_dataset[[62, 188, 269, 510, 711, 1262, 1790]]
 
             # Plot
             if run_args.model_type == "timeseries":
@@ -273,6 +294,10 @@ def main(args):
             # Checkpoint doesn't exist
             util.logging.info(f"No checkpoint in {checkpoint_path}")
 
+    util.logging.info(
+        f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
+    )
+
 
 def get_parser():
     import argparse
@@ -293,6 +318,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         if args.repeat:
             while True:
+                # time.sleep(10)
                 main(args)
         else:
             main(args)
