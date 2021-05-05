@@ -18,28 +18,34 @@ def init_memory_groups(num_obs, memory_size, generative_model, check_unique=True
         [num_obs, memory_size, *event_shapes[i]]
     """
     util.logging.info("Initializing memory")
-    latent_groupss = []
-    for _ in tqdm(range(num_obs)):
-        while True:
-            latent_groups = generative_model.discrete_latent_sample([memory_size])
 
-            # Force latent_groups into a 1-element list if it is a tensor
-            if torch.is_tensor(latent_groups):
-                latent_groups = [latent_groups]
+    if not check_unique:
+        memory_groups = generative_model.discrete_latent_sample([num_obs, memory_size])
+        # Force memory_groups into a 1-element list if it is a tensor
+        if torch.is_tensor(memory_groups):
+            memory_groups = [memory_groups]
+        else:
+            memory_groups = list(memory_groups)
+    else:
+        latent_groupss = []
+        for _ in tqdm(range(num_obs)):
+            while True:
+                latent_groups = generative_model.discrete_latent_sample([memory_size])
 
-            latent_groups_are_unique = (
-                len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size
-            )
-            if not check_unique or latent_groups_are_unique:
-                latent_groupss.append(latent_groups)
-                break
+                # Force latent_groups into a 1-element list if it is a tensor
+                if torch.is_tensor(latent_groups):
+                    latent_groups = [latent_groups]
 
-    # Extract
-    num_groups = len(latent_groupss[0])
+                if len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size:
+                    latent_groupss.append(latent_groups)
+                    break
 
-    memory_groups = []
-    for group_id in range(num_groups):
-        memory_groups.append(torch.stack([latent_groupss[i][group_id] for i in range(num_obs)]))
+        # Extract
+        num_groups = len(latent_groupss[0])
+
+        memory_groups = []
+        for group_id in range(num_groups):
+            memory_groups.append(torch.stack([latent_groupss[i][group_id] for i in range(num_obs)]))
     return memory_groups
 
 
