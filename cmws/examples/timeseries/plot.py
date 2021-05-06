@@ -240,6 +240,7 @@ def main(args):
     # return
 
     # Plot for all checkpoints
+    plotted_something = False
     for checkpoint_path in checkpoint_paths:
         # Fix seed
         util.set_seed(1)
@@ -266,7 +267,7 @@ def main(args):
 
             # -- Test
             test_timeseries_dataset = data.TimeseriesDataset(device, test=True)
-            obs["test"], _ = test_timeseries_dataset[[99, 906, 920, 957, 697, 901, 1584]]
+            obs["test"], _ = test_timeseries_dataset[:]
 
             # -- Train
             train_timeseries_dataset = data.TimeseriesDataset(device, test=False)
@@ -290,6 +291,7 @@ def main(args):
                         obs[mode],
                     )
 
+            plotted_something = True
         else:
             # Checkpoint doesn't exist
             util.logging.info(f"No checkpoint in {checkpoint_path}")
@@ -297,6 +299,7 @@ def main(args):
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
     )
+    return plotted_something
 
 
 def get_parser():
@@ -318,7 +321,9 @@ if __name__ == "__main__":
     with torch.no_grad():
         if args.repeat:
             while True:
-                # time.sleep(10)
-                main(args)
+                plotted_something = main(args)
+                if not plotted_something:
+                    util.logging.info("Didn't plot anything ... waiting 30 seconds")
+                    time.sleep(30)
         else:
             main(args)
