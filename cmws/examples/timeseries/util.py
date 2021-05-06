@@ -18,6 +18,7 @@ char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
 gp_params_dim = 5
+epsilon = 1e-4
 
 
 def get_raw_expression(expression, device):
@@ -182,17 +183,17 @@ class Kernel(nn.Module):
             param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0])}
+            return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0]) + epsilon}
         elif char == "R":
-            return {"op": "RBF", "lengthscale_sq": F.softplus(param[1])}
+            return {"op": "RBF", "lengthscale_sq": F.softplus(param[1]) + epsilon}
         elif char == "E":
             return {
                 "op": "ExpSinSq",
-                "period": F.softplus(param[2]),
-                "lengthscale_sq": F.softplus(param[3]),
+                "period": F.softplus(param[2]) + epsilon,
+                "lengthscale_sq": F.softplus(param[3]) + epsilon,
             }
         if char == "C":
-            return {"op": "Constant", "const": F.softplus(param[4])}
+            return {"op": "Constant", "const": F.softplus(param[4]) + epsilon}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 
