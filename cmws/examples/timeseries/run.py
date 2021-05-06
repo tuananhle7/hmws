@@ -42,6 +42,9 @@ def get_args_parser():
     parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
     parser.add_argument("--test-num-particles", default=100, type=int, help=" ")
 
+    # Data
+    parser.add_argument("--full-training-data", action="store_true", help=" ")
+
     # Model
     parser.add_argument("--max-num-chars", default=20, type=int, help=" ")
     parser.add_argument("--lstm-hidden-dim", default=128, type=int, help=" ")

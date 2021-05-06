@@ -276,8 +276,15 @@ def main(args):
             obs["test"], _ = test_timeseries_dataset[:]
 
             # -- Train
-            train_timeseries_dataset = data.TimeseriesDataset(device, test=False)
-            obs["train"], obs_id = train_timeseries_dataset[:]
+            train_timeseries_dataset = data.TimeseriesDataset(
+                device, test=False, full_data=run_args.full_training_data
+            )
+            if run_args.full_training_data:
+                obs["train"], obs_id = train_timeseries_dataset[
+                    [62, 188, 269, 510, 711, 1262, 1790]
+                ]
+            else:
+                obs["train"], obs_id = train_timeseries_dataset[:]
 
             # Plot
             if run_args.model_type == "timeseries":

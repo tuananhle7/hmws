@@ -146,7 +146,7 @@ def train(model, optimizer, stats, args):
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.timeseries.data.get_timeseries_data_loader(
-                device, args.batch_size, test=False
+                device, args.batch_size, test=False, full_data=args.full_training_data
             )
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(

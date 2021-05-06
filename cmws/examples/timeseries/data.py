@@ -104,13 +104,15 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_timeseries_data_loader(device, batch_size, test=False):
+def get_timeseries_data_loader(device, batch_size, test=False, full_data=False):
     if test:
         shuffle = True
     else:
         shuffle = False
     return torch.utils.data.DataLoader(
-        TimeseriesDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
+        TimeseriesDataset(device, test=test, full_data=full_data),
+        batch_size=batch_size,
+        shuffle=shuffle,
     )
 
 
