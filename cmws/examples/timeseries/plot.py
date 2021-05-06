@@ -81,7 +81,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     num_test_obs, num_timesteps = obs.shape
 
     # Sample latent
-    num_svi_iterations = 10
+    num_svi_iterations = 0
     if memory is None:
         num_particles = 10
         latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
@@ -89,9 +89,12 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
         )
     else:
         assert obs_id is not None
-        num_particles = memory.size
-        latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
-            num_svi_iterations, obs, obs_id, generative_model, guide, memory
+        num_particles = 10
+        # latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
+        #     num_svi_iterations, obs, obs_id, generative_model, guide, memory
+        # )
+        latent, log_weight = cmws.examples.timeseries.inference.importance_sample_memory(
+            num_particles, obs, obs_id, generative_model, guide, memory
         )
     x, eos, _ = latent
     num_chars = lstm_util.get_num_timesteps(eos)

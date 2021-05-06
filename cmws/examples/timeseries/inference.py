@@ -233,3 +233,38 @@ def svi_memory(num_svi_iterations, obs, obs_id, generative_model, guide, memory)
     log_weight = generative_model_log_prob - guide_log_prob
 
     return latent, log_weight
+
+
+def importance_sample_memory(num_particles, obs, obs_id, generative_model, guide, memory):
+    """
+    Args
+        num_particles
+        obs [batch_size, num_timesteps]
+        obs_id [batch_size]
+        generative_model
+        guide
+        memory
+
+    Returns
+        latent
+            raw_expression [memory_size, batch_size, max_num_chars]
+            eos [memory_size, batch_size, max_num_chars]
+            raw_gp_params [memory_size, batch_size, max_num_chars, gp_params_dim]
+        log_marginal_joint [memory_size, batch_size]
+    """
+    # Sample discrete latent
+    # [memory_size, batch_size, ...]
+    discrete_latent = memory.select(obs_id)
+
+    # COMPUTE SCORES s_i = log p(d_i, x) for i  {1, ..., M}
+    # [memory_size, batch_size]
+    log_marginal_joint = cmws.losses.get_log_marginal_joint(
+        generative_model, guide, discrete_latent, obs, num_particles
+    )
+
+    continuous_latent = guide.sample_continuous(obs, discrete_latent)
+
+    # Combine latents
+    latent = discrete_latent[0], discrete_latent[1], continuous_latent
+
+    return latent, log_marginal_joint
