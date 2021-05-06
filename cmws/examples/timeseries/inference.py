@@ -235,10 +235,13 @@ def svi_memory(num_svi_iterations, obs, obs_id, generative_model, guide, memory)
     return latent, log_weight
 
 
-def importance_sample_memory(num_particles, obs, obs_id, generative_model, guide, memory):
+def importance_sample_memory(
+    num_particles, num_svi_iterations, obs, obs_id, generative_model, guide, memory
+):
     """
     Args
         num_particles
+        num_svi_iterations
         obs [batch_size, num_timesteps]
         obs_id [batch_size]
         generative_model
@@ -252,6 +255,10 @@ def importance_sample_memory(num_particles, obs, obs_id, generative_model, guide
             raw_gp_params [memory_size, batch_size, max_num_chars, gp_params_dim]
         log_marginal_joint [memory_size, batch_size]
     """
+    # Extract
+    batch_size = obs.shape[0]
+    memory_size = memory.size
+
     # Sample discrete latent
     # [memory_size, batch_size, ...]
     discrete_latent = memory.select(obs_id)
@@ -262,7 +269,14 @@ def importance_sample_memory(num_particles, obs, obs_id, generative_model, guide
         generative_model, guide, discrete_latent, obs, num_particles
     )
 
-    continuous_latent = guide.sample_continuous(obs, discrete_latent)
+    # Sample svi-optimized q(z_c | z_d, x)
+    # -- Expand obs
+    # [memory_size, batch_size, num_timesteps]
+    obs_expanded = obs[None].expand([memory_size, batch_size, timeseries_data.num_timesteps])
+    # -- SVI
+    continuous_latent, _ = svi(
+        num_svi_iterations, obs_expanded, discrete_latent, generative_model, guide
+    )
 
     # Combine latents
     latent = discrete_latent[0], discrete_latent[1], continuous_latent
