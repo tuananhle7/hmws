@@ -293,7 +293,8 @@ class GenerativeModel(nn.Module):
                             : num_base_kernels_flattened[sample_id, element_id],
                         ],
                     )(x_1, x_2)[0]
-                except timeseries_util.ParsingError:
+                except timeseries_util.ParsingError as e:
+                    cmws.util.logging.info(f"Parsing error: {e}")
                     covariance_matrix_se = identity_matrix
                     zero_obs_prob[sample_id, element_id] = True
 
@@ -316,7 +317,7 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).log_prob(obs_expanded)
         except Exception as e:
-            cmws.util.logging.info(f"MVN error: {e}")
+            cmws.util.logging.info(f"MVN log prob error: {e}")
             obs_log_prob = torch.ones((num_samples, num_elements), device=self.device) * -1e6
 
         # -- Mask out zero log probs
@@ -462,7 +463,7 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).sample(sample_shape)
         except Exception as e:
-            cmws.util.logging.info(f"MVN error: {e}")
+            cmws.util.logging.info(f"MVN sample error: {e}")
             obs = torch.zeros(
                 *[*sample_shape, *shape, timeseries_data.num_timesteps], device=self.device
             )
@@ -543,7 +544,7 @@ class GenerativeModel(nn.Module):
             predictive_dist = cmws.util.condition_mvn(joint_dist, obs)
             obs_predictions = predictive_dist.sample(sample_shape)
         except Exception as e:
-            cmws.util.logging.info(f"MVN error: {e}")
+            cmws.util.logging.info(f"MVN sample predictions error: {e}")
             obs_predictions = torch.zeros(
                 *[*sample_shape, *shape, timeseries_data.num_timesteps], device=self.device
             )
