@@ -71,7 +71,7 @@ def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
     # Optimization loop
     for iteration in range(num_iterations):
         optimizer.zero_grad()
-        loss = get_elbo_single(discrete_latent, obs, generative_model, guide_copy)
+        loss = -get_elbo_single(discrete_latent, obs, generative_model, guide_copy)
         loss.backward()
         optimizer.step()
 
