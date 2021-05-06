@@ -267,7 +267,11 @@ def init(run_args, device, fast=False):
         # Memory
         if "mws" in run_args.algorithm:
             memory = cmws.memory.Memory(
-                len(data.TimeseriesDataset(device, test=False)),
+                len(
+                    data.TimeseriesDataset(
+                        device, test=False, full_data=run_args.full_training_data
+                    )
+                ),
                 run_args.memory_size,
                 generative_model,
                 check_unique=not fast,
