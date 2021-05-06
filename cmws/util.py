@@ -41,8 +41,11 @@ def get_checkpoint_path(experiment_name, config_name, checkpoint_iteration=-1):
 
 def get_checkpoint_paths(experiment_name, checkpoint_iteration=-1):
     save_dir = f"./save/{experiment_name}"
-    for config_name in sorted(os.listdir(save_dir)):
-        yield get_checkpoint_path(experiment_name, config_name, checkpoint_iteration)
+    if Path(save_dir).exists():
+        for config_name in sorted(os.listdir(save_dir)):
+            yield get_checkpoint_path(experiment_name, config_name, checkpoint_iteration)
+    else:
+        return []
 
 
 def sqrt(x):
@@ -208,7 +211,7 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
         while True:
             jitter_new = jitter[bad_batch_id] * (10 ** exponents[bad_batch_id])
             exponents[bad_batch_id] += 1
-            if exponents[bad_batch_id].item() == 10:
+            if jitter_new > 0.1:
                 raise error_1
             covariance_matrix.view((num_elements, dim, dim))[bad_batch_id].diagonal(
                 dim1=-2, dim2=-1
