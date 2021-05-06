@@ -357,13 +357,13 @@ class GenerativeModel(nn.Module):
         # Expand discrete
         # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
         raw_expression_expanded = (
-            raw_expression.view(-1, self.max_num_chars)[None]
+            raw_expression.reshape(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
             .view([*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
         # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
         eos_expanded = (
-            eos.view(-1, self.max_num_chars)[None]
+            eos.reshape(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
             .view([*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
@@ -903,8 +903,8 @@ class Guide(nn.Module):
 
         # Sample continuous
         # -- Flatten discrete latents
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_expression_flattened = raw_expression.reshape(-1, self.max_num_chars)
+        eos_flattened = eos.reshape(-1, self.max_num_chars)
 
         # -- Compute num base kernels
         # [num_discrete_elements * num_elements]
