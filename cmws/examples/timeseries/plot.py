@@ -275,14 +275,15 @@ def main(args):
 
             # Plot
             if run_args.model_type == "timeseries":
-                plot_predictions_timeseries(
-                    f"{save_dir}/predictions/train/memory/{num_iterations}.png",
-                    generative_model,
-                    guide,
-                    obs["train"],
-                    memory,
-                    obs_id,
-                )
+                if memory is not None:
+                    plot_predictions_timeseries(
+                        f"{save_dir}/predictions/train/memory/{num_iterations}.png",
+                        generative_model,
+                        guide,
+                        obs["train"],
+                        memory,
+                        obs_id,
+                    )
                 for mode in ["train", "test"]:
                     plot_predictions_timeseries(
                         f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
