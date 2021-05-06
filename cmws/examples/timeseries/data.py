@@ -92,6 +92,8 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
         else:
             self.obs = torch.tensor(train_obs, device=self.device).float()
+            if not full_data:
+                self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
         self.num_data = len(self.obs)
         self.obs_id = torch.arange(self.num_data, device=device)
 
