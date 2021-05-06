@@ -72,7 +72,6 @@ def get_train_test_data():
 
 class TimeseriesDataset(torch.utils.data.Dataset):
     """Loads or generates a dataset
-    # Uses ~1.2M (test) / 120MB (train)
 
     Args
         device
@@ -82,13 +81,15 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         seed (int): only used for generation
     """
 
-    def __init__(self, device, test=False):
+    def __init__(self, device, test=False, full_data=False):
         self.device = device
         self.test = test
         train_obs, test_obs = get_train_test_data()
 
         if self.test:
             self.obs = torch.tensor(test_obs, device=self.device).float()
+            if not full_data:
+                self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
         else:
             self.obs = torch.tensor(train_obs, device=self.device).float()
         self.num_data = len(self.obs)
