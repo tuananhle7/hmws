@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from cmws.examples.timeseries.models import timeseries
+from cmws.examples.timeseries import data
 from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
@@ -266,7 +267,10 @@ def init(run_args, device, fast=False):
         # Memory
         if "mws" in run_args.algorithm:
             memory = cmws.memory.Memory(
-                2000, run_args.memory_size, generative_model, check_unique=not fast
+                len(data.TimeseriesDataset(device, test=False)),
+                run_args.memory_size,
+                generative_model,
+                check_unique=not fast,
             ).to(device)
 
     # Model dict
