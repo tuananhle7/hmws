@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import textwrap
 import torch
+import numpy as np
 from cmws import util
 from cmws.examples.timeseries import data, run
 from cmws.examples.timeseries import util as timeseries_util
@@ -45,7 +46,9 @@ def plot_stats(path, stats):
 
     # Loss
     ax = ax_losses
-    ax.plot(stats.losses)
+    losses = np.array(stats.losses)
+    losses[losses > 1000] = np.nan
+    ax.plot(losses)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Loss")
     sns.despine(ax=ax, trim=True)
