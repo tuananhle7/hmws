@@ -211,30 +211,36 @@ class Kernel(nn.Module):
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
                 t = t + self.forward(x_1, x_2, v)
-            return t
+            result = t
         elif kernel["op"] == "*":
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
                 t = t * self.forward(x_1, x_2, v)
-            return t
+            result = t
         elif kernel["op"] == "Constant":
             batch_size, num_timesteps_1 = x_1.shape[:2]
             num_timesteps_2 = x_2.shape[-1]
-            return (
+            result = (
                 torch.ones((batch_size, num_timesteps_1, num_timesteps_2), device=x_1.device)
                 * kernel["const"]
             )
         elif kernel["op"] == "WhiteNoise":
-            return (x_1 == x_2).float() * kernel["scale_sq"]
+            result = (x_1 == x_2).float() * kernel["scale_sq"]
         elif kernel["op"] == "RBF":
             l2 = kernel["lengthscale_sq"]
-            return (-((x_1 - x_2) ** 2) / (2 * l2)).exp()
+            result = (-((x_1 - x_2) ** 2) / (2 * l2)).exp()
         elif kernel["op"] == "ExpSinSq":
             t = kernel["period"]
             l2 = kernel["lengthscale_sq"]
-            return (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp()
+            result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp()
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
+
+        # Test nan
+        if torch.isnan(result).any():
+            raise RuntimeError("Covariance nan")
+
+        return result
 
 
 # Init, saving, etc
