@@ -211,7 +211,7 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
         while True:
             jitter_new = jitter[bad_batch_id] * (10 ** exponents[bad_batch_id])
             exponents[bad_batch_id] += 1
-            if jitter_new > 0.1:
+            if jitter_new > 1.0:
                 raise error_1
             covariance_matrix.view((num_elements, dim, dim))[bad_batch_id].diagonal(
                 dim1=-2, dim2=-1
