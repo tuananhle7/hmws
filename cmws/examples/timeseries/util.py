@@ -9,13 +9,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from cmws.examples.timeseries.models import timeseries
+from cmws.examples.timeseries import data
 from cmws.util import logging
+import cmws.examples.timeseries.expression_prior_pretraining
 
 base_kernel_chars = {"W", "R", "E", "C"}
+char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "C": "C"}
 char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
 gp_params_dim = 5
+epsilon = 1e-4
 
 
 def get_raw_expression(expression, device):
@@ -45,6 +49,26 @@ def get_expression(raw_expression):
     return expression
 
 
+def get_long_expression(expression):
+    """
+    Args
+        expression (str)
+
+    Returns (str)
+    """
+    long_expression = ""
+    for char in expression:
+        if char in base_kernel_chars:
+            long_expression += char_to_long_char[char]
+        elif char == "*":
+            long_expression += " × "
+        elif char == "+":
+            long_expression += " + "
+        else:
+            long_expression += char
+    return long_expression
+
+
 def count_base_kernels(raw_expression):
     """How many base kernels are there in the raw_expression?
 
@@ -59,6 +83,10 @@ def count_base_kernels(raw_expression):
     return result
 
 
+class ParsingError(Exception):
+    pass
+
+
 class Kernel(nn.Module):
     """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | C
     Adapted from
@@ -66,7 +94,7 @@ class Kernel(nn.Module):
 
     Args
         expression (str) consists of characters *, +, (, ) or
-            W = WhiteNoie
+            W = WhiteNoise
             R = SquaredExponential
             E = Periodic
             C = Constant
@@ -88,10 +116,14 @@ class Kernel(nn.Module):
 
         self.value = self.getValue()
 
+    @property
+    def device(self):
+        return self.raw_params.device
+
     def getValue(self):
         value = self.parseExpression()
         if self.hasNext():
-            raise Exception(
+            raise ParsingError(
                 "Unexpected character found: '" + self.peek() + "' at index " + str(self.index)
             )
         return value
@@ -139,7 +171,7 @@ class Kernel(nn.Module):
             self.index += 1
             value = self.parseExpression()
             if self.peek() != ")":
-                raise Exception("No closing parenthesis found at character " + str(self.index))
+                raise ParsingError("No closing parenthesis found at character " + str(self.index))
             self.index += 1
             return value
         else:
@@ -148,22 +180,23 @@ class Kernel(nn.Module):
     def parseValue(self):
         char = self.peek()
         self.index += 1
-        param = self.raw_params[self.raw_params_index]
-        self.raw_params_index += 1
+        if self.raw_params_index < len(self.raw_params):
+            param = self.raw_params[self.raw_params_index]
+            self.raw_params_index += 1
         if char == "W":
-            return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0])}
+            return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0]) + 1e-4}
         elif char == "R":
-            return {"op": "RBF", "lengthscale_sq": F.softplus(param[1])}
+            return {"op": "RBF", "lengthscale_sq": F.softplus(param[1]) + 1e-4}
         elif char == "E":
             return {
                 "op": "ExpSinSq",
-                "period": F.softplus(param[2]),
-                "lengthscale_sq": F.softplus(param[3]),
+                "period": F.softplus(param[2]) + 1e-1,
+                "lengthscale_sq": F.softplus(param[3]) + 1e-4,
             }
         if char == "C":
-            return {"op": "Constant", "const": F.softplus(param[4])}
+            return {"op": "Constant", "const": F.softplus(param[4]) + 1e-2}
         else:
-            raise NotImplementedError("Cannot parse char: " + str(char))
+            raise ParsingError("Cannot parse char: " + str(char))
 
     def forward(self, x_1, x_2, kernel=None):
         """
@@ -173,37 +206,46 @@ class Kernel(nn.Module):
 
         Returns [batch_size, num_timesteps_1, num_timesteps_2]
         """
-        # batch_size = x_1.size(0)
-        n = x_1.size(1)
         if kernel is None:
             kernel = self.value
         if kernel["op"] == "+":
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t += self.forward(x_1, x_2, v)
-            return t
+                t = t + self.forward(x_1, x_2, v)
+            result = t
         elif kernel["op"] == "*":
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t *= self.forward(x_1, x_2, v)
-            return t
+                t = t * self.forward(x_1, x_2, v)
+            result = t
         elif kernel["op"] == "Constant":
-            return kernel["const"].repeat(1, n)
+            batch_size, num_timesteps_1 = x_1.shape[:2]
+            num_timesteps_2 = x_2.shape[-1]
+            result = (
+                torch.ones((batch_size, num_timesteps_1, num_timesteps_2), device=x_1.device)
+                * kernel["const"]
+            )
         elif kernel["op"] == "WhiteNoise":
-            return (x_1 == x_2).float() * kernel["scale_sq"]
+            result = (x_1 == x_2).float() * kernel["scale_sq"]
         elif kernel["op"] == "RBF":
             l2 = kernel["lengthscale_sq"]
-            return (-((x_1 - x_2) ** 2) / (2 * l2)).exp()
+            result = (-((x_1 - x_2) ** 2) / (2 * l2)).exp()
         elif kernel["op"] == "ExpSinSq":
             t = kernel["period"]
             l2 = kernel["lengthscale_sq"]
-            return (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp()
+            result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp()
         else:
-            raise NotImplementedError()
+            raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
+
+        # Test nan
+        if torch.isnan(result).any():
+            raise RuntimeError("Covariance nan")
+
+        return result
 
 
 # Init, saving, etc
-def init(run_args, device):
+def init(run_args, device, fast=False):
     memory = None
     if run_args.model_type == "timeseries":
         # Generative model
@@ -216,9 +258,24 @@ def init(run_args, device):
             max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
         ).to(device)
 
+        if not fast:
+            # Pretrain the prior
+            cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
+                generative_model, batch_size=10, num_iterations=2000
+            )
+
         # Memory
         if "mws" in run_args.algorithm:
-            memory = cmws.memory.Memory(2000, run_args.memory_size, generative_model).to(device)
+            memory = cmws.memory.Memory(
+                len(
+                    data.TimeseriesDataset(
+                        device, test=False, full_data=run_args.full_training_data
+                    )
+                ),
+                run_args.memory_size,
+                generative_model,
+                check_unique=not fast,
+            ).to(device)
 
     # Model dict
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
@@ -263,7 +320,7 @@ def load_checkpoint(path, device, num_tries=3):
             logging.info(f"Waiting for {wait_time} seconds")
             time.sleep(wait_time)
     run_args = checkpoint["run_args"]
-    model, optimizer, stats = init(run_args, device)
+    model, optimizer, stats = init(run_args, device, fast=True)
 
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
     guide.load_state_dict(checkpoint["guide_state_dict"])

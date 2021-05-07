@@ -25,19 +25,28 @@ def step_lstm(lstm, input_, h_0_c_0=None):
 def get_num_timesteps(eos):
     """
     Args
-        eos [batch_size, max_num_timesteps]
+        eos [*shape, max_num_timesteps]
 
-    Returns [batch_size]
+    Returns [*shape]
     """
-    batch_size, max_num_timesteps = eos.shape
+    # Extract
+    shape = eos.shape[:-1]
+    max_num_timesteps = eos.shape[-1]
+    num_elements = cmws.util.get_num_elements(shape)
     device = eos.device
+
+    # Flatten
+    eos_flattened = eos.reshape(-1, max_num_timesteps)
+
     num_timesteps = []
-    for batch_id in range(batch_size):
-        if torch.all(eos[batch_id] == 0):
+    for element_id in range(num_elements):
+        if torch.all(eos_flattened[element_id] == 0):
             num_timesteps.append(max_num_timesteps)
         else:
-            num_timesteps.append((eos[batch_id] == 1).nonzero(as_tuple=False)[0].item() + 1)
-    return torch.tensor(num_timesteps, device=device)
+            num_timesteps.append(
+                (eos_flattened[element_id] == 1).nonzero(as_tuple=False)[0].item() + 1
+            )
+    return torch.tensor(num_timesteps, device=device).view(*shape)
 
 
 class TimeseriesDistribution:
@@ -85,9 +94,10 @@ class TimeseriesDistribution:
     def device(self):
         return next(iter(self.lstm.parameters())).device
 
-    def sample(self, sample_shape=torch.Size(), num_timesteps=None, warning_enabled=True):
+    def _sample(self, reparam, sample_shape=torch.Size(), num_timesteps=None, warning_enabled=True):
         """
         Args:
+            reparam (bool)
             sample_shape:
             num_timesteps: None or [*sample_shape, batch_size]
                 NOTE: if provided, will sample for num_timesteps regardless of whether
@@ -99,6 +109,8 @@ class TimeseriesDistribution:
             Optionally
             eos [*sample_shape(, batch_size), max_num_timesteps]
         """
+        if reparam:
+            assert self.x_type == "continuous"
         num_samples = cmws.util.get_num_elements(sample_shape)
         if num_timesteps is None:  # use EOS to end
             if not self.lstm_eos:
@@ -171,7 +183,10 @@ class TimeseriesDistribution:
 
             # sample
             # [num_samples( * batch_size)] or [num_samples( * batch_size), x_dim]
-            x.append(x_dist.sample())
+            if reparam:
+                x.append(x_dist.rsample())
+            else:
+                x.append(x_dist.sample())
 
             if num_timesteps is None:  # use EOS to end
                 eos_logit = linear_out[..., -1]
@@ -321,6 +336,50 @@ class TimeseriesDistribution:
                 return x_final, eos_final
             else:
                 return x_final
+
+    def sample(self, sample_shape=torch.Size(), num_timesteps=None, warning_enabled=True):
+        """NOT reparameterized
+
+        Args:
+            sample_shape:
+            num_timesteps: None or [*sample_shape, batch_size]
+                NOTE: if provided, will sample for num_timesteps regardless of whether
+                lstm_eos is True or not. if not provided, the length will be dicated by
+                the end-of-signal indicator.
+        Returns:
+            x [*sample_shape(, batch_size), max_num_timesteps(, x_dim)]
+
+            Optionally
+            eos [*sample_shape(, batch_size), max_num_timesteps]
+        """
+        return self._sample(
+            False,
+            sample_shape=sample_shape,
+            num_timesteps=num_timesteps,
+            warning_enabled=warning_enabled,
+        )
+
+    def rsample(self, sample_shape=torch.Size(), num_timesteps=None, warning_enabled=True):
+        """Reparameterized
+
+        Args:
+            sample_shape:
+            num_timesteps: None or [*sample_shape, batch_size]
+                NOTE: if provided, will sample for num_timesteps regardless of whether
+                lstm_eos is True or not. if not provided, the length will be dicated by
+                the end-of-signal indicator.
+        Returns:
+            x [*sample_shape(, batch_size), max_num_timesteps(, x_dim)]
+
+            Optionally
+            eos [*sample_shape(, batch_size), max_num_timesteps]
+        """
+        return self._sample(
+            True,
+            sample_shape=sample_shape,
+            num_timesteps=num_timesteps,
+            warning_enabled=warning_enabled,
+        )
 
     def log_prob(self, x, eos=None, num_timesteps=None):
         """

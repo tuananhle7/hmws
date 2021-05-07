@@ -41,8 +41,11 @@ def get_checkpoint_path(experiment_name, config_name, checkpoint_iteration=-1):
 
 def get_checkpoint_paths(experiment_name, checkpoint_iteration=-1):
     save_dir = f"./save/{experiment_name}"
-    for config_name in sorted(os.listdir(save_dir)):
-        yield get_checkpoint_path(experiment_name, config_name, checkpoint_iteration)
+    if Path(save_dir).exists():
+        for config_name in sorted(os.listdir(save_dir)):
+            yield get_checkpoint_path(experiment_name, config_name, checkpoint_iteration)
+    else:
+        return []
 
 
 def sqrt(x):
@@ -174,6 +177,112 @@ class CategoricalPlusOne(torch.distributions.Categorical):
 
     def log_prob(self, value):
         return super().log_prob(value - 1)
+
+
+def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
+    """Numerically stable multivariate normal distribution
+
+    Args
+        loc [*shape, dim]
+        covariance_matrix [*shape, dim, dim]
+
+    Returns distribution with batch_shape [*shape] and event_shape [dim]
+    """
+    # Extract
+    shape = loc.shape[:-1]
+    dim = loc.shape[-1]
+    device = loc.device
+    num_elements = get_num_elements(shape)
+
+    # Extracting bad batch id
+    def get_bad_batch_id(error_str):
+        end = error_str.find("U(") - 2
+        start = error_str.find("batch ") + len("batch ")
+        return int(error_str[start:end])
+
+    try:
+        return torch.distributions.MultivariateNormal(loc, covariance_matrix)
+    except RuntimeError as error_1:
+        bad_batch_id = get_bad_batch_id(str(error_1))
+        jitter = 1e-6 * torch.ones(num_elements, device=device)
+        jitter_prev = torch.zeros(num_elements, device=device)
+        exponents = torch.zeros(num_elements, device=device)
+
+        while True:
+            jitter_new = jitter[bad_batch_id] * (10 ** exponents[bad_batch_id])
+            exponents[bad_batch_id] += 1
+            if jitter_new > 1.0:
+                raise error_1
+            covariance_matrix.view((num_elements, dim, dim))[bad_batch_id].diagonal(
+                dim1=-2, dim2=-1
+            ).add_(jitter_new - jitter_prev[bad_batch_id])
+            jitter_prev[bad_batch_id] = jitter_new
+            try:
+                if verbose:
+                    logging.warn(
+                        f"WARNING: cov not p.d., added jitter of {jitter_new} to batch "
+                        f"{bad_batch_id} of the diagonal"
+                    )
+                return torch.distributions.MultivariateNormal(loc, covariance_matrix)
+            except RuntimeError as error_2:
+                bad_batch_id = get_bad_batch_id(str(error_2))
+                continue
+        raise error_1
+
+
+def condition_mvn(multivariate_normal_dist, y):
+    """Given a joint multivariate distribution
+    p(y, x) = N([y, x] | [μ_y, μ_x], [[Σ_yy, Σ_yx], [Σ_xy, Σ_xx]]),
+    return the conditional distribution conditioned on a subset of values y,
+    p(x | y) = N(x | μ_{x|y}, Σ_{x|y})
+
+    Reference
+    https://www.robots.ox.ac.uk/~mosb/teaching/AIMS_CDT/Gaussian_identities.pdf
+
+    Args
+        multivariate_normal_dist: distribution with batch_shape [*shape] and event_shape [dim]
+            with per element
+            mean
+                [mean_y
+                 mean_x]
+            and cov
+                [cov_yy, cov_yx
+                 cov_xy, cov_xx]
+
+        y [*shape, dim_y]
+
+    Returns distribution with batch_shape [*shape] and event_shape [dim - dim_y]
+    """
+    # Extract
+    dim_y = y.shape[-1]
+    loc, cov = multivariate_normal_dist.mean, multivariate_normal_dist.covariance_matrix
+
+    # Extract component locs and covs
+    loc_y = loc[..., :dim_y]
+    loc_x = loc[..., dim_y:]
+    cov_yy = cov[..., :dim_y, :dim_y]
+    cov_yx = cov[..., :dim_y, dim_y:]
+    cov_xx = cov[..., dim_y:, dim_y:]
+    cov_xy = cov[..., dim_y:, :dim_y]
+
+    # Compute new params
+    # -- Compute matmul(inv(cov_yy), y - loc_y)
+    # [*shape, dim_y]
+    temp_1 = torch.solve((y - loc_y)[..., None], cov_yy)[0][..., 0]
+
+    # -- Compute matmul(inv(cov_yy), cov_yx)
+    # [*shape, dim_y, dim_x]
+    temp_2 = torch.solve(cov_yx, cov_yy)[0]
+
+    # -- Compute new loc
+    # [*shape, dim_x]
+    loc_new = loc_x + torch.einsum("...xy,...y->...x", cov_xy, temp_1)
+
+    # -- Compute new cov
+    # [*shape, dim_x, dim_x]
+    cov_new = cov_xx - torch.einsum("...zy,...yx->...zx", cov_xy, temp_2)
+
+    return get_multivariate_normal_dist(loc_new, covariance_matrix=cov_new)
 
 
 # Plotting

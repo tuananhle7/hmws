@@ -82,7 +82,7 @@ class GenerativeModel(nn.Module):
         # Run LSTM
         # [1, num_elements, lstm_hidden_size]
         _, (h, _) = self.expression_lstm(lstm_input)
-        return h[0].view(*[*shape, self.lstm_hidden_dim])
+        return h[0].view([*shape, self.lstm_hidden_dim])
 
     def get_num_base_kernels(self, raw_expression, eos):
         """
@@ -97,8 +97,8 @@ class GenerativeModel(nn.Module):
         num_elements = cmws.util.get_num_elements(shape)
 
         # Flatten
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_expression_flattened = raw_expression.reshape(-1, self.max_num_chars)
+        eos_flattened = eos.reshape(-1, self.max_num_chars)
 
         # Compute num timesteps
         # [num_elements]
@@ -111,7 +111,7 @@ class GenerativeModel(nn.Module):
                     raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
                 )
             )
-        return torch.tensor(result, device=self.device).long().view(*shape)
+        return torch.tensor(result, device=self.device).long().view(shape)
 
     def latent_log_prob(self, latent):
         """Prior log p(z)
@@ -129,8 +129,8 @@ class GenerativeModel(nn.Module):
         shape = raw_expression.shape[:-1]
 
         # Flatten
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_expression_flattened = raw_expression.reshape(-1, self.max_num_chars)
+        eos_flattened = eos.reshape(-1, self.max_num_chars)
         raw_gp_params_flattened = raw_gp_params.view(
             -1, self.max_num_chars, timeseries_util.gp_params_dim
         )
@@ -138,7 +138,7 @@ class GenerativeModel(nn.Module):
         # Expression log prob
         expression_log_prob = self.expression_dist.log_prob(
             raw_expression_flattened, eos=eos_flattened
-        ).view(*shape)
+        ).view(shape)
 
         # GP params log prob
         num_base_kernels_flattened = self.get_num_base_kernels(
@@ -160,7 +160,7 @@ class GenerativeModel(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*shape)
+            .view(shape)
         )
 
         return expression_log_prob + gp_params_log_prob
@@ -205,7 +205,7 @@ class GenerativeModel(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .sample(num_timesteps=num_base_kernels_flattened)
-            .view(*[*sample_shape, self.max_num_chars, timeseries_util.gp_params_dim])
+            .view([*sample_shape, self.max_num_chars, timeseries_util.gp_params_dim])
         )
         return raw_expression, eos, raw_gp_params
 
@@ -248,10 +248,10 @@ class GenerativeModel(nn.Module):
 
         # Log p(x | z)
         # -- Create x_1 and x_2
-        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_1 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
             None, :, None
         ].expand(1, timeseries_data.num_timesteps, 1)
-        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_2 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
             None, None, :
         ].expand(1, 1, timeseries_data.num_timesteps)
 
@@ -259,12 +259,15 @@ class GenerativeModel(nn.Module):
         identity_matrix = torch.eye(timeseries_data.num_timesteps, device=self.device).float()
 
         # -- Flatten
-        raw_expression_flattened = raw_expression.view(num_samples, num_elements, -1)
-        eos_flattened = eos.view(num_samples, num_elements, -1)
+        raw_expression_flattened = raw_expression.reshape(num_samples, num_elements, -1)
+        eos_flattened = eos.reshape(num_samples, num_elements, -1)
         raw_gp_params_flattened = raw_gp_params.view(
             num_samples, num_elements, self.max_num_chars, -1
         )
         obs_flattened = obs.reshape(num_elements, -1)
+
+        # -- Compute num timesteps
+        num_timesteps_flattened = lstm_util.get_num_timesteps(eos_flattened)
 
         # -- Compute num base kernels
         num_base_kernels_flattened = self.get_num_base_kernels(
@@ -279,15 +282,18 @@ class GenerativeModel(nn.Module):
         for sample_id in range(num_samples):
             for element_id in range(num_elements):
                 try:
+                    raw_expression_se = raw_expression_flattened[sample_id, element_id][
+                        : num_timesteps_flattened[sample_id, element_id]
+                    ]
                     covariance_matrix_se = timeseries_util.Kernel(
-                        timeseries_util.get_expression(raw_expression[sample_id, element_id]),
+                        timeseries_util.get_expression(raw_expression_se),
                         raw_gp_params_flattened[
                             sample_id,
                             element_id,
                             : num_base_kernels_flattened[sample_id, element_id],
                         ],
                     )(x_1, x_2)[0]
-                except Exception:
+                except timeseries_util.ParsingError:
                     covariance_matrix_se = identity_matrix
                     zero_obs_prob[sample_id, element_id] = True
 
@@ -305,15 +311,18 @@ class GenerativeModel(nn.Module):
         )
 
         # -- Compute obs log prob
-        obs_log_prob = torch.distributions.MultivariateNormal(
-            loc, covariance_matrix=covariance_matrix
-        ).log_prob(obs_expanded)
+        try:
+            obs_log_prob = cmws.util.get_multivariate_normal_dist(
+                loc, covariance_matrix=covariance_matrix
+            ).log_prob(obs_expanded)
+        except Exception as e:
+            raise RuntimeError(f"MVN log prob error: {e}")
 
         # -- Mask out zero log probs
         obs_log_prob[zero_obs_prob] = -1e6
 
         # -- Reshape
-        obs_log_prob = obs_log_prob.view(*[*sample_shape, *shape])
+        obs_log_prob = obs_log_prob.view([*sample_shape, *shape])
 
         return latent_log_prob + obs_log_prob
 
@@ -343,51 +352,20 @@ class GenerativeModel(nn.Module):
         # num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
         num_continuous_elements = cmws.util.get_num_elements(continuous_shape)
 
-        # Flatten
-        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
-        raw_expression_flattened = (
-            raw_expression.view(-1, self.max_num_chars)[None]
+        # Expand discrete
+        # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
+        raw_expression_expanded = (
+            raw_expression.reshape(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
-            .reshape(-1, self.max_num_chars)
+            .view([*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
-        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars]
-        eos_flattened = (
-            eos.view(-1, self.max_num_chars)[None]
+        # [*continuous_shape, *discrete_shape, *shape, max_num_chars]
+        eos_expanded = (
+            eos.reshape(-1, self.max_num_chars)[None]
             .expand(num_continuous_elements, -1, self.max_num_chars)
-            .reshape(-1, self.max_num_chars)
+            .view([*continuous_shape, *discrete_shape, *shape, self.max_num_chars])
         )
-        # [num_continuous_elements * num_discrete_elements * num_elements, max_num_chars,
-        #  gp_params_dim]
-        raw_gp_params_flattened = raw_gp_params.view(
-            -1, self.max_num_chars, timeseries_util.gp_params_dim,
-        )
-
-        # GP params log prob
-        # -- Compute num base kernels
-        # [num_continuous_elements * num_discrete_elements * num_elements]
-        num_base_kernels_flattened = self.get_num_base_kernels(
-            raw_expression_flattened, eos_flattened
-        )
-
-        # -- Compute expression embedding
-        # [num_continuous_elements * num_discrete_elements * num_elements, expression_embedding_dim]
-        expression_embedding_flattened = self.get_expression_embedding(
-            raw_expression_flattened, eos_flattened
-        )
-
-        return (
-            lstm_util.TimeseriesDistribution(
-                "continuous",
-                timeseries_util.gp_params_dim,
-                expression_embedding_flattened,
-                self.gp_params_lstm,
-                self.gp_params_extractor,
-                lstm_eos=False,
-                max_num_timesteps=self.max_num_chars,
-            )
-            .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*[*continuous_shape, *discrete_shape, *shape])
-        )
+        return self.log_prob((raw_expression_expanded, eos_expanded, raw_gp_params), obs)
 
     @torch.no_grad()
     def sample(self, sample_shape=[]):
@@ -408,60 +386,162 @@ class GenerativeModel(nn.Module):
         latent = self.latent_sample(sample_shape)
 
         # Sample obs
-        # -- Extract
+        obs = self.sample_obs(latent)
+
+        return latent, obs
+
+    @torch.no_grad()
+    def sample_obs(self, latent, sample_shape=[]):
+        """Sample from p(x | z)
+
+        Args
+            latent:
+                raw_expression [*shape, max_num_chars]
+                eos [*shape, max_num_chars]
+                raw_gp_params [*shape, max_num_chars, gp_params_dim]
+            sample_shape
+
+        Returns
+            obs [*sample_shape, *shape, num_timesteps]
+        """
+        # Extract
         raw_expression, eos, raw_gp_params = latent
-        num_samples = cmws.util.get_num_elements(sample_shape)
+        shape = raw_expression.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
 
-        # -- Flatten
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
-        raw_gp_params_flattened = raw_gp_params.view(
-            -1, self.max_num_chars, timeseries_util.gp_params_dim
-        )
+        # Create x_1 and x_2
+        x_1 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
+            None, :, None
+        ].expand(1, timeseries_data.num_timesteps, 1)
+        x_2 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
+            None, None, :
+        ].expand(1, 1, timeseries_data.num_timesteps)
 
-        # -- Compute num base kernels
+        # Create identity matrix
+        identity_matrix = torch.eye(timeseries_data.num_timesteps, device=self.device).float()
+
+        # Flatten
+        raw_expression_flattened = raw_expression.reshape(num_elements, -1)
+        eos_flattened = eos.reshape(num_elements, -1)
+        raw_gp_params_flattened = raw_gp_params.view(num_elements, self.max_num_chars, -1)
+
+        # Compute num timesteps
+        num_timesteps_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+        # Compute num base kernels
         num_base_kernels_flattened = self.get_num_base_kernels(
             raw_expression_flattened, eos_flattened
         )
 
-        # -- Create x_1 and x_2
-        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
-            None, :, None
-        ].expand(1, timeseries_data.num_timesteps, 1)
-        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
-            None, None, :
-        ].expand(1, 1, timeseries_data.num_timesteps)
-
-        # -- Create identity matrix
-        identity_matrix = torch.eye(timeseries_data.num_timesteps, device=self.device).float()
-
-        # -- Compute covariance matrices
+        # Compute covariance matrices
         covariance_matrix = []
-        for sample_id in range(num_samples):
+        for element_id in range(num_elements):
             try:
+                raw_expression_se = raw_expression_flattened[element_id][
+                    : num_timesteps_flattened[element_id]
+                ]
                 covariance_matrix_se = timeseries_util.Kernel(
-                    timeseries_util.get_expression(raw_expression[sample_id]),
-                    raw_gp_params_flattened[sample_id, : num_base_kernels_flattened[sample_id],],
+                    timeseries_util.get_expression(raw_expression_se),
+                    raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
                 )(x_1, x_2)[0]
-            except Exception:
-                covariance_matrix_se = identity_matrix
+            except timeseries_util.ParsingError:
+                covariance_matrix_se = identity_matrix * 1e-6
 
             covariance_matrix.append(covariance_matrix_se)
         covariance_matrix = torch.stack(covariance_matrix).view(
-            num_samples, timeseries_data.num_timesteps, timeseries_data.num_timesteps
+            *[*shape, timeseries_data.num_timesteps, timeseries_data.num_timesteps]
         )
 
-        # -- Create mean
-        loc = torch.zeros((num_samples, timeseries_data.num_timesteps), device=self.device)
+        # Create mean
+        loc = torch.zeros(*[*shape, timeseries_data.num_timesteps], device=self.device)
 
-        # -- Sample obs
-        obs = (
-            torch.distributions.MultivariateNormal(loc, covariance_matrix=covariance_matrix)
-            .sample()
-            .view(*[*sample_shape, -1])
+        # Sample obs
+        try:
+            obs = cmws.util.get_multivariate_normal_dist(
+                loc, covariance_matrix=covariance_matrix
+            ).sample(sample_shape)
+        except Exception as e:
+            raise RuntimeError(f"MVN sample error: {e}")
+
+        return obs
+
+    @torch.no_grad()
+    def sample_obs_predictions(self, latent, obs, sample_shape=[]):
+        """Sample from p(x' | z, x)
+
+        Args
+            latent:
+                raw_expression [*shape, max_num_chars]
+                eos [*shape, max_num_chars]
+                raw_gp_params [*shape, max_num_chars, gp_params_dim]
+            obs [*shape, num_timesteps]
+            sample_shape
+
+        Returns
+            obs_predictions [*sample_shape, *shape, num_timesteps]
+        """
+        # Extract
+        raw_expression, eos, raw_gp_params = latent
+        shape = raw_expression.shape[:-1]
+        num_elements = cmws.util.get_num_elements(shape)
+
+        # Create x_1 and x_2
+        x_old = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)
+        x_new = x_old + (x_old[-1] - x_old[0]) + (x_old[1] - x_old[0])
+        x = torch.cat([x_old, x_new])
+        joint_num_timesteps = len(x)
+        x_1 = x[None, :, None].expand(1, joint_num_timesteps, 1)
+        x_2 = x[None, None, :].expand(1, 1, joint_num_timesteps)
+
+        # Create identity matrix
+        identity_matrix = torch.eye(joint_num_timesteps, device=self.device).float()
+
+        # Flatten
+        raw_expression_flattened = raw_expression.reshape(num_elements, -1)
+        eos_flattened = eos.reshape(num_elements, -1)
+        raw_gp_params_flattened = raw_gp_params.view(num_elements, self.max_num_chars, -1)
+
+        # Compute num chars
+        num_chars_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+        # Compute num base kernels
+        num_base_kernels_flattened = self.get_num_base_kernels(
+            raw_expression_flattened, eos_flattened
         )
 
-        return latent, obs
+        # Compute covariance matrices
+        covariance_matrix = []
+        for element_id in range(num_elements):
+            try:
+                raw_expression_se = raw_expression_flattened[element_id][
+                    : num_chars_flattened[element_id]
+                ]
+                covariance_matrix_se = timeseries_util.Kernel(
+                    timeseries_util.get_expression(raw_expression_se),
+                    raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                )(x_1, x_2)[0]
+            except timeseries_util.ParsingError:
+                covariance_matrix_se = identity_matrix * 1e-6
+
+            covariance_matrix.append(covariance_matrix_se)
+        covariance_matrix = torch.stack(covariance_matrix).view(
+            *[*shape, joint_num_timesteps, joint_num_timesteps]
+        )
+
+        # Create mean
+        loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)
+
+        # Sample obs
+        try:
+            joint_dist = cmws.util.get_multivariate_normal_dist(
+                loc, covariance_matrix=covariance_matrix
+            )
+            predictive_dist = cmws.util.condition_mvn(joint_dist, obs)
+            obs_predictions = predictive_dist.sample(sample_shape)
+        except Exception as e:
+            raise RuntimeError(f"MVN sample predictions error: {e}")
+
+        return obs_predictions
 
 
 class Guide(nn.Module):
@@ -517,7 +597,7 @@ class Guide(nn.Module):
         obs_flattened = obs.reshape(-1, num_timesteps)
 
         _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
-        return h.view(*[*shape, self.obs_embedding_dim])
+        return h.view([*shape, self.obs_embedding_dim])
 
     def get_expression_embedding(self, raw_expression, eos):
         """
@@ -553,7 +633,7 @@ class Guide(nn.Module):
         # Run LSTM
         # [1, num_elements, lstm_hidden_size]
         _, (h, _) = self.expression_embedder(lstm_input)
-        return h[0].view(*[*shape, self.lstm_hidden_dim])
+        return h[0].view([*shape, self.lstm_hidden_dim])
 
     def get_num_base_kernels(self, raw_expression, eos):
         """
@@ -582,7 +662,7 @@ class Guide(nn.Module):
                     raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
                 )
             )
-        return torch.tensor(result, device=self.device).long().view(*shape)
+        return torch.tensor(result, device=self.device).long().view(shape)
 
     def log_prob(self, obs, latent):
         """
@@ -628,7 +708,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_expression_flattened, eos_flattened)
-            .view(*[*sample_shape, *shape])
+            .view([*sample_shape, *shape])
         )
 
         # Log prob of continuous
@@ -662,7 +742,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*[*sample_shape, *shape])
+            .view([*sample_shape, *shape])
         )
 
         return discrete_log_prob + continuous_log_prob
@@ -703,8 +783,8 @@ class Guide(nn.Module):
         ).sample(sample_shape)
 
         # -- Reshape
-        raw_expression = raw_expression.view(*[*sample_shape, *shape, -1])
-        eos = eos.view(*[*sample_shape, *shape, -1])
+        raw_expression = raw_expression.view([*sample_shape, *shape, -1])
+        eos = eos.view([*sample_shape, *shape, -1])
 
         # Sample continuous
         # -- Flatten discrete latents
@@ -743,7 +823,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .sample((), num_timesteps=num_base_kernels_flattened)
-            .view(*[*sample_shape, *shape, self.max_num_chars, timeseries_util.gp_params_dim])
+            .view([*sample_shape, *shape, self.max_num_chars, timeseries_util.gp_params_dim])
         )
 
         return raw_expression, eos, raw_gp_params
@@ -783,15 +863,16 @@ class Guide(nn.Module):
         ).sample(sample_shape)
 
         # -- Reshape
-        raw_expression = raw_expression.view(*[*sample_shape, *shape, -1])
-        eos = eos.view(*[*sample_shape, *shape, -1])
+        raw_expression = raw_expression.view([*sample_shape, *shape, -1])
+        eos = eos.view([*sample_shape, *shape, -1])
 
         return raw_expression, eos
 
-    def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
+    def _sample_continuous(self, reparam, obs, discrete_latent, sample_shape=[]):
         """z_c ~ q(z_c | z_d, x)
 
         Args
+            reparam (bool)
             obs [*shape, num_timesteps]
             discrete_latent
                 raw_expression [*discrete_shape, *shape, max_num_chars]
@@ -799,7 +880,7 @@ class Guide(nn.Module):
             sample_shape
 
         Returns
-                raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
+            raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
         """
         # Extract
         shape = obs.shape[:-1]
@@ -814,8 +895,8 @@ class Guide(nn.Module):
 
         # Sample continuous
         # -- Flatten discrete latents
-        raw_expression_flattened = raw_expression.view(-1, self.max_num_chars)
-        eos_flattened = eos.view(-1, self.max_num_chars)
+        raw_expression_flattened = raw_expression.reshape(-1, self.max_num_chars)
+        eos_flattened = eos.reshape(-1, self.max_num_chars)
 
         # -- Compute num base kernels
         # [num_discrete_elements * num_elements]
@@ -841,27 +922,62 @@ class Guide(nn.Module):
         )
 
         # -- Sample
-        return (
-            lstm_util.TimeseriesDistribution(
-                "continuous",
-                timeseries_util.gp_params_dim,
-                torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
-                self.gp_params_lstm,
-                self.gp_params_extractor,
-                lstm_eos=False,
-                max_num_timesteps=self.max_num_chars,
-            )
-            .sample((num_samples,), num_timesteps=num_base_kernels_expanded)
-            .view(
-                *[
-                    *sample_shape,
-                    *discrete_shape,
-                    *shape,
-                    self.max_num_chars,
-                    timeseries_util.gp_params_dim,
-                ]
-            )
+        raw_gp_params_dist = lstm_util.TimeseriesDistribution(
+            "continuous",
+            timeseries_util.gp_params_dim,
+            torch.cat([obs_embedding_expanded, expression_embedding_flattened], dim=1),
+            self.gp_params_lstm,
+            self.gp_params_extractor,
+            lstm_eos=False,
+            max_num_timesteps=self.max_num_chars,
         )
+        if reparam:
+            raw_gp_params = raw_gp_params_dist.rsample(
+                (num_samples,), num_timesteps=num_base_kernels_expanded
+            )
+        else:
+            raw_gp_params = raw_gp_params_dist.sample(
+                (num_samples,), num_timesteps=num_base_kernels_expanded
+            )
+        return raw_gp_params.view(
+            *[
+                *sample_shape,
+                *discrete_shape,
+                *shape,
+                self.max_num_chars,
+                timeseries_util.gp_params_dim,
+            ]
+        )
+
+    def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x) (NOT reparameterized)
+
+        Args
+            obs [*shape, num_timesteps]
+            discrete_latent
+                raw_expression [*discrete_shape, *shape, max_num_chars]
+                eos [*discrete_shape, *shape, max_num_chars]
+            sample_shape
+
+        Returns
+            raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
+        """
+        return self._sample_continuous(False, obs, discrete_latent, sample_shape=sample_shape)
+
+    def rsample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x) (reparameterized)
+
+        Args
+            obs [*shape, num_timesteps]
+            discrete_latent
+                raw_expression [*discrete_shape, *shape, max_num_chars]
+                eos [*discrete_shape, *shape, max_num_chars]
+            sample_shape
+
+        Returns
+            raw_gp_params [*sample_shape, *discrete_shape, *shape, max_num_chars, gp_params_dim]
+        """
+        return self._sample_continuous(True, obs, discrete_latent, sample_shape=sample_shape)
 
     def log_prob_discrete(self, obs, discrete_latent):
         """log q(z_d | x)
@@ -907,7 +1023,7 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_expression_flattened, eos_flattened)
-            .view(*[*discrete_shape, *shape])
+            .view([*discrete_shape, *shape])
         )
 
     def log_prob_continuous(self, obs, discrete_latent, continuous_latent):
@@ -989,5 +1105,5 @@ class Guide(nn.Module):
                 max_num_timesteps=self.max_num_chars,
             )
             .log_prob(raw_gp_params_flattened, num_timesteps=num_base_kernels_flattened)
-            .view(*[*continuous_shape, *discrete_shape, *shape])
+            .view([*continuous_shape, *discrete_shape, *shape])
         )

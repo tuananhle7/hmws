@@ -44,6 +44,13 @@ def train(model, optimizer, stats, args):
         util.logging.info(f"Using pyro version {pyro.__version__}")
 
     # Sleep pretraining
+    if "sleep_pretraining_batch_size" in args:
+        if args.sleep_pretraining_batch_size == 0:
+            sleep_pretraining_batch_size = args.num_particles * args.batch_size
+        else:
+            sleep_pretraining_batch_size = args.sleep_pretraining_batch_size
+    else:
+        sleep_pretraining_batch_size = args.num_particles * args.batch_size
     for iteration in range(
         num_sleep_pretraining_iterations_so_far, args.num_sleep_pretraining_iterations
     ):
@@ -55,7 +62,7 @@ def train(model, optimizer, stats, args):
 
             # Evaluate loss
             loss = losses.get_sleep_loss(
-                generative_model, guide, args.num_particles * args.batch_size
+                generative_model, guide, sleep_pretraining_batch_size
             ).mean()
 
             # Compute gradient
@@ -139,7 +146,7 @@ def train(model, optimizer, stats, args):
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.timeseries.data.get_timeseries_data_loader(
-                device, args.batch_size, test=False
+                device, args.batch_size, test=False, full_data=args.full_training_data
             )
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(

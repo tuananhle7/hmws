@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 
 
-def init_memory_groups(num_obs, memory_size, generative_model):
+def init_memory_groups(num_obs, memory_size, generative_model, check_unique=True):
     """Initializes a latent variables, making sure it's unique.
 
     Args
@@ -18,25 +18,34 @@ def init_memory_groups(num_obs, memory_size, generative_model):
         [num_obs, memory_size, *event_shapes[i]]
     """
     util.logging.info("Initializing memory")
-    latent_groupss = []
-    for _ in tqdm(range(num_obs)):
-        while True:
-            latent_groups = generative_model.discrete_latent_sample([memory_size])
 
-            # Force latent_groups into a 1-element list if it is a tensor
-            if torch.is_tensor(latent_groups):
-                latent_groups = [latent_groups]
+    if not check_unique:
+        memory_groups = generative_model.discrete_latent_sample([num_obs, memory_size])
+        # Force memory_groups into a 1-element list if it is a tensor
+        if torch.is_tensor(memory_groups):
+            memory_groups = [memory_groups]
+        else:
+            memory_groups = list(memory_groups)
+    else:
+        latent_groupss = []
+        for _ in tqdm(range(num_obs)):
+            while True:
+                latent_groups = generative_model.discrete_latent_sample([memory_size])
 
-            if len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size:
-                latent_groupss.append(latent_groups)
-                break
+                # Force latent_groups into a 1-element list if it is a tensor
+                if torch.is_tensor(latent_groups):
+                    latent_groups = [latent_groups]
 
-    # Extract
-    num_groups = len(latent_groupss[0])
+                if len(torch.unique(flatten_tensors(latent_groups, 1), dim=0)) == memory_size:
+                    latent_groupss.append(latent_groups)
+                    break
 
-    memory_groups = []
-    for group_id in range(num_groups):
-        memory_groups.append(torch.stack([latent_groupss[i][group_id] for i in range(num_obs)]))
+        # Extract
+        num_groups = len(latent_groupss[0])
+
+        memory_groups = []
+        for group_id in range(num_groups):
+            memory_groups.append(torch.stack([latent_groupss[i][group_id] for i in range(num_obs)]))
     return memory_groups
 
 
@@ -49,10 +58,12 @@ class Memory:
         generative_model - only used to initialize the memory by sampling from p(z_d)
     """
 
-    def __init__(self, num_obs, size, generative_model):
+    def __init__(self, num_obs, size, generative_model, check_unique=True):
         self.num_obs = num_obs
         self.size = size
-        self.memory_groups = init_memory_groups(num_obs, size, generative_model)
+        self.memory_groups = init_memory_groups(
+            num_obs, size, generative_model, check_unique=check_unique
+        )
         self.num_groups = len(self.memory_groups)
 
     @property
