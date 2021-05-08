@@ -50,12 +50,13 @@ class GenerativeModel(nn.Module):
 
         Args:
             latent:
-                num_blocks [*shape]
-                stacking_program [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
+                num_blocks [*shape, num_grid_rows, num_grid_cols]
+                stacking_program [*shape, num_grid_rows, num_grid_cols, max_num_blocks]
+                raw_locations [*shape, num_grid_rows, num_grid_cols, max_num_blocks]
 
         Returns: [*shape]
         """
+        # TODO
         # Extract
         num_blocks, stacking_program, raw_locations = latent
 
@@ -87,10 +88,11 @@ class GenerativeModel(nn.Module):
 
         Returns
             latent:
-                num_blocks [*sample_shape]
-                stacking_program [*sample_shape, max_num_blocks]
-                raw_locations [*sample_shape, max_num_blocks]
+                num_blocks [*sample_shape, num_grid_rows, num_grid_cols]
+                stacking_program [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
+                raw_locations [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
+        # TODO
         # Sample num_blocks
         num_blocks = self.num_blocks_dist.sample(sample_shape)
 
@@ -119,9 +121,10 @@ class GenerativeModel(nn.Module):
 
         Returns
             latent:
-                num_blocks [*sample_shape]
-                stacking_program [*sample_shape, max_num_blocks]
+                num_blocks [*sample_shape, num_grid_rows, num_grid_cols]
+                stacking_program [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
+        # TODO
         # Sample num_blocks
         num_blocks = self.num_blocks_dist.sample(sample_shape)
 
@@ -138,9 +141,9 @@ class GenerativeModel(nn.Module):
 
         Args:
             latent:
-                num_blocks [*shape]
-                stacking_program [*shape, max_num_blocks]
-                raw_locations [*shape, max_num_blocks]
+                num_blocks [*shape, num_grid_rows, num_grid_cols]
+                stacking_program [*shape, num_grid_rows, num_grid_cols, max_num_blocks]
+                raw_locations [*shape, num_grid_rows, num_grid_cols, max_num_blocks]
 
         Returns: [*shape, num_channels, im_size, im_size]
         """
@@ -149,8 +152,13 @@ class GenerativeModel(nn.Module):
 
         # Compute stuff
         return render.render(
-            self.primitives, num_blocks, stacking_program, raw_locations, im_size=self.im_size,
-            sigma=self.sigma, gamma=self.gamma
+            self.primitives,
+            num_blocks,
+            stacking_program,
+            raw_locations,
+            im_size=self.im_size,
+            sigma=self.sigma,
+            gamma=self.gamma,
         )
 
     def log_prob(self, latent, obs):
@@ -159,13 +167,15 @@ class GenerativeModel(nn.Module):
 
         Args:
             latent:
-                num_blocks [*sample_shape, *shape]
-                stacking_program [*sample_shape, *shape, max_num_blocks]
-                raw_locations [*sample_shape, *shape, max_num_blocks]
+                num_blocks [*sample_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program
+                    [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
+                raw_locations [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
             obs [*shape, num_channels, im_size, im_size]
 
         Returns: [*sample_shape, *shape]
         """
+        # TODO
         # p(z)
         latent_log_prob = self.latent_log_prob(latent)
 
@@ -183,14 +193,17 @@ class GenerativeModel(nn.Module):
 
         Args:
             discrete_latent
-                num_blocks [*discrete_shape, *shape]
-                stacking_program [*discrete_shape, *shape, max_num_blocks]
+                num_blocks [*discrete_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program [*discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                                  max_num_blocks]
             continuous_latent
-                raw_locations [*continuous_shape, *discrete_shape, *shape, max_num_blocks]
+                raw_locations [*continuous_shape, *discrete_shape, *shape, num_grid_rows,
+                               num_grid_cols, max_num_blocks]
             obs [*shape, num_channels, im_size, im_size]
 
         Returns: [*continuous_shape, *discrete_shape, *shape]
         """
+        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
         raw_locations = continuous_latent
@@ -218,11 +231,12 @@ class GenerativeModel(nn.Module):
 
         Returns
             latent:
-                num_blocks [*sample_shape]
-                stacking_program [*sample_shape, max_num_blocks]
-                raw_locations [*sample_shape, max_num_blocks]
+                num_blocks [*sample_shape, num_grid_rows, num_grid_cols]
+                stacking_program [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
+                raw_locations [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
             obs [*sample_shape, num_channels, im_size, im_size]
         """
+        # TODO
         # p(z)
         latent = self.latent_sample(sample_shape)
 
@@ -313,12 +327,14 @@ class Guide(nn.Module):
         Args
             obs [*shape, num_channels, im_size, im_size]
             latent:
-                num_blocks [*sample_shape, *shape]
-                stacking_program [*sample_shape, *shape, max_num_blocks]
-                raw_locations [*sample_shape, *shape, max_num_blocks]
+                num_blocks [*sample_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program [*sample_shape, *shape, num_grid_rows, num_grid_cols,
+                                  max_num_blocks]
+                raw_locations [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
 
         Returns [*sample_shape, *shape]
         """
+        # TODO
         # Extract
         num_blocks, stacking_program, raw_locations = latent
 
@@ -351,10 +367,11 @@ class Guide(nn.Module):
             obs [*shape, num_channels, im_size, im_size]
 
         Returns
-            num_blocks [*sample_shape, *shape]
-            stacking_program [*sample_shape, *shape, max_num_blocks]
-            raw_locations [*sample_shape, *shape, max_num_blocks]
+            num_blocks [*sample_shape, *shape, num_grid_rows, num_grid_cols]
+            stacking_program [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
+            raw_locations [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
+        # TODO
         # Compute params
         num_blocks_params, stacking_program_params, (loc, scale) = self.get_dist_params(obs)
 
@@ -383,9 +400,10 @@ class Guide(nn.Module):
             sample_shape
 
         Returns
-            num_blocks [*sample_shape, *shape]
-            stacking_program [*sample_shape, *shape, max_num_blocks]
+            num_blocks [*sample_shape, *shape, num_grid_rows, num_grid_cols]
+            stacking_program [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
+        # TODO
         # Compute params
         num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
 
@@ -407,13 +425,16 @@ class Guide(nn.Module):
         Args
             obs [*shape, num_channels, im_size, im_size]
             discrete_latent
-                num_blocks [*discrete_shape, *shape]
-                stacking_program [*discrete_shape, *shape, max_num_blocks]
+                num_blocks [*discrete_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program [*discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                                  max_num_blocks]
             sample_shape
 
         Returns
-            raw_locations [*sample_shape, *discrete_shape, *shape, max_num_blocks]
+            raw_locations [*sample_shape, *discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                           max_num_blocks]
         """
+        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
         shape = obs.shape[:-3]
@@ -440,11 +461,13 @@ class Guide(nn.Module):
         Args
             obs [*shape, num_channels, im_size, im_size]
             discrete_latent
-                num_blocks [*discrete_shape, *shape]
-                stacking_program [*discrete_shape, *shape, max_num_blocks]
+                num_blocks [*discrete_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program
+                    [*discrete_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
 
         Returns [*discrete_shape, *shape]
         """
+        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
 
@@ -471,13 +494,16 @@ class Guide(nn.Module):
         Args
             obs [*shape, num_channels, im_size, im_size]
             discrete_latent
-                num_blocks [*discrete_shape, *shape]
-                stacking_program [*discrete_shape, *shape, max_num_blocks]
+                num_blocks [*discrete_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program
+                    [*discrete_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
             continuous_latent (raw_locations)
-                [*continuous_shape, *discrete_shape, *shape, max_num_blocks]
+                [*continuous_shape, *discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                 max_num_blocks]
 
         Returns [*continuous_shape, *discrete_shape, *shape]
         """
+        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
         raw_locations = continuous_latent
