@@ -3,7 +3,7 @@ from cmws.examples.timeseries import run
 
 
 def get_run_argss():
-    experiment_name = "2021_05_07_cmws_rws_seeds"
+    experiment_name = "2021_05_08_cmws_rws_seeds"
 
     for seed in range(5):
         # CMWS
@@ -12,7 +12,7 @@ def get_run_argss():
         args.seed = seed
         args.full_training_data = True
         args.num_particles = 10
-        args.insomnia = 0.5
+        args.insomnia = 1.0
         args.num_sleep_pretraining_iterations = 10000
         args.sleep_pretraining_batch_size = 50
         args.algorithm = "cmws"
@@ -25,7 +25,7 @@ def get_run_argss():
         args.seed = seed
         args.full_training_data = True
         args.num_particles = 50
-        args.insomnia = 0.5
+        args.insomnia = 1.0
         args.num_sleep_pretraining_iterations = 10000
         args.sleep_pretraining_batch_size = 50
         args.algorithm = "rws"
