@@ -115,20 +115,26 @@ class GenerativeModel(nn.Module):
                 stacking_program [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
                 raw_locations [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
-        # TODO
         # Sample num_blocks
         num_blocks = self.num_blocks_dist.sample(sample_shape)
 
         # Sample stacking_program
-        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
+        logits = torch.ones(
+            (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, self.num_primitives),
+            device=self.device,
+        )
         stacking_program = util.pad_tensor(
             torch.distributions.Categorical(logits=logits).sample(sample_shape), num_blocks, 0
         )
 
         # Sample raw_locations
         # --Compute dist params
-        loc = torch.zeros(self.max_num_blocks, device=self.device)
-        scale = torch.ones(self.max_num_blocks, device=self.device)
+        loc = torch.zeros(
+            self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, device=self.device
+        )
+        scale = torch.ones(
+            self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, device=self.device
+        )
         # --Compute log prob [*shape]
         raw_locations = util.pad_tensor(
             torch.distributions.Normal(loc, scale).sample(sample_shape), num_blocks, 0
