@@ -299,13 +299,13 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 #         max_x = min_x + size
 #     return torch.stack(locations)
 
-def convert_raw_locations(raw_locations, stacking_program, primitives, (x_cell, z_cell), num_rows, num_cols):
+def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
     """
     Args
         raw_locations (tensor [num_blocks])
         stacking_program (tensor [num_blocks])
         primitives (list [num_primitives])
-        cell_idx (tensor, scalar integer) - update!
+        cell_idx  (tuple of ints (x_cell, z_cel
         num_rows (scalar integer)
         num_cols (scalar integer)
     Returns [num_blocks, 3]
@@ -315,6 +315,7 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, (x_cell, 
 
     # Map cell idx to position in n x n grid, where grid is in x-z space
     # (x_cell, z_cell) = np.unravel_index(int(cell_idx), (num_rows, num_cols))
+    (x_cell, z_cell) = cell_idx
 
     # Sample the bottom and adjust coords based on grid cell
     y = torch.tensor(-1.0, device=device)
