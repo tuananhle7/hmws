@@ -365,6 +365,7 @@ def render(
         stacking_program (tensor [*shape, max_num_blocks])
         raw_locations (tensor [*shape, max_num_blocks])
         im_size
+        sigma, gamma (blending parameters)
 
     Returns [*shape, num_channels=3, im_size, im_size]
     """
