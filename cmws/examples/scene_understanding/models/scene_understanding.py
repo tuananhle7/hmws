@@ -197,7 +197,7 @@ class GenerativeModel(nn.Module):
 
         Returns: [*sample_shape, *shape]
         """
-        # TODO
+        # TODO: tests still fail
         # p(z)
         latent_log_prob = self.latent_log_prob(latent)
 
@@ -225,21 +225,34 @@ class GenerativeModel(nn.Module):
 
         Returns: [*continuous_shape, *discrete_shape, *shape]
         """
-        # TODO
+        # TODO: test
         # Extract
         num_blocks, stacking_program = discrete_latent
         raw_locations = continuous_latent
         shape = obs.shape[:-3]
-        discrete_shape = num_blocks.shape[: -len(shape)]
-        continuous_shape = continuous_latent.shape[: -(1 + len(shape) + len(discrete_shape))]
+        discrete_shape = num_blocks.shape[: -(len(shape) + 2)]
+        continuous_shape = continuous_latent.shape[: -(3 + len(shape) + len(discrete_shape))]
         continuous_num_elements = util.get_num_elements(continuous_shape)
 
         # Expand discrete latent
         num_blocks_expanded = num_blocks[None].expand(
-            *[continuous_num_elements, *discrete_shape, *shape]
+            *[
+                continuous_num_elements,
+                *discrete_shape,
+                *shape,
+                self.num_grid_rows,
+                self.num_grid_cols,
+            ]
         )
         stacking_program_expanded = stacking_program[None].expand(
-            *[continuous_num_elements, *discrete_shape, *shape, self.max_num_blocks]
+            *[
+                continuous_num_elements,
+                *discrete_shape,
+                *shape,
+                self.num_grid_rows,
+                self.num_grid_cols,
+                self.max_num_blocks,
+            ]
         )
 
         return self.log_prob((num_blocks_expanded, stacking_program_expanded, raw_locations), obs)
@@ -258,7 +271,6 @@ class GenerativeModel(nn.Module):
                 raw_locations [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
             obs [*sample_shape, num_channels, im_size, im_size]
         """
-        # TODO
         # p(z)
         latent = self.latent_sample(sample_shape)
 
