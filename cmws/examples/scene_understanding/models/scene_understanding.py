@@ -115,17 +115,8 @@ class GenerativeModel(nn.Module):
                 stacking_program [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
                 raw_locations [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
-        # Sample num_blocks
-        num_blocks = self.num_blocks_dist.sample(sample_shape)
-
-        # Sample stacking_program
-        logits = torch.ones(
-            (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, self.num_primitives),
-            device=self.device,
-        )
-        stacking_program = util.pad_tensor(
-            torch.distributions.Categorical(logits=logits).sample(sample_shape), num_blocks, 0
-        )
+        # Sample discrete latents
+        num_blocks, stacking_program = self.discrete_latent_sample(sample_shape)
 
         # Sample raw_locations
         # --Compute dist params
@@ -153,12 +144,14 @@ class GenerativeModel(nn.Module):
                 num_blocks [*sample_shape, num_grid_rows, num_grid_cols]
                 stacking_program [*sample_shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
-        # TODO
         # Sample num_blocks
         num_blocks = self.num_blocks_dist.sample(sample_shape)
 
         # Sample stacking_program
-        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
+        logits = torch.ones(
+            (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, self.num_primitives),
+            device=self.device,
+        )
         stacking_program = util.pad_tensor(
             torch.distributions.Categorical(logits=logits).sample(sample_shape), num_blocks, 0
         )
