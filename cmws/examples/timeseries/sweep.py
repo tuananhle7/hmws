@@ -3,7 +3,7 @@ from cmws.examples.timeseries import run
 
 
 def get_run_argss():
-    experiment_name = "2021_05_08_cmws_rws_seeds"
+    experiment_name = "2021_05_08_cmws_rws_seeds_again"
 
     for seed in range(5):
         # CMWS

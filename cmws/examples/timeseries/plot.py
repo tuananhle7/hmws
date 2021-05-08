@@ -252,8 +252,6 @@ def plot_comparison(path, checkpoint_paths):
                 x = x_new
             log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
             kls[run_args.algorithm].append([x[1] for x in stats.kls])
-    if len(x) == 0:
-        return
 
     # Make numpy arrays
     max_len = len(x)
@@ -319,11 +317,11 @@ def main(args):
         checkpoint_paths = [args.checkpoint_path]
 
     # Plot log p and KL for all checkpoints
-    plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
+    # plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
+    # returns
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
     )
-    return
 
     # Plot for all checkpoints
     plotted_something = False
