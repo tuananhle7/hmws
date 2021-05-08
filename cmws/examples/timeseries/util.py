@@ -184,14 +184,14 @@ class Kernel(nn.Module):
             param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            return {"op": "WhiteNoise", "scale_sq": F.sigmoid(param[0]) * 10 + 1e-4}
+            return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0]) + 1e-4}
         elif char == "R":
-            return {"op": "RBF", "lengthscale_sq": F.sigmoid(param[1]) * 10 + 1e-4}
+            return {"op": "RBF", "lengthscale_sq": F.softplus(param[1]) + 1e-4}
         elif char == "E":
             return {
                 "op": "ExpSinSq",
-                "period": F.sigmoid(param[2]) * 10 + 1e-1,
-                "lengthscale_sq": F.sigmoid(param[3]) * 10 + 1e-4,
+                "period": F.softplus(param[2]) + 1e-1,
+                "lengthscale_sq": F.softplus(param[3]) + 1e-4,
             }
         if char == "C":
             return {"op": "Constant", "const": F.sigmoid(param[4]) * 10 + 1e-2}
