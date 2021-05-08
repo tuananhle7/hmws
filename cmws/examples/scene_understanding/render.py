@@ -369,8 +369,8 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
             for col in range(num_grid_cols):
                 locations_batched.append(
                     convert_raw_locations(
-                        raw_locations_flattened[sample_id],
-                        stacking_program_flattened[sample_id],
+                        raw_locations_flattened[sample_id, row, col],
+                        stacking_program_flattened[sample_id, row, col],
                         primitives,
                         (int(row), int(col)),
                         num_grid_rows,
