@@ -2,19 +2,28 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from cmws import util
-from cmws.examples.stacking_3d import render
+from cmws.examples.scene_understanding import render
 
 
 class GenerativeModel(nn.Module):
-    """Samples order of blocks (discrete), their raw positions (continuous) and renders image.
+    """
     """
 
     def __init__(
-        self, num_primitives=3, max_num_blocks=3, im_size=32, obs_scale=1.0, obs_dist_type="normal"
+        self,
+        num_grid_rows=3,
+        num_grid_cols=3,
+        num_primitives=5,
+        max_num_blocks=3,
+        im_size=32,
+        obs_scale=1.0,
+        obs_dist_type="normal",
     ):
         super().__init__()
 
         # Init
+        self.num_grid_rows = num_grid_rows
+        self.num_grid_cols = num_grid_cols
         self.num_primitives = num_primitives
         self.max_num_blocks = max_num_blocks
         self.num_channels = 3
@@ -41,9 +50,17 @@ class GenerativeModel(nn.Module):
     @property
     def num_blocks_dist(self):
         """Prior distribution p(num_blocks)
-        batch_shape [], event_shape []
+        batch_shape [], event_shape [num_grid_rows, num_grid_cols]
         """
-        return util.CategoricalPlusOne(logits=torch.ones(self.max_num_blocks, device=self.device))
+        return torch.distributions.Independent(
+            torch.distributions.Categorical(
+                logits=torch.ones(
+                    (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks + 1),
+                    device=self.device,
+                )
+            ),
+            reinterpreted_batch_ndims=2,
+        )
 
     def latent_log_prob(self, latent):
         """Prior log p(z)
@@ -56,7 +73,6 @@ class GenerativeModel(nn.Module):
 
         Returns: [*shape]
         """
-        # TODO
         # Extract
         num_blocks, stacking_program, raw_locations = latent
 
@@ -64,19 +80,26 @@ class GenerativeModel(nn.Module):
         num_blocks_log_prob = self.num_blocks_dist.log_prob(num_blocks)
 
         # Log prob of stacking_program
-        logits = torch.ones((self.max_num_blocks, self.num_primitives), device=self.device)
+        logits = torch.ones(
+            (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, self.num_primitives),
+            device=self.device,
+        )
         stacking_program_log_prob = util.pad_tensor(
             torch.distributions.Categorical(logits=logits).log_prob(stacking_program), num_blocks, 0
-        ).sum(-1)
+        ).sum([-1, -2, -3])
 
         # Log prob of raw_locations
         # --Compute dist params
-        loc = torch.zeros(self.max_num_blocks, device=self.device)
-        scale = torch.ones(self.max_num_blocks, device=self.device)
+        loc = torch.zeros(
+            (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks), device=self.device
+        )
+        scale = torch.ones(
+            (self.num_grid_rows, self.num_grid_cols, self.max_num_blocks), device=self.device
+        )
         # --Compute log prob [*shape]
         raw_locations_log_prob = util.pad_tensor(
             torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks, 0,
-        ).sum(-1)
+        ).sum([-1, -2, -3])
 
         return num_blocks_log_prob + stacking_program_log_prob + raw_locations_log_prob
 
