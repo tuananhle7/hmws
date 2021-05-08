@@ -256,22 +256,31 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 
     return img
 
-
-# def convert_raw_locations(raw_locations, stacking_program, primitives):
+# def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
 #     """
 #     Args
 #         raw_locations (tensor [num_blocks])
 #         stacking_program (tensor [num_blocks])
 #         primitives (list [num_primitives])
-#
+#         cell_idx (tensor, scalar integer)
+#         num_rows (scalar integer)
+#         num_cols (scalar integer)
 #     Returns [num_blocks, 3]
 #     """
 #     # Extract
 #     device = primitives[0].device
 #
-#     # Sample the bottom
-#     y = torch.tensor(0.0, device=device)
-#     z = torch.tensor(-1.0, device=device)
+#     # Map cell idx to position in n x n grid, where grid is in x-z space
+#     (x_cell, z_cell) = np.unravel_index(int(cell_idx), (num_rows, num_cols))
+#
+#     # Sample the bottom and adjust coords based on grid cell
+#     y = torch.tensor(-1.0, device=device)
+#
+#     # adjust z based on cell idx -- place at 0 point within cell
+#     # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
+#     # -z = closer to the camera, +z = farther away
+#     z = torch.tensor(0.0 + z_cell , device=device)
+#
 #     min_x = -0.8
 #     max_x = 0.8
 #     locations = []
@@ -280,28 +289,42 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 #
 #         min_x = min_x - size
 #         x = raw_location.sigmoid() * (max_x - min_x) + min_x
+#         # adjust x based on cell -- assume cell sizes = +/- 1 (note: +x= move left)
+#         # center_x = num_cells/2 -- farthest left = +num_rows
+#         x = x + (x_cell - (num_rows/2)) # based on median/true center
 #         locations.append(torch.stack([x, y, z]))
 #
-#         z = z + size
+#         y = y + size
 #         min_x = x
 #         max_x = min_x + size
 #     return torch.stack(locations)
 
-def convert_raw_locations(raw_locations, stacking_program, primitives):
+def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
     """
     Args
         raw_locations (tensor [num_blocks])
         stacking_program (tensor [num_blocks])
         primitives (list [num_primitives])
-
+        cell_idx  (tuple of ints (x_cell, z_cel
+        num_rows (scalar integer)
+        num_cols (scalar integer)
     Returns [num_blocks, 3]
     """
     # Extract
     device = primitives[0].device
 
-    # Sample the bottom
+    # Map cell idx to position in n x n grid, where grid is in x-z space
+    # (x_cell, z_cell) = np.unravel_index(int(cell_idx), (num_rows, num_cols))
+    (x_cell, z_cell) = cell_idx
+
+    # Sample the bottom and adjust coords based on grid cell
     y = torch.tensor(-1.0, device=device)
-    z = torch.tensor(0.0, device=device)
+
+    # adjust z based on cell idx -- place at 0 point within cell
+    # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
+    # -z = closer to the camera, +z = farther away
+    z = torch.tensor(0.0 + z_cell , device=device)
+
     min_x = -0.8
     max_x = 0.8
     locations = []
@@ -310,6 +333,9 @@ def convert_raw_locations(raw_locations, stacking_program, primitives):
 
         min_x = min_x - size
         x = raw_location.sigmoid() * (max_x - min_x) + min_x
+        # adjust x based on cell -- assume cell sizes = +/- 1 (note: +x= move left)
+        # center_x = num_cells/2 -- farthest left = +num_rows
+        x = x + (x_cell - (num_rows/2)) # based on median/true center
         locations.append(torch.stack([x, y, z]))
 
         y = y + size
@@ -321,32 +347,37 @@ def convert_raw_locations(raw_locations, stacking_program, primitives):
 def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
     """
     Args
-        raw_locations (tensor [*shape, num_blocks])
-        stacking_program (tensor [*shape, num_blocks])
+        raw_locations (tensor [*shape, num_grid_rows, num_grid_cols, max_num_blocks])
+        stacking_program (tensor [*shape, num_grid_rows, num_grid_cols, max_num_blocks])
         primitives (list [num_primitives])
 
-    Returns [*shape, num_blocks, 3]
+    Returns [*shape, num_grid_rows * num_grid_cols * max_num_blocks, 3]
     """
     # Extract
-    shape = raw_locations.shape[:-1]
+    shape = raw_locations.shape[:-3]
     num_samples = util.get_num_elements(shape)
-    num_blocks = raw_locations.shape[-1]
+    num_grid_rows, num_grid_cols, max_num_blocks = raw_locations.shape[-3:]
 
     # Flatten
     # [num_samples, num_blocks]
-    raw_locations_flattened = raw_locations.view(num_samples, num_blocks)
-    stacking_program_flattened = stacking_program.reshape(num_samples, num_blocks)
+    raw_locations_flattened = raw_locations.view(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
+    stacking_program_flattened = stacking_program.reshape(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
 
     locations_batched = []
     for sample_id in range(num_samples):
-        locations_batched.append(
-            convert_raw_locations(
-                raw_locations_flattened[sample_id],
-                stacking_program_flattened[sample_id],
-                primitives,
-            )
-        )
-    return torch.stack(locations_batched).view(*[*shape, num_blocks, 3])
+        for row in range(num_grid_rows):
+            for col in range(num_grid_cols):
+                locations_batched.append(
+                    convert_raw_locations(
+                        raw_locations_flattened[sample_id, row, col],
+                        stacking_program_flattened[sample_id, row, col],
+                        primitives,
+                        (int(row), int(col)),
+                        num_grid_rows,
+                        num_grid_cols
+                    )
+                )
+    return torch.stack(locations_batched).view(*[*shape, num_grid_rows * num_grid_cols * max_num_blocks, 3])
 
 def convert_raw_gamma(gamma):
     return torch.abs(gamma* 1e-2)
@@ -361,13 +392,16 @@ def render(
     """
     Args
         primitives (list [num_primitives])
-        num_blocks [*shape]
-        stacking_program (tensor [*shape, max_num_blocks])
-        raw_locations (tensor [*shape, max_num_blocks])
+        num_blocks [*shape, num_grid_rows, num_grid_cols]
+        stacking_program (tensor [*shape, num_grid_rows, num_grid_cols, max_num_blocks])
+        raw_locations (tensor [*shape, num_grid_rows, num_grid_cols, max_num_blocks])
         im_size
+        sigma, gamma (blending parameters)
 
     Returns [*shape, num_channels=3, im_size, im_size]
     """
+
+    # TODO: adjust input to include cell idxs + more blocks
 
     if torch.is_tensor(gamma):
         gamma = convert_raw_gamma(gamma)
