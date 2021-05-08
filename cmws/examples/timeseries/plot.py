@@ -173,6 +173,50 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     util.save_fig(fig, path)
 
 
+def plot_prior_timeseries(path, generative_model, num_samples):
+    """
+    Args:
+        path (str)
+        generative_model
+        num_samples
+    """
+    latent, obs = generative_model.sample([num_samples])
+    raw_expression, eos, _ = latent
+    num_chars = lstm_util.get_num_timesteps(eos)
+
+    # Plot
+    num_rows = 1
+    num_cols = num_samples
+    fig, axss = plt.subplots(
+        num_rows,
+        num_cols,
+        figsize=(3 * num_cols, 2 * num_rows),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for sample_id in range(num_samples):
+        # Plot obs
+        ax = axss[0, sample_id]
+        plot_obs(ax, obs[sample_id])
+        long_expression = timeseries_util.get_long_expression(
+            timeseries_util.get_expression(raw_expression[sample_id][: num_chars[sample_id]])
+        )
+        ax.text(
+            0.95,
+            0.95,
+            "\n".join(textwrap.wrap(long_expression, 20)),
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="black",
+        )
+
+    util.save_fig(fig, path)
+
+
 def main(args):
     # Cuda
     device = util.get_device()
@@ -183,12 +227,12 @@ def main(args):
     else:
         checkpoint_paths = [args.checkpoint_path]
 
-    # Plot log p and KL for all checkpoints
+    # # Plot log p and KL for all checkpoints
     util.logging.info(f"Plotting stats for all runs in the experiment: {checkpoint_paths}")
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
 
-    # colors = {"cmws": "C0", "rws": "C1"}
-    colors = {0.0: "C0", 0.25: "C1", 0.5: "C2", 0.75: "C3", 1.0: "C4"}
+    colors = {"cmws": "C0", "rws": "C1"}
+    # colors = {0.0: "C0", 0.25: "C1", 0.5: "C2", 0.75: "C3", 1.0: "C4"}
     for checkpoint_path in checkpoint_paths:
         # Fix seed
         util.set_seed(1)
@@ -200,16 +244,12 @@ def main(args):
             )
             generative_model, guide = model["generative_model"], model["guide"]
             num_iterations = len(stats.losses)
+            if not run_args.full_training_data:
+                continue
 
             label = run.get_config_name(run_args)
-            if run_args.algorithm == "rws":
-                linestyle = "solid"
-            else:
-                if run_args.num_particles == 5:
-                    linestyle = "dotted"
-                else:
-                    linestyle = "dashed"
-            color = colors[run_args.insomnia]
+            linestyle = "solid"
+            color = colors[run_args.algorithm]
             plot_kwargs = {
                 "label": label,
                 "color": color,
@@ -234,7 +274,7 @@ def main(args):
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
-    ax.set_ylim(0, 1000000)
+    # ax.set_ylim(0, 1000000)
     ax.legend()
     for ax in axs:
         # ax.set_xlim(0, 20000)
@@ -288,6 +328,11 @@ def main(args):
 
             # Plot
             if run_args.model_type == "timeseries":
+                # Plot prior
+                plot_prior_timeseries(
+                    f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=100
+                )
+                # Plot predictions
                 if memory is not None:
                     plot_predictions_timeseries(
                         f"{save_dir}/predictions/train/memory/{num_iterations}.png",
