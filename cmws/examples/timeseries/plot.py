@@ -217,6 +217,97 @@ def plot_prior_timeseries(path, generative_model, num_samples):
     util.save_fig(fig, path)
 
 
+def plot_with_error_bars(ax, x, data, **plot_kwargs):
+    mid = np.nanmedian(data, axis=0)
+    low = np.nanpercentile(data, 25, axis=0)
+    high = np.nanpercentile(data, 75, axis=0)
+
+    num_not_nan = np.count_nonzero(~np.isnan(mid))
+
+    if num_not_nan > 0:
+        ax.plot(x[:num_not_nan], mid[:num_not_nan], **plot_kwargs)
+        ax.fill_between(
+            x[:num_not_nan], low[:num_not_nan], high[:num_not_nan], alpha=0.2, **plot_kwargs
+        )
+
+
+def plot_comparison(path, checkpoint_paths):
+    device = util.get_device()
+
+    util.logging.info(f"Plotting stats for all runs in the experiment: {checkpoint_paths}")
+
+    # Load
+    x = []
+    log_ps = {"cmws": [], "rws": []}
+    kls = {"cmws": [], "rws": []}
+    colors = {"cmws": "C0", "rws": "C1"}
+    for checkpoint_path in checkpoint_paths:
+        if os.path.exists(checkpoint_path):
+            # Load checkpoint
+            model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
+                checkpoint_path, device=device
+            )
+            x_new = [x[0] for x in stats.log_ps]
+            if len(x_new) > len(x):
+                x = x_new
+            log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
+            kls[run_args.algorithm].append([x[1] for x in stats.kls])
+    if len(x) == 0:
+        return
+
+    # Make numpy arrays
+    max_len = len(x)
+    num_seeds = 5
+    algorithms = ["cmws", "rws"]
+    log_ps_np = dict(
+        [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
+    )
+    kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
+    for algorithm in algorithms:
+        for seed in range(num_seeds):
+            log_p = log_ps[algorithm][seed]
+            kl = kls[algorithm][seed]
+            log_ps_np[algorithm][seed][: len(log_p)] = log_p
+            kls_np[algorithm][seed][: len(kl)] = kl
+
+    # Plot
+    fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+    colors = {"cmws": "C0", "rws": "C1"}
+    for algorithm in algorithms:
+        label = algorithm
+        linestyle = "solid"
+        color = colors[algorithm]
+        plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
+
+        # Logp
+        log_p = log_ps_np[algorithm]
+        ax = axs[0]
+        plot_with_error_bars(ax, x, log_p, **plot_kwargs)
+
+        # KL
+        kl = kls_np[algorithm]
+        ax = axs[1]
+        plot_with_error_bars(ax, x, kl, **plot_kwargs)
+
+    ax = axs[0]
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Log p")
+    ax.set_ylim(-500, 600)
+    ax.set_xlim(0, 5000)
+    ax.legend()
+
+    ax = axs[1]
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("KL")
+    ax.set_ylim(0, 1000000)
+    ax.set_xlim(0, 5000)
+    ax.legend()
+    for ax in axs:
+        # ax.set_xlim(0, 20000)
+        sns.despine(ax=ax, trim=True)
+    util.save_fig(fig, path, dpi=200)
+
+
 def main(args):
     # Cuda
     device = util.get_device()
@@ -227,63 +318,12 @@ def main(args):
     else:
         checkpoint_paths = [args.checkpoint_path]
 
-    # # Plot log p and KL for all checkpoints
-    util.logging.info(f"Plotting stats for all runs in the experiment: {checkpoint_paths}")
-    fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
-
-    colors = {"cmws": "C0", "rws": "C1"}
-    # colors = {0.0: "C0", 0.25: "C1", 0.5: "C2", 0.75: "C3", 1.0: "C4"}
-    for checkpoint_path in checkpoint_paths:
-        # Fix seed
-        util.set_seed(1)
-
-        if os.path.exists(checkpoint_path):
-            # Load checkpoint
-            model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
-                checkpoint_path, device=device
-            )
-            generative_model, guide = model["generative_model"], model["guide"]
-            num_iterations = len(stats.losses)
-            if not run_args.full_training_data:
-                continue
-
-            label = run.get_config_name(run_args)
-            linestyle = "solid"
-            color = colors[run_args.algorithm]
-            plot_kwargs = {
-                "label": label,
-                "color": color,
-                "linestyle": linestyle,
-                "alpha": 0.8,
-                "linewidth": 1.5,
-            }
-
-            # Logp
-            ax = axs[0]
-            ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps], **plot_kwargs)
-
-            # KL
-            ax = axs[1]
-            ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
-
-    ax = axs[0]
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Log p")
-    # ax.set_ylim(-5000, 1000)
-
-    ax = axs[1]
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("KL")
-    # ax.set_ylim(0, 1000000)
-    ax.legend()
-    for ax in axs:
-        # ax.set_xlim(0, 20000)
-        sns.despine(ax=ax, trim=True)
-    util.save_fig(fig, f"save/{args.experiment_name}/stats.png", dpi=200)
+    # Plot log p and KL for all checkpoints
+    plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
     )
-    # return
+    return
 
     # Plot for all checkpoints
     plotted_something = False
