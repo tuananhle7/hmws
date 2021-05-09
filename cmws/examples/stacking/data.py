@@ -132,9 +132,9 @@ class StackingDataset(torch.utils.data.Dataset):
 
 def get_stacking_data_loader(dataset_type, device, batch_size, test=False):
     if test:
-        shuffle = True
-    else:
         shuffle = False
+    else:
+        shuffle = True
     return torch.utils.data.DataLoader(
         StackingDataset(dataset_type, device, test=test), batch_size=batch_size, shuffle=shuffle
     )
