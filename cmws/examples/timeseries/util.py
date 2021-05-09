@@ -194,7 +194,7 @@ class Kernel(nn.Module):
                 "lengthscale_sq": F.softplus(param[3]) + 1e-4,
             }
         if char == "C":
-            return {"op": "Constant", "const": F.sigmoid(param[4]) * 10 + 1e-2}
+            return {"op": "Constant", "const": F.softplus(param[4]) + 1e-2}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 
