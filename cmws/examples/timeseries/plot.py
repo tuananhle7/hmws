@@ -318,7 +318,7 @@ def main(args):
 
     # Plot log p and KL for all checkpoints
     # plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
-    # returns
+    # return
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
     )
