@@ -284,10 +284,14 @@ class Guide(nn.Module):
     """CNN going from image to order and locations
     """
 
-    def __init__(self, num_primitives=3, max_num_blocks=3, im_size=32):
+    def __init__(
+        self, num_grid_rows=3, num_grid_cols=3, num_primitives=5, max_num_blocks=3, im_size=32
+    ):
         super().__init__()
 
         # Init
+        self.num_grid_rows = num_grid_rows
+        self.num_grid_cols = num_grid_cols
         self.num_primitives = num_primitives
         self.max_num_blocks = max_num_blocks
         self.num_channels = 3
@@ -299,16 +303,21 @@ class Guide(nn.Module):
         # self.obs_embedding_dim = 400  # determined by running the network forward
 
         # Mapping from obs embedding to num_blocks params
-        self.num_blocks_params_extractor = nn.Linear(self.obs_embedding_dim, self.max_num_blocks)
+        self.num_blocks_params_extractor = nn.Linear(
+            self.obs_embedding_dim,
+            self.num_grid_rows * self.num_grid_cols * (1 + self.max_num_blocks),
+        )
 
         # Mapping from obs embedding to stacking_program params
         self.stacking_program_params_extractor = nn.Linear(
-            self.obs_embedding_dim, self.max_num_blocks * self.num_primitives
+            self.obs_embedding_dim,
+            self.num_grid_rows * self.num_grid_cols * self.max_num_blocks * self.num_primitives,
         )
 
         # Mapping from obs embedding to location params
         self.raw_location_params_extractor = nn.Linear(
-            self.obs_embedding_dim, self.max_num_blocks * 2
+            self.obs_embedding_dim,
+            self.num_grid_rows * self.num_grid_cols * self.max_num_blocks * 2,
         )
 
     @property
@@ -321,11 +330,12 @@ class Guide(nn.Module):
             obs: [*shape, num_channels, im_size, im_size]
 
         Returns
-            num_blocks_params [*shape, max_num_blocks]
-            stacking_program_params [*shape, max_num_blocks, num_primitives]
+            num_blocks_params [*shape, num_grid_rows, num_grid_cols, 1 + max_num_blocks]
+            stacking_program_params [*shape, num_grid_rows, num_grid_cols, max_num_blocks,
+                                     num_primitives]
             raw_locations_params
-                loc [*shape, max_num_blocks]
-                scale [*shape, max_num_blocks]
+                loc [*shape, num_grid_rows, num_grid_cols, max_num_blocks]
+                scale [*shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
         shape = obs.shape[:-3]
         obs_flattened = obs.reshape(-1, self.num_channels, self.im_size, self.im_size)
@@ -335,24 +345,20 @@ class Guide(nn.Module):
 
         # Num blocks
         num_blocks_params = self.num_blocks_params_extractor(obs_embedding).view(
-            *shape, self.max_num_blocks
+            *shape, self.num_grid_rows, self.num_grid_cols, 1 + self.max_num_blocks
         )
 
         # Stacking program
         stacking_program_params = self.stacking_program_params_extractor(obs_embedding).view(
-            *shape, self.max_num_blocks, self.num_primitives
+            *shape, self.num_grid_rows, self.num_grid_cols, self.max_num_blocks, self.num_primitives
         )
 
         # Raw location
-        raw_location_params_extractor = self.raw_location_params_extractor(obs_embedding)
-        loc = raw_location_params_extractor[..., : self.max_num_blocks].view(
-            *shape, self.max_num_blocks
+        raw_location_params = self.raw_location_params_extractor(obs_embedding).view(
+            *shape, self.num_grid_rows, self.num_grid_cols, 2 * self.max_num_blocks
         )
-        scale = (
-            raw_location_params_extractor[..., self.max_num_blocks :]
-            .exp()
-            .view(*shape, self.max_num_blocks)
-        )
+        loc = raw_location_params[..., : self.max_num_blocks]
+        scale = raw_location_params[..., self.max_num_blocks :].exp()
 
         return num_blocks_params, stacking_program_params, (loc, scale)
 
@@ -368,7 +374,6 @@ class Guide(nn.Module):
 
         Returns [*sample_shape, *shape]
         """
-        # TODO
         # Extract
         num_blocks, stacking_program, raw_locations = latent
 
@@ -376,7 +381,9 @@ class Guide(nn.Module):
         num_blocks_params, stacking_program_params, (loc, scale) = self.get_dist_params(obs)
 
         # log q(Num blocks | x)
-        num_blocks_log_prob = util.CategoricalPlusOne(logits=num_blocks_params).log_prob(num_blocks)
+        num_blocks_log_prob = torch.distributions.Independent(
+            torch.distributions.Categorical(logits=num_blocks_params), reinterpreted_batch_ndims=2
+        ).log_prob(num_blocks)
 
         # log q(Stacking program | x)
         stacking_program_log_prob = util.pad_tensor(
@@ -385,12 +392,12 @@ class Guide(nn.Module):
             ),
             num_blocks,
             0,
-        ).sum(-1)
+        ).sum([-1, -2, -3])
 
         # log q(Raw locations | x)
         raw_locations_log_prob = util.pad_tensor(
             torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks, 0,
-        ).sum(-1)
+        ).sum([-1, -2, -3])
 
         return num_blocks_log_prob + stacking_program_log_prob + raw_locations_log_prob
 
@@ -405,12 +412,11 @@ class Guide(nn.Module):
             stacking_program [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
             raw_locations [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
-        # TODO
         # Compute params
         num_blocks_params, stacking_program_params, (loc, scale) = self.get_dist_params(obs)
 
         # Sample from q(Num blocks | x)
-        num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
+        num_blocks = torch.distributions.Categorical(logits=num_blocks_params).sample(sample_shape)
 
         # Sample from q(Stacking program | x)
         stacking_program = util.pad_tensor(
@@ -437,12 +443,11 @@ class Guide(nn.Module):
             num_blocks [*sample_shape, *shape, num_grid_rows, num_grid_cols]
             stacking_program [*sample_shape, *shape, num_grid_rows, num_grid_cols, max_num_blocks]
         """
-        # TODO
         # Compute params
         num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
 
         # Sample from q(Num blocks | x)
-        num_blocks = util.CategoricalPlusOne(logits=num_blocks_params).sample(sample_shape)
+        num_blocks = torch.distributions.Categorical(logits=num_blocks_params).sample(sample_shape)
 
         # Sample from q(Stacking program | x)
         stacking_program = util.pad_tensor(
@@ -468,11 +473,10 @@ class Guide(nn.Module):
             raw_locations [*sample_shape, *discrete_shape, *shape, num_grid_rows, num_grid_cols,
                            max_num_blocks]
         """
-        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
         shape = obs.shape[:-3]
-        discrete_shape = list(num_blocks.shape[: -len(shape)])
+        discrete_shape = list(num_blocks.shape[: -(len(shape) + 2)])
         num_elements = util.get_num_elements(sample_shape)
 
         # Compute params
@@ -501,7 +505,6 @@ class Guide(nn.Module):
 
         Returns [*discrete_shape, *shape]
         """
-        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
 
@@ -509,7 +512,9 @@ class Guide(nn.Module):
         num_blocks_params, stacking_program_params, _ = self.get_dist_params(obs)
 
         # log q(Num blocks | x)
-        num_blocks_log_prob = util.CategoricalPlusOne(logits=num_blocks_params).log_prob(num_blocks)
+        num_blocks_log_prob = torch.distributions.Independent(
+            torch.distributions.Categorical(logits=num_blocks_params), reinterpreted_batch_ndims=2
+        ).log_prob(num_blocks)
 
         # log q(Stacking program | x)
         stacking_program_log_prob = util.pad_tensor(
@@ -518,7 +523,7 @@ class Guide(nn.Module):
             ),
             num_blocks,
             0,
-        ).sum(-1)
+        ).sum([-1, -2, -3])
 
         return num_blocks_log_prob + stacking_program_log_prob
 
@@ -537,13 +542,12 @@ class Guide(nn.Module):
 
         Returns [*continuous_shape, *discrete_shape, *shape]
         """
-        # TODO
         # Extract
         num_blocks, stacking_program = discrete_latent
         raw_locations = continuous_latent
         shape = obs.shape[:-3]
-        discrete_shape = num_blocks.shape[: -len(shape)]
-        continuous_shape = continuous_latent.shape[: -(1 + len(shape) + len(discrete_shape))]
+        discrete_shape = num_blocks.shape[: -(len(shape) + 2)]
+        continuous_shape = continuous_latent.shape[: -(3 + len(shape) + len(discrete_shape))]
         continuous_num_elements = util.get_num_elements(continuous_shape)
 
         # Compute params
@@ -560,20 +564,6 @@ class Guide(nn.Module):
         # log q(Raw locations | x)
         raw_locations_log_prob = util.pad_tensor(
             torch.distributions.Normal(loc, scale).log_prob(raw_locations), num_blocks_expanded, 0,
-        ).sum(-1)
+        ).sum([-1, -2, -3])
 
         return raw_locations_log_prob
-
-
-if __name__ == "__main__":
-    num_samples = 5
-    path = "test/samples.png"
-    generative_model = GenerativeModel()
-    latent, obs = generative_model.sample((num_samples,))
-    fig, axs = plt.subplots(1, num_samples, figsize=(num_samples * 4, 4))
-    for i in range(num_samples):
-        axs[i].imshow(obs[i].cpu().detach()[i])
-    for ax in axs:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    util.save_fig(fig, path)
