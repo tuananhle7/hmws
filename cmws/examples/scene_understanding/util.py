@@ -7,20 +7,20 @@ from pathlib import Path
 import cmws
 import pyro
 import torch
-from cmws.examples.stacking_3d.models import stacking
+from cmws.examples.scene_understanding.models import scene_understanding
 
 
 # Init, saving, etc
 def init(run_args, device):
     memory = None
-    if run_args.model_type == "stacking":
+    if run_args.model_type == "scene_understanding":
         # Generative model
-        generative_model = stacking.GenerativeModel(
+        generative_model = scene_understanding.GenerativeModel(
             num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
         ).to(device)
 
         # Guide
-        guide = stacking.Guide(
+        guide = scene_understanding.Guide(
             num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
         ).to(device)
 
