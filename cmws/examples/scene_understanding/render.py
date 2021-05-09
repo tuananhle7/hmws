@@ -220,9 +220,6 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     for batch_idx, n_cubes in enumerate(num_cubes):
         # Combine obj meshes into single mesh from rendering
         # https://github.com/facebookresearch/pytorch3d/issues/15
-        if n_cubes == 0:
-            print("ERROR: NO BLOCKS!!!!")
-            continue
         vertices = []
         faces = []
         textures = []
@@ -241,12 +238,16 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             textures.append(texture)
 
         # Concatenate data into single mesh
-        vertices = torch.cat(vertices)
-        faces = torch.cat(faces)
-        textures = torch.cat(textures)[None]  # (1, num_verts, 3)
-        textures = TexturesVertex(verts_features=textures)
-        # each elmt of verts array is diff mesh in batch
-        mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+        if not n_cubes == 0:
+            vertices = torch.cat(vertices)
+            faces = torch.cat(faces)
+            textures = torch.cat(textures)[None]  # (1, num_verts, 3)
+            textures = TexturesVertex(verts_features=textures)
+            # each elmt of verts array is diff mesh in batch
+            mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+        else:
+            print("NOTE: no cubes in entire grid!!")
+            mesh = Meshes(verts=[], faces=[], textures=textures)
         meshes.append(mesh)
 
     batched_mesh = join_meshes_as_batch(meshes)
