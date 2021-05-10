@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 from cmws import util
-from cmws.examples.stacking_3d import data, render, run
-from cmws.examples.stacking_3d import util as stacking_3d_util
+from cmws.examples.scene_understanding import data, render, run
+from cmws.examples.scene_understanding import util as scene_understanding_util
 import time
 import numpy as np
 
@@ -49,7 +49,7 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_reconstructions_stacking(path, generative_model, guide, obs):
+def plot_reconstructions_scene_understanding(path, generative_model, guide, obs):
     """
     Args:
         path (str)
@@ -101,7 +101,7 @@ def plot_reconstructions_stacking(path, generative_model, guide, obs):
     util.save_fig(fig, path)
 
 
-def plot_primitives_stacking(path, generative_model):
+def plot_primitives_scene_understanding(path, generative_model):
     device = generative_model.device
     im_size = generative_model.im_size
     hi_res_im_size = 256
@@ -159,7 +159,7 @@ def main(args):
 
         if os.path.exists(checkpoint_path):
             # Load checkpoint
-            model, optimizer, stats, run_args = stacking_3d_util.load_checkpoint(
+            model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
                 checkpoint_path, device=device
             )
             generative_model, guide = model["generative_model"], model["guide"]
@@ -174,14 +174,14 @@ def main(args):
             obs = data.generate_test_obs(device)
 
             # Plot
-            if run_args.model_type == "stacking":
-                plot_reconstructions_stacking(
+            if run_args.model_type == "scene_understanding":
+                plot_reconstructions_scene_understanding(
                     f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
                     obs,
                 )
-                plot_primitives_stacking(
+                plot_primitives_scene_understanding(
                     f"{save_dir}/primitives/{num_iterations}.png", generative_model,
                 )
 
@@ -198,7 +198,9 @@ def get_parser():
     parser.add_argument("--experiment-name", type=str, default="", help=" ")
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
-    parser.add_argument("--delay", action="store_true", help="Whether to delay the start of execution")
+    parser.add_argument(
+        "--delay", action="store_true", help="Whether to delay the start of execution"
+    )
 
     return parser
 
@@ -210,7 +212,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         if args.delay:
             # delay start to ensure checkpoints exist before plotting
-            time.sleep(10*60) # units of seconds
+            time.sleep(10 * 60)  # units of seconds
 
         if args.repeat:
             while True:
