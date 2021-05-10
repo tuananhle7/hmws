@@ -1,8 +1,9 @@
 import pyro
 import torch
 from cmws import util
-from cmws.examples.stacking_3d import render
+from cmws.examples.scene_understanding import render
 import pathlib
+import matplotlib.pyplot as plt
 
 
 def sample_stacking_program(num_primitives, device, address_suffix="", fixed_num_blocks=False):
@@ -103,9 +104,9 @@ def generate_from_true_generative_model_single(
     # Render
     img = render.render(
         primitives,
-        torch.tensor(len(stacking_program), device=device).long(),
-        stacking_program,
-        raw_locations,
+        torch.tensor(len(stacking_program), device=device).long()[None, None],
+        stacking_program[None, None],
+        raw_locations[None, None],
         im_size,
     )
     assert len(img.shape) == 3
@@ -146,7 +147,7 @@ def generate_test_obs(device):
     return generate_obs(10, device, seed=1)
 
 
-class StackingDataset(torch.utils.data.Dataset):
+class SceneUnderstandingDataset(torch.utils.data.Dataset):
     """Loads or generates a dataset
     Uses ~1.2M (test) / 120MB (train)
 
@@ -205,39 +206,49 @@ class StackingDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_stacking_data_loader(device, batch_size, test=False):
+def get_scene_understanding_data_loader(device, batch_size, test=False):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        StackingDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
+        SceneUnderstandingDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
     )
 
 
+def plot_data():
+    device = torch.device("cuda")
+
+    # Plot train / test data
+    timeseries_dataset = {}
+
+    # Train
+    timeseries_dataset["train"] = SceneUnderstandingDataset(device)
+
+    # Test
+    timeseries_dataset["test"] = SceneUnderstandingDataset(device, test=True)
+
+    for mode in ["test", "train"]:
+        start = 0
+        end = 100
+
+        while start < len(timeseries_dataset[mode]):
+            obs, obs_id = timeseries_dataset[mode][start:end]
+            path = f"./data/plots/{mode}/{start:05.0f}_{end:05.0f}.png"
+
+            fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 3))
+
+            for i in range(len(obs)):
+                ax = axss.flat[i]
+                ax.imshow(obs[i].permute(1, 2, 0).detach().cpu())
+                ax.set_xticks([])
+                ax.set_yticks([])
+
+            util.save_fig(fig, path)
+
+            start = end
+            end += 100
+
+
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    from models import stacking
-
-    num_samples = 5
-    path = "test/samples.png"
-    generative_model = stacking.GenerativeModel(im_size=256)
-    latent, obs = generative_model.sample((num_samples,))
-    fig, axs = plt.subplots(1, num_samples, figsize=(num_samples * 4, 4))
-    for i in range(num_samples):
-        axs[i].imshow(obs.cpu().detach()[i].permute(1, 2, 0))
-    for ax in axs:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    util.save_fig(fig, path)
-
-    path = "test/data.png"
-    obs = generate_obs(num_samples, util.get_device())
-    fig, axs = plt.subplots(1, num_samples, figsize=(num_samples * 4, 4))
-    for i in range(num_samples):
-        axs[i].imshow(obs.cpu().detach()[i].permute(1, 2, 0))
-    for ax in axs:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    util.save_fig(fig, path)
+    plot_data()
