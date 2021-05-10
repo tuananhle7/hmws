@@ -57,7 +57,8 @@ def test_generative_model_discrete_latent_sample_dims():
 
 def test_generative_model_log_prob_dims():
     device = cmws.util.get_device()
-    num_grid_rows, num_grid_cols, num_primitives, max_num_blocks = 3, 3, 5, 3
+    # num_grid_rows, num_grid_cols, num_primitives, max_num_blocks = 3, 3, 5, 3
+    num_grid_rows, num_grid_cols, num_primitives, max_num_blocks = 2,2, 5, 3
     sample_shape = [2, 3]
     shape = [4]
 

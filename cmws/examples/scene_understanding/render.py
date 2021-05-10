@@ -238,12 +238,16 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             textures.append(texture)
 
         # Concatenate data into single mesh
-        vertices = torch.cat(vertices)
-        faces = torch.cat(faces)
-        textures = torch.cat(textures)[None]  # (1, num_verts, 3)
-        textures = TexturesVertex(verts_features=textures)
-        # each elmt of verts array is diff mesh in batch
-        mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+        if not n_cubes == 0:
+            vertices = torch.cat(vertices)
+            faces = torch.cat(faces)
+            textures = torch.cat(textures)[None]  # (1, num_verts, 3)
+            textures = TexturesVertex(verts_features=textures)
+            # each elmt of verts array is diff mesh in batch
+            mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+        else:
+            print("NOTE: no cubes in entire grid!!")
+            mesh = Meshes(verts=[], faces=[], textures=textures)
         meshes.append(mesh)
 
     batched_mesh = join_meshes_as_batch(meshes)
@@ -255,49 +259,6 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     img = img[:, ..., :3]#.detach().squeeze().cpu().numpy()
 
     return img
-
-# def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
-#     """
-#     Args
-#         raw_locations (tensor [num_blocks])
-#         stacking_program (tensor [num_blocks])
-#         primitives (list [num_primitives])
-#         cell_idx (tensor, scalar integer)
-#         num_rows (scalar integer)
-#         num_cols (scalar integer)
-#     Returns [num_blocks, 3]
-#     """
-#     # Extract
-#     device = primitives[0].device
-#
-#     # Map cell idx to position in n x n grid, where grid is in x-z space
-#     (x_cell, z_cell) = np.unravel_index(int(cell_idx), (num_rows, num_cols))
-#
-#     # Sample the bottom and adjust coords based on grid cell
-#     y = torch.tensor(-1.0, device=device)
-#
-#     # adjust z based on cell idx -- place at 0 point within cell
-#     # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
-#     # -z = closer to the camera, +z = farther away
-#     z = torch.tensor(0.0 + z_cell , device=device)
-#
-#     min_x = -0.8
-#     max_x = 0.8
-#     locations = []
-#     for primitive_id, raw_location in zip(stacking_program, raw_locations):
-#         size = primitives[primitive_id].size
-#
-#         min_x = min_x - size
-#         x = raw_location.sigmoid() * (max_x - min_x) + min_x
-#         # adjust x based on cell -- assume cell sizes = +/- 1 (note: +x= move left)
-#         # center_x = num_cells/2 -- farthest left = +num_rows
-#         x = x + (x_cell - (num_rows/2)) # based on median/true center
-#         locations.append(torch.stack([x, y, z]))
-#
-#         y = y + size
-#         min_x = x
-#         max_x = min_x + size
-#     return torch.stack(locations)
 
 def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
     """
@@ -412,8 +373,8 @@ def render(
     if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
 
     # Extract
-    shape = stacking_program.shape[:-1]
-    max_num_blocks = stacking_program.shape[-1]
+    shape = stacking_program.shape[:-3]
+    num_grid_rows, num_grid_cols, max_num_blocks = stacking_program.shape[-3:]
     num_elements = util.get_num_elements(shape)
     num_channels = 3
 
@@ -426,9 +387,9 @@ def render(
     locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
 
     # Flatten
-    num_blocks_flattened = num_blocks.reshape(num_elements)
-    stacking_program_flattened = stacking_program.reshape((num_elements, max_num_blocks))
-    locations_flattened = locations.view((num_elements, max_num_blocks, 3))
+    num_blocks_flattened = torch.sum(num_blocks.view((num_elements, num_grid_rows * num_grid_cols)),axis=1)
+    stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols * max_num_blocks))
+    locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols * max_num_blocks, 3))
 
     imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
                         sigma,gamma)
