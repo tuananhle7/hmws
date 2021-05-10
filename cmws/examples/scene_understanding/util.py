@@ -5,7 +5,6 @@ import time
 from pathlib import Path
 
 import cmws
-import pyro
 import torch
 from cmws.examples.scene_understanding.models import scene_understanding
 
@@ -16,12 +15,18 @@ def init(run_args, device):
     if run_args.model_type == "scene_understanding":
         # Generative model
         generative_model = scene_understanding.GenerativeModel(
-            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+            num_grid_rows=run_args.num_grid_rows,
+            num_grid_cols=run_args.num_grid_cols,
+            num_primitives=run_args.num_primitives,
+            max_num_blocks=run_args.max_num_blocks,
         ).to(device)
 
         # Guide
         guide = scene_understanding.Guide(
-            num_primitives=run_args.num_primitives, max_num_blocks=run_args.max_num_blocks
+            num_grid_rows=run_args.num_grid_rows,
+            num_grid_cols=run_args.num_grid_cols,
+            num_primitives=run_args.num_primitives,
+            max_num_blocks=run_args.max_num_blocks,
         ).to(device)
 
         # Memory
@@ -32,11 +37,8 @@ def init(run_args, device):
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
-    if "_pyro" in run_args.model_type:
-        optimizer = pyro.optim.pytorch_optimizers.Adam({"lr": run_args.lr})
-    else:
-        parameters = itertools.chain(generative_model.parameters(), guide.parameters())
-        optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
+    parameters = itertools.chain(generative_model.parameters(), guide.parameters())
+    optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
     stats = Stats([], [], [], [])
@@ -52,9 +54,7 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
             "generative_model_state_dict": generative_model.state_dict(),
             "guide_state_dict": guide.state_dict(),
             "memory_state_dict": None if memory is None else memory.state_dict(),
-            "optimizer_state_dict": optimizer.get_state()
-            if "_pyro" in run_args.model_type
-            else optimizer.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
             "stats": stats,
             "run_args": run_args,
         },
@@ -83,10 +83,7 @@ def load_checkpoint(path, device, num_tries=3):
         memory.load_state_dict(checkpoint["memory_state_dict"])
 
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
-    if "_pyro" in run_args.model_type:
-        optimizer.set_state(checkpoint["optimizer_state_dict"])
-    else:
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     stats = checkpoint["stats"]
     return model, optimizer, stats, run_args
 

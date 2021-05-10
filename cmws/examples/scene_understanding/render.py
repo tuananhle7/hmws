@@ -387,7 +387,7 @@ def render(
     locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
 
     # Flatten
-    num_blocks_flattened = torch.sum(num_blocks.view((num_elements, num_grid_rows * num_grid_cols)),axis=1)
+    num_blocks_flattened = torch.sum(num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols)),axis=1)
     stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols * max_num_blocks))
     locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols * max_num_blocks, 3))
 

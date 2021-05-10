@@ -485,8 +485,12 @@ class Guide(nn.Module):
         raw_locations = util.pad_tensor(
             torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape),
             num_blocks[None]
-            .expand(*[num_elements, *discrete_shape, *shape])
-            .view(*[*sample_shape, *discrete_shape, *shape]),
+            .expand(
+                *[num_elements, *discrete_shape, *shape, self.num_grid_rows, self.num_grid_cols]
+            )
+            .view(
+                *[*sample_shape, *discrete_shape, *shape, self.num_grid_rows, self.num_grid_cols]
+            ),
             0,
         )
 
@@ -556,8 +560,24 @@ class Guide(nn.Module):
         # [*continuous_shape, *discrete_shape, *shape]
         num_blocks_expanded = (
             num_blocks[None]
-            .expand(*[continuous_num_elements, *discrete_shape, *shape])
-            .view(*[*continuous_shape, *discrete_shape, *shape])
+            .expand(
+                *[
+                    continuous_num_elements,
+                    *discrete_shape,
+                    *shape,
+                    self.num_grid_rows,
+                    self.num_grid_cols,
+                ]
+            )
+            .view(
+                *[
+                    *continuous_shape,
+                    *discrete_shape,
+                    *shape,
+                    self.num_grid_rows,
+                    self.num_grid_cols,
+                ]
+            )
         )
 
         # log q(Raw locations | x)

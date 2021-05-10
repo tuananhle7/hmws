@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from cmws import train, util
-from cmws.examples.stacking_3d import util as stacking_3d_util
+from cmws.examples.scene_understanding import util as scene_understanding_util
 
 
 def main(args):
@@ -15,9 +15,11 @@ def main(args):
     checkpoint_path = util.get_checkpoint_path(args.experiment_name, get_config_name(args))
     if not (args.continue_training and Path(checkpoint_path).exists()):
         util.logging.info("Training from scratch")
-        model, optimizer, stats = stacking_3d_util.init(args, device)
+        model, optimizer, stats = scene_understanding_util.init(args, device)
     else:
-        model, optimizer, stats, _ = stacking_3d_util.load_checkpoint(checkpoint_path, device)
+        model, optimizer, stats, _ = scene_understanding_util.load_checkpoint(
+            checkpoint_path, device
+        )
 
     # Train
     train.train(model, optimizer, stats, args)
@@ -44,9 +46,11 @@ def get_args_parser():
 
     # Model
     parser.add_argument("--num-primitives", default=5, type=int, help=" ")
+    parser.add_argument("--num-grid-rows", default=3, type=int, help=" ")
+    parser.add_argument("--num-grid-cols", default=3, type=int, help=" ")
     parser.add_argument("--max-num-blocks", default=3, type=int, help=" ")
     parser.add_argument(
-        "--model-type", default="stacking", choices=["stacking"], help=" ",
+        "--model-type", default="scene_understanding", choices=["scene_understanding"], help=" ",
     )
 
     # Data
