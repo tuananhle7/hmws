@@ -187,6 +187,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
                                     )#fov=90.0)  # fov=45.0)
 
+    print("sigma: ", sigma, " gamma: ", gamma)
+
     # Settings for rasterizer (optional blur)
     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
     # implements eqs from SoftRasterizer paper
@@ -194,7 +196,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     raster_settings = RasterizationSettings(
         image_size=im_size,  # crisper objects + texture w/ higher resolution
         blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
-        faces_per_pixel=1,  # increase at cost of GPU memory,
+        faces_per_pixel=3,  # increase at cost of GPU memory,
         bin_size=None
     )
 
@@ -408,8 +410,6 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
     max_x = 0.8
     screen_width = (max_x - min_x) * num_cols#num_rows
 
-    print(screen_width, num_rows * 2)
-
     # get pairs of [min_x, max_x] for screen
     x_bounds = np.linspace(-(screen_width / 2), (screen_width / 2), num_rows * 2)
 
@@ -431,7 +431,8 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
         # threshold x: https://stackoverflow.com/questions/48109228/normalizing-data-to-certain-range-of-values
         #x = cell_x_min + (cell_x_max - cell_x_min)*x
 
-        print("new loc: ", x, y, z)
+        print("y: " , y , " size: ", size)
+        print("x, y, z: ", [x, y, z])
         locations.append(torch.stack([x, y, z]))
 
         y = y + size
@@ -465,10 +466,10 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
             for col in range(num_grid_cols):
                 locations_batched.append(
                     convert_raw_locations(
-                        # raw_locations_flattened[sample_id, row, col],
-                        # stacking_program_flattened[sample_id, row, col],
-                        raw_locations_flattened[sample_id, col, row],
-                        stacking_program_flattened[sample_id, col, row],
+                        raw_locations_flattened[sample_id, row, col],
+                        stacking_program_flattened[sample_id, row, col],
+                        # raw_locations_flattened[sample_id, col, row],
+                        # stacking_program_flattened[sample_id, col, row],
                         primitives,
                         (int(col), int(row)),
                         num_grid_rows,
@@ -478,10 +479,10 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
     return torch.stack(locations_batched).view(*[*shape, num_grid_rows * num_grid_cols * max_num_blocks, 3])
 
 def convert_raw_gamma(gamma):
-    return torch.abs(gamma* 1e-2)
+    return torch.abs(gamma* 1e-4)
 
 def convert_raw_sigma(sigma):
-    return torch.abs(sigma * 1e-2)
+    return torch.abs(sigma * 1e-4)
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
@@ -500,11 +501,6 @@ def render(
     """
 
     # TODO: adjust input to include cell idxs + more blocks
-
-    if torch.is_tensor(gamma):
-        gamma = convert_raw_gamma(gamma)
-    if torch.is_tensor(sigma):
-        sigma = convert_raw_sigma(sigma)
 
     if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
     if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
@@ -529,6 +525,9 @@ def render(
 
     stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols, max_num_blocks))
     locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols, max_num_blocks, 3))
+
+    print("num blocks: ", num_blocks_flattened)
+    print("sizes: ", square_size[stacking_program_flattened])
 
     imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
                         sigma,gamma)
