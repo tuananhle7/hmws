@@ -1,5 +1,5 @@
 import cmws.slurm_util
-from cmws.examples.stacking_3d import run
+from cmws.examples.scene_understanding import run
 
 
 def get_run_argss():
@@ -12,7 +12,7 @@ def get_run_argss():
         args.num_particles = 10
         args.insomnia = 0.75
         args.algorithm = "cmws"
-        args.model_type = "stacking"
+        args.model_type = "scene_understanding"
         args.continue_training = True
         yield args
 
@@ -23,7 +23,7 @@ def get_run_argss():
         args.num_particles = 50
         args.insomnia = 0.75
         args.algorithm = "rws"
-        args.model_type = "stacking"
+        args.model_type = "scene_understanding"
         args.continue_training = True
         yield args
 
