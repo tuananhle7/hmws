@@ -398,12 +398,15 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
     # adjust z based on cell idx -- place at 0 point within cell
     # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
     # -z = closer to the camera, +z = farther away
-    z = torch.tensor(0.0 + 2*z_cell , device=device)
+    z_spacing = 2 # spacing in the z direction between cells
+    z = torch.tensor(0.0 + z_spacing*z_cell , device=device)
+    # z = torch.tensor(num_rows - (z_spacing*z_cell + 1), device=device)
+
 
     # each box is width 1.6 (+/- 0.8)
     min_x = -0.8
     max_x = 0.8
-    screen_width = (max_x - min_x) * num_rows
+    screen_width = (max_x - min_x) * num_cols#num_rows
 
     print(screen_width, num_rows * 2)
 
@@ -462,10 +465,12 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
             for col in range(num_grid_cols):
                 locations_batched.append(
                     convert_raw_locations(
-                        raw_locations_flattened[sample_id, row, col],
-                        stacking_program_flattened[sample_id, row, col],
+                        # raw_locations_flattened[sample_id, row, col],
+                        # stacking_program_flattened[sample_id, row, col],
+                        raw_locations_flattened[sample_id, col, row],
+                        stacking_program_flattened[sample_id, col, row],
                         primitives,
-                        (int(row), int(col)),
+                        (int(col), int(row)),
                         num_grid_rows,
                         num_grid_cols
                     )
@@ -527,6 +532,8 @@ def render(
 
     imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
                         sigma,gamma)
+    # imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations, im_size,
+    #                     sigma,gamma)
     imgs = imgs.permute(0, 3, 1, 2)
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])
 
