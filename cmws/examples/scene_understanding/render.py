@@ -179,13 +179,13 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     device = sizes.device
 
     # Create camera
-    R, T = look_at_view_transform(1.7, 0, 180,
-                                  at=((0.0, 0.0, -0.5),))
+    R, T = look_at_view_transform(2.7, 0, 180,
+                                  at=((0.0, 0.0, 0.0),),)
     # R, T = look_at_view_transform(3.5, 0, 0,
     #                               up=((0.0, 0.0, 0.0),),
     #                               at=((0.0, 0.0, -0.5),))
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
-                                    )  # fov=45.0)
+                                    )#fov=90.0)  # fov=45.0)
 
     # Settings for rasterizer (optional blur)
     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
@@ -232,7 +232,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             texture = torch.ones_like(cube_vertices) * color# [V, 3]
             # Offset faces (account for diff indexing, b/c treating as one mesh)
             cube_faces = cube_faces + vert_offset
-            vert_offset = cube_vertices.shape[0]
+            vert_offset += cube_vertices.shape[0]
             vertices.append(cube_vertices)
             faces.append(cube_faces)
             textures.append(texture)
@@ -247,7 +247,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
         else:
             print("NOTE: no cubes in entire grid!!")
-            mesh = Meshes(verts=[], faces=[], textures=textures)
+            mesh = Meshes(verts=[], faces=[], textures=TexturesVertex(verts_features=[]))
         meshes.append(mesh)
 
     batched_mesh = join_meshes_as_batch(meshes)
@@ -266,11 +266,12 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
         raw_locations (tensor [num_blocks])
         stacking_program (tensor [num_blocks])
         primitives (list [num_primitives])
-        cell_idx  (tuple of ints (x_cell, z_cel
+        cell_idx  (tuple of ints (x_cell, z_cell))
         num_rows (scalar integer)
         num_cols (scalar integer)
     Returns [num_blocks, 3]
     """
+
     # Extract
     device = primitives[0].device
 
@@ -278,16 +279,32 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
     # (x_cell, z_cell) = np.unravel_index(int(cell_idx), (num_rows, num_cols))
     (x_cell, z_cell) = cell_idx
 
+    print("x cell: ", x_cell, " z cell: ", z_cell)
+
     # Sample the bottom and adjust coords based on grid cell
     y = torch.tensor(-1.0, device=device)
 
     # adjust z based on cell idx -- place at 0 point within cell
     # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
     # -z = closer to the camera, +z = farther away
-    z = torch.tensor(0.0 + z_cell , device=device)
+    z = torch.tensor(0.0 + 2*z_cell , device=device)
 
+    # each box is width 1.6 (+/- 0.8)
     min_x = -0.8
     max_x = 0.8
+    screen_width = (max_x - min_x) * num_rows
+
+    print(screen_width, num_rows * 2)
+
+    # get pairs of [min_x, max_x] for screen
+    x_bounds = np.linspace(-(screen_width / 2), (screen_width / 2), num_rows * 2)
+
+    cell_x_min = x_bounds[x_cell*2]
+    cell_x_max = x_bounds[(x_cell*2)+1]
+
+    min_x = cell_x_min
+    max_x = cell_x_max
+
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
         size = primitives[primitive_id].size
@@ -296,7 +313,11 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
         x = raw_location.sigmoid() * (max_x - min_x) + min_x
         # adjust x based on cell -- assume cell sizes = +/- 1 (note: +x= move left)
         # center_x = num_cells/2 -- farthest left = +num_rows
-        x = x + (x_cell - (num_rows/2)) # based on median/true center
+
+        # threshold x: https://stackoverflow.com/questions/48109228/normalizing-data-to-certain-range-of-values
+        #x = cell_x_min + (cell_x_max - cell_x_min)*x
+
+        print("new loc: ", x, y, z)
         locations.append(torch.stack([x, y, z]))
 
         y = y + size
@@ -322,7 +343,7 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
     # Flatten
     # [num_samples, num_blocks]
     raw_locations_flattened = raw_locations.view(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
-    stacking_program_flattened = stacking_program.reshape(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
+    stacking_program_flattened = stacking_program.view(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
 
     locations_batched = []
     for sample_id in range(num_samples):
