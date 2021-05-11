@@ -252,7 +252,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
         if len(vertices) == 0:
             # no cubes were in the entire grid -- error case
             print("NOTE: no cubes in entire grid!!")
-            mesh = Meshes(verts=[], faces=[])
+            blank_texture = TexturesVertex(verts_features=[torch.ones_like([8,3])])[None]
+            mesh = Meshes(verts=[], faces=[],textures=blank_texture)
         else:
             vertices = torch.cat(vertices)
             faces = torch.cat(faces)
