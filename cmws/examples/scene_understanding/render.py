@@ -160,17 +160,17 @@ def render_cube(size, color, position, im_size=32):
     return imgs[0]
 
 
-def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6):
+def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6, remove_color=False):
     """Renders cubes given cube specs
 
     Args
-        num_cubes [*shape]
-        sizes [*shape,max_num_cubes]
-        colors [*shape, max_num_cubes, 3]
-        positions [*shape, max_num_cubes, 3]
+        num_cubes [batch_size, num_cells]
+        sizes [batch_size, num_cells, max_num_cubes]
+        colors [batch_size, num_cells, max_num_cubes, 3]
+        positions [batch_size, num_cells, max_num_cubes, 3]
         im_size (int)
-
-    Returns rgb image [*shape, im_size, im_size, 3]
+        remove_color (bool) if True, make all blocks the same color (ignores colors tensor)
+    Returns rgb image [batch_size, im_size, im_size, 3]
     """
     # Modified from PyTorch3D tutorial
     # https://github.com/facebookresearch/pytorch3d/blob/master/docs/tutorials/render_textured_meshes.ipynb
@@ -215,39 +215,49 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
         )
     )
 
+    # extract info
+    num_batches, num_cells = num_cubes.shape
+
     # create one mesh per elmt in batch
     meshes = []
-    for batch_idx, n_cubes in enumerate(num_cubes):
+    for batch_idx in range(num_batches):
         # Combine obj meshes into single mesh from rendering
         # https://github.com/facebookresearch/pytorch3d/issues/15
         vertices = []
         faces = []
         textures = []
-        vert_offset = 0 # offset by vertices from prior meshes
-        for i, (position, size,color) in enumerate(zip(positions[batch_idx, :n_cubes, :], sizes[batch_idx, :n_cubes],
-                                                       colors[batch_idx, :n_cubes, :])):
-            cube_vertices, cube_faces = get_cube_mesh(position, size)
-            # For now, apply same color to each mesh vertex (v \in V)
-            #texture = torch.ones_like(cube_vertices)
-            texture = torch.ones_like(cube_vertices) * color# [V, 3]
-            # Offset faces (account for diff indexing, b/c treating as one mesh)
-            cube_faces = cube_faces + vert_offset
-            vert_offset += cube_vertices.shape[0]
-            vertices.append(cube_vertices)
-            faces.append(cube_faces)
-            textures.append(texture)
+        vert_offset = 0  # offset by vertices from prior meshes
+        for cell_idx in range(num_cells):
+            n_cubes = num_cubes[batch_idx][cell_idx]
+            if n_cubes == 0:
+                print("Grid cell: ", cell_idx, " empty!")
+                continue
+            for i, (position, size,color) in enumerate(zip(positions[batch_idx, cell_idx, :n_cubes, :], sizes[batch_idx, cell_idx, :n_cubes],
+                                                           colors[batch_idx, cell_idx, :n_cubes, :])):
+                cube_vertices, cube_faces = get_cube_mesh(position, size)
+                # For now, apply same color to each mesh vertex (v \in V)
+                if remove_color: texture = torch.ones_like(cube_vertices)
+                else: texture = torch.ones_like(cube_vertices) * color# [V, 3]
+                # Offset faces (account for diff indexing, b/c treating as one mesh)
+                cube_faces = cube_faces + vert_offset
+                vert_offset += cube_vertices.shape[0]
+                vertices.append(cube_vertices)
+                faces.append(cube_faces)
+                textures.append(texture)
 
         # Concatenate data into single mesh
-        if not n_cubes == 0:
+        # first check that entire grid has at least one block
+        if len(vertices) == 0:
+            # no cubes were in the entire grid -- error case
+            print("NOTE: no cubes in entire grid!!")
+            mesh = Meshes(verts=[], faces=[])
+        else:
             vertices = torch.cat(vertices)
             faces = torch.cat(faces)
             textures = torch.cat(textures)[None]  # (1, num_verts, 3)
             textures = TexturesVertex(verts_features=textures)
             # each elmt of verts array is diff mesh in batch
             mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
-        else:
-            print("NOTE: no cubes in entire grid!!")
-            mesh = Meshes(verts=[], faces=[], textures=TexturesVertex(verts_features=[]))
         meshes.append(mesh)
 
     batched_mesh = join_meshes_as_batch(meshes)
@@ -259,6 +269,107 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     img = img[:, ..., :3]#.detach().squeeze().cpu().numpy()
 
     return img
+
+#
+# def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6):
+#     """Renders cubes given cube specs
+#
+#     Args
+#         num_cubes [*shape]
+#         sizes [*shape,max_num_cubes]
+#         colors [*shape, max_num_cubes, 3]
+#         positions [*shape, max_num_cubes, 3]
+#         im_size (int)
+#
+#     Returns rgb image [*shape, im_size, im_size, 3]
+#     """
+#     # Modified from PyTorch3D tutorial
+#     # https://github.com/facebookresearch/pytorch3d/blob/master/docs/tutorials/render_textured_meshes.ipynb
+#
+#     # Extract
+#     device = sizes.device
+#
+#     # Create camera
+#     R, T = look_at_view_transform(2.7, 0, 180,
+#                                   at=((0.0, 0.0, 0.0),),)
+#     # R, T = look_at_view_transform(3.5, 0, 0,
+#     #                               up=((0.0, 0.0, 0.0),),
+#     #                               at=((0.0, 0.0, -0.5),))
+#     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
+#                                     )#fov=90.0)  # fov=45.0)
+#
+#     # Settings for rasterizer (optional blur)
+#     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
+#     # implements eqs from SoftRasterizer paper
+#     blend_params = BlendParams(sigma=sigma, gamma=gamma) #,background_color=(0.0, 0.0, 0.0))
+#     raster_settings = RasterizationSettings(
+#         image_size=im_size,  # crisper objects + texture w/ higher resolution
+#         blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
+#         faces_per_pixel=1,  # increase at cost of GPU memory,
+#         bin_size=None
+#     )
+#
+#     # Add light from the front
+#     lights = PointLights(device=device, location=[[0.0, 0.0, 3.0]])
+#
+#     # Compose renderer and shader
+#     renderer = MeshRenderer(
+#         rasterizer=MeshRasterizer(
+#             cameras=cameras,
+#             raster_settings=raster_settings
+#         ),
+#         shader=SoftPhongShader(
+#             device=device,
+#             cameras=cameras,
+#             lights=lights,
+#             blend_params=blend_params
+#         )
+#     )
+#
+#     # create one mesh per elmt in batch
+#     meshes = []
+#     for batch_idx, n_cubes in enumerate(num_cubes):
+#         # Combine obj meshes into single mesh from rendering
+#         # https://github.com/facebookresearch/pytorch3d/issues/15
+#         vertices = []
+#         faces = []
+#         textures = []
+#         vert_offset = 0 # offset by vertices from prior meshes
+#         for i, (position, size,color) in enumerate(zip(positions[batch_idx, :n_cubes, :], sizes[batch_idx, :n_cubes],
+#                                                        colors[batch_idx, :n_cubes, :])):
+#             cube_vertices, cube_faces = get_cube_mesh(position, size)
+#             # For now, apply same color to each mesh vertex (v \in V)
+#             #texture = torch.ones_like(cube_vertices)
+#             texture = torch.ones_like(cube_vertices) * color# [V, 3]
+#             # Offset faces (account for diff indexing, b/c treating as one mesh)
+#             cube_faces = cube_faces + vert_offset
+#             vert_offset += cube_vertices.shape[0]
+#             vertices.append(cube_vertices)
+#             faces.append(cube_faces)
+#             textures.append(texture)
+#
+#         # Concatenate data into single mesh
+#         if not n_cubes == 0:
+#             vertices = torch.cat(vertices)
+#             faces = torch.cat(faces)
+#             textures = torch.cat(textures)[None]  # (1, num_verts, 3)
+#             textures = TexturesVertex(verts_features=textures)
+#             # each elmt of verts array is diff mesh in batch
+#             mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
+#         else:
+#             print("NOTE: no cubes in entire grid!!")
+#             mesh = Meshes(verts=[], faces=[], textures=TexturesVertex(verts_features=[]))
+#         meshes.append(mesh)
+#
+#     batched_mesh = join_meshes_as_batch(meshes)
+#
+#     # Render image
+#     img = renderer(batched_mesh)   # (B, H, W, 4)
+#
+#     # Remove alpha channel and return (B, im_size, im_size, 3)
+#     img = img[:, ..., :3]#.detach().squeeze().cpu().numpy()
+#
+#     return img
 
 def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
     """
@@ -408,9 +519,11 @@ def render(
     locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
 
     # Flatten
-    num_blocks_flattened = torch.sum(num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols)),axis=1)
-    stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols * max_num_blocks))
-    locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols * max_num_blocks, 3))
+    # num_blocks_flattened = torch.sum(num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols)),axis=1)
+    num_blocks_flattened = num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols))
+
+    stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols, max_num_blocks))
+    locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols, max_num_blocks, 3))
 
     imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
                         sigma,gamma)
