@@ -45,6 +45,24 @@ def test_value():
     assert torch.equal(scores_selected, scores_selected_correct)
 
 
+def test_return_indices():
+    # shape is []
+    k = 2
+    x = torch.tensor([[0, 1, 2, 3], [3, 2, 4, 1], [0, 1, 2, 3], [3, 1, 3, 2], [1, 2, 4, 1]]).long()
+    scores = torch.tensor([10, 3, 10, 1, 5]).float()
+    x_selected_correct = torch.tensor([[1, 2, 4, 1], [0, 1, 2, 3]])
+    scores_selected_correct = torch.tensor([5, 10]).float()
+    indices_correct = torch.tensor([4, 0])
+
+    x_selected, scores_selected, indices = cmws.memory.get_unique_and_top_k(
+        x, scores, k, return_indices=True
+    )
+
+    assert torch.equal(x_selected, x_selected_correct)
+    assert torch.equal(scores_selected, scores_selected_correct)
+    assert torch.equal(indices, indices_correct)
+
+
 def test_select():
     num_obs = 10
     memory_size = 11

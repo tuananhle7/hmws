@@ -225,10 +225,21 @@ def plot_with_error_bars(ax, x, data, **plot_kwargs):
     num_not_nan = np.count_nonzero(~np.isnan(mid))
 
     if num_not_nan > 0:
-        ax.plot(x[:num_not_nan], mid[:num_not_nan], **plot_kwargs)
+        lines = ax.plot(x[:num_not_nan], mid[:num_not_nan], **plot_kwargs)
         ax.fill_between(
-            x[:num_not_nan], low[:num_not_nan], high[:num_not_nan], alpha=0.2, **plot_kwargs
+            x[:num_not_nan],
+            low[:num_not_nan],
+            high[:num_not_nan],
+            alpha=0.2,
+            color=lines[0].get_color(),
         )
+
+
+def get_colors(num_colors, cmap=matplotlib.cm.Blues):
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=num_colors)
+    cmap = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+    cmap.set_array([])
+    return [cmap.to_rgba(i + 1) for i in range(num_colors)]
 
 
 def plot_comparison(path, checkpoint_paths):
