@@ -462,7 +462,7 @@ def get_cmws_2_loss(
     # COMPUTE losses
     # --Compute generative model loss
     # [batch_size]
-    generative_model_loss = (
+    generative_model_loss = -(
         (torch.softmax(_log_weight, dim=0).detach() * _log_p).sum(dim=0).mean(dim=0)
     )
 
@@ -482,7 +482,7 @@ def get_cmws_2_loss(
             num_particles, memory.size, batch_size
         )
         # [batch_size]
-        guide_loss_cmws = (
+        guide_loss_cmws = -(
             _log_weight_normalized.detach() * (_log_q_discrete[None] + _log_q_continuous)
         ).sum(dim=[0, 1])
 
