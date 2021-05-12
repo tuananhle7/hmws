@@ -222,6 +222,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 
     # create one mesh per elmt in batch
     meshes = []
+    empty_idxs = set() # patch: fill-in rendered images with blank images for blockless grids
     for batch_idx in range(num_batches):
         # Combine obj meshes into single mesh from rendering
         # https://github.com/facebookresearch/pytorch3d/issues/15
@@ -252,8 +253,10 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
         if len(vertices) == 0:
             # no cubes were in the entire grid -- error case
             print("NOTE: no cubes in entire grid!!")
-            blank_texture = TexturesVertex(verts_features=[torch.ones_like([8,3])])[None]
+            singleton = torch.ones_like(torch.empty(8, 3))
+            blank_texture = TexturesVertex(verts_features=singleton[None])
             mesh = Meshes(verts=[], faces=[],textures=blank_texture)
+            empty_idxs.add(batch_idx)
         else:
             vertices = torch.cat(vertices)
             faces = torch.cat(faces)
@@ -262,16 +265,30 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             # each elmt of verts array is diff mesh in batch
             mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
         meshes.append(mesh)
+        print("MESH LEN: ", len(meshes))
 
+    print("PRE batched mesh: ", len(meshes), meshes[0])
     batched_mesh = join_meshes_as_batch(meshes)
+    print("batched mesh: ", batched_mesh)
 
     # Render image
-    img = renderer(batched_mesh)   # (B, H, W, 4)
+    rendered_scenes = renderer(batched_mesh)   # (B, H, W, 4)
+
+    # TODO: clean up code -- patch to handle rendering a blank img if not blocks in full cell
+    if len(empty_idxs) == 0: imgs = rendered_scenes
+    else:
+        imgs = torch.ones_like(torch.empty(num_batches, im_size, im_size, 4))
+        rendered_scene_idx = 0
+        for batch_idx in range(num_batches):
+            if batch_idx in empty_idxs:
+                imgs[batch_idx] = torch.ones_like(torch.empty(im_size, im_size, 4))
+            else: imgs[batch_idx] = rendered_scenes[rendered_scene_idx]
+
 
     # Remove alpha channel and return (B, im_size, im_size, 3)
-    img = img[:, ..., :3]#.detach().squeeze().cpu().numpy()
+    imgs = imgs[:, ..., :3]#.detach().squeeze().cpu().numpy()
 
-    return img
+    return imgs.to(device)
 
 #
 # def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6):
@@ -535,6 +552,11 @@ def render(
     # imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations, im_size,
     #                     sigma,gamma)
     imgs = imgs.permute(0, 3, 1, 2)
+
+    print("imgs: ", imgs.shape)
+    print("shape: ", shape)
+    print("num elements: ", num_elements)
+
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])
 
     return imgs
