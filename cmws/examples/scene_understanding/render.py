@@ -156,7 +156,7 @@ def render_cube(size, color, position, im_size=32):
     Returns rgb image [im_size, im_size, 3]
     """
     num_cubes = torch.IntTensor([1])
-    imgs = render_cubes(num_cubes, size[None,None], color[None,None], position[None, None], im_size)
+    imgs = render_cubes(num_cubes[None], size[None,None,None], color[None,None,None], position[None,None,None], im_size)
     return imgs[0]
 
 
@@ -186,8 +186,6 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     #                               at=((0.0, 0.0, -0.5),))
     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
                                     )#fov=90.0)  # fov=45.0)
-
-    print("sigma: ", sigma, " gamma: ", gamma)
 
     # Settings for rasterizer (optional blur)
     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
@@ -232,9 +230,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
         vert_offset = 0  # offset by vertices from prior meshes
         for cell_idx in range(num_cells):
             n_cubes = num_cubes[batch_idx][cell_idx]
-            if n_cubes == 0:
-                print("Grid cell: ", cell_idx, " empty!")
-                continue
+            if n_cubes == 0: continue # empty cell
             for i, (position, size,color) in enumerate(zip(positions[batch_idx, cell_idx, :n_cubes, :], sizes[batch_idx, cell_idx, :n_cubes],
                                                            colors[batch_idx, cell_idx, :n_cubes, :])):
                 cube_vertices, cube_faces = get_cube_mesh(position, size)
@@ -252,24 +248,21 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
         # first check that entire grid has at least one block
         if len(vertices) == 0:
             # no cubes were in the entire grid -- error case
-            print("NOTE: no cubes in entire grid!!")
-            singleton = torch.ones_like(torch.empty(8, 3))
+            print("No cubes in entire grid!!")
+            singleton = torch.zeros_like(torch.empty(8, 3)).to(device)
             blank_texture = TexturesVertex(verts_features=singleton[None])
-            mesh = Meshes(verts=[], faces=[],textures=blank_texture)
+            mesh = Meshes(verts=torch.tensor([]).to(device), faces=torch.tensor([]).to(device),textures=blank_texture)
             empty_idxs.add(batch_idx)
         else:
-            vertices = torch.cat(vertices)
-            faces = torch.cat(faces)
-            textures = torch.cat(textures)[None]  # (1, num_verts, 3)
+            vertices = torch.cat(vertices).to(device)
+            faces = torch.cat(faces).to(device)
+            textures = torch.cat(textures)[None].to(device)  # (1, num_verts, 3)
             textures = TexturesVertex(verts_features=textures)
             # each elmt of verts array is diff mesh in batch
             mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
         meshes.append(mesh)
-        print("MESH LEN: ", len(meshes))
 
-    print("PRE batched mesh: ", len(meshes), meshes[0])
     batched_mesh = join_meshes_as_batch(meshes)
-    print("batched mesh: ", batched_mesh)
 
     # Render image
     rendered_scenes = renderer(batched_mesh)   # (B, H, W, 4)
@@ -290,106 +283,6 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 
     return imgs.to(device)
 
-#
-# def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6):
-#     """Renders cubes given cube specs
-#
-#     Args
-#         num_cubes [*shape]
-#         sizes [*shape,max_num_cubes]
-#         colors [*shape, max_num_cubes, 3]
-#         positions [*shape, max_num_cubes, 3]
-#         im_size (int)
-#
-#     Returns rgb image [*shape, im_size, im_size, 3]
-#     """
-#     # Modified from PyTorch3D tutorial
-#     # https://github.com/facebookresearch/pytorch3d/blob/master/docs/tutorials/render_textured_meshes.ipynb
-#
-#     # Extract
-#     device = sizes.device
-#
-#     # Create camera
-#     R, T = look_at_view_transform(2.7, 0, 180,
-#                                   at=((0.0, 0.0, 0.0),),)
-#     # R, T = look_at_view_transform(3.5, 0, 0,
-#     #                               up=((0.0, 0.0, 0.0),),
-#     #                               at=((0.0, 0.0, -0.5),))
-#     cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
-#                                     )#fov=90.0)  # fov=45.0)
-#
-#     # Settings for rasterizer (optional blur)
-#     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
-#     # implements eqs from SoftRasterizer paper
-#     blend_params = BlendParams(sigma=sigma, gamma=gamma) #,background_color=(0.0, 0.0, 0.0))
-#     raster_settings = RasterizationSettings(
-#         image_size=im_size,  # crisper objects + texture w/ higher resolution
-#         blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
-#         faces_per_pixel=1,  # increase at cost of GPU memory,
-#         bin_size=None
-#     )
-#
-#     # Add light from the front
-#     lights = PointLights(device=device, location=[[0.0, 0.0, 3.0]])
-#
-#     # Compose renderer and shader
-#     renderer = MeshRenderer(
-#         rasterizer=MeshRasterizer(
-#             cameras=cameras,
-#             raster_settings=raster_settings
-#         ),
-#         shader=SoftPhongShader(
-#             device=device,
-#             cameras=cameras,
-#             lights=lights,
-#             blend_params=blend_params
-#         )
-#     )
-#
-#     # create one mesh per elmt in batch
-#     meshes = []
-#     for batch_idx, n_cubes in enumerate(num_cubes):
-#         # Combine obj meshes into single mesh from rendering
-#         # https://github.com/facebookresearch/pytorch3d/issues/15
-#         vertices = []
-#         faces = []
-#         textures = []
-#         vert_offset = 0 # offset by vertices from prior meshes
-#         for i, (position, size,color) in enumerate(zip(positions[batch_idx, :n_cubes, :], sizes[batch_idx, :n_cubes],
-#                                                        colors[batch_idx, :n_cubes, :])):
-#             cube_vertices, cube_faces = get_cube_mesh(position, size)
-#             # For now, apply same color to each mesh vertex (v \in V)
-#             #texture = torch.ones_like(cube_vertices)
-#             texture = torch.ones_like(cube_vertices) * color# [V, 3]
-#             # Offset faces (account for diff indexing, b/c treating as one mesh)
-#             cube_faces = cube_faces + vert_offset
-#             vert_offset += cube_vertices.shape[0]
-#             vertices.append(cube_vertices)
-#             faces.append(cube_faces)
-#             textures.append(texture)
-#
-#         # Concatenate data into single mesh
-#         if not n_cubes == 0:
-#             vertices = torch.cat(vertices)
-#             faces = torch.cat(faces)
-#             textures = torch.cat(textures)[None]  # (1, num_verts, 3)
-#             textures = TexturesVertex(verts_features=textures)
-#             # each elmt of verts array is diff mesh in batch
-#             mesh = Meshes(verts=[vertices], faces=[faces], textures=textures)
-#         else:
-#             print("NOTE: no cubes in entire grid!!")
-#             mesh = Meshes(verts=[], faces=[], textures=TexturesVertex(verts_features=[]))
-#         meshes.append(mesh)
-#
-#     batched_mesh = join_meshes_as_batch(meshes)
-#
-#     # Render image
-#     img = renderer(batched_mesh)   # (B, H, W, 4)
-#
-#     # Remove alpha channel and return (B, im_size, im_size, 3)
-#     img = img[:, ..., :3]#.detach().squeeze().cpu().numpy()
-#
-#     return img
 
 def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
     """
@@ -409,8 +302,6 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
     # Map cell idx to position in n x n grid, where grid is in x-z space
     # (x_cell, z_cell) = np.unravel_index(int(cell_idx), (num_rows, num_cols))
     (x_cell, z_cell) = cell_idx
-
-    print("x cell: ", x_cell, " z cell: ", z_cell)
 
     # Sample the bottom and adjust coords based on grid cell
     y = torch.tensor(-1.0, device=device)
@@ -443,14 +334,7 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
 
         min_x = min_x - size
         x = raw_location.sigmoid() * (max_x - min_x) + min_x
-        # adjust x based on cell -- assume cell sizes = +/- 1 (note: +x= move left)
-        # center_x = num_cells/2 -- farthest left = +num_rows
 
-        # threshold x: https://stackoverflow.com/questions/48109228/normalizing-data-to-certain-range-of-values
-        #x = cell_x_min + (cell_x_max - cell_x_min)*x
-
-        print("y: " , y , " size: ", size)
-        print("x, y, z: ", [x, y, z])
         locations.append(torch.stack([x, y, z]))
 
         y = y + size
@@ -486,8 +370,6 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
                     convert_raw_locations(
                         raw_locations_flattened[sample_id, row, col],
                         stacking_program_flattened[sample_id, row, col],
-                        # raw_locations_flattened[sample_id, col, row],
-                        # stacking_program_flattened[sample_id, col, row],
                         primitives,
                         (int(col), int(row)),
                         num_grid_rows,
@@ -544,18 +426,9 @@ def render(
     stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols, max_num_blocks))
     locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols, max_num_blocks, 3))
 
-    print("num blocks: ", num_blocks_flattened)
-    print("sizes: ", square_size[stacking_program_flattened])
-
     imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
                         sigma,gamma)
-    # imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations, im_size,
-    #                     sigma,gamma)
     imgs = imgs.permute(0, 3, 1, 2)
-
-    print("imgs: ", imgs.shape)
-    print("shape: ", shape)
-    print("num elements: ", num_elements)
 
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])
 
