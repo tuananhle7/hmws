@@ -246,7 +246,7 @@ def concat(x, y):
         return [torch.cat([x_, y_], dim=0) for x_, y_ in zip(x, y)]
 
 
-def get_unique_and_top_k(x, scores, k):
+def get_unique_and_top_k(x, scores, k, return_indices=False):
     """Removes duplicates in x, sorts them according to their scores and
     takes the top k.
 
@@ -262,6 +262,7 @@ def get_unique_and_top_k(x, scores, k):
             [n, *shape, *dims_N]
         scores [n, *shape]
         k (int)
+        return_indices
 
     Returns
         x_selected
@@ -274,6 +275,9 @@ def get_unique_and_top_k(x, scores, k):
             ...
             [k, *shape, *dims_N]
         scores_selected [k, *shape]
+
+        (Optionally if return_indices == True)
+        indices [k, *shape]
     """
     # Extract
     shape = scores.shape[1:]
@@ -295,6 +299,8 @@ def get_unique_and_top_k(x, scores, k):
     # Do everything unbatched
     x_top_k = []
     scores_top_k = []
+    if return_indices:
+        indices = []
     for element_id in range(num_elements):
         # Take the unique elements
         # [num_unique, total_ndims], [num_unique]
@@ -309,10 +315,15 @@ def get_unique_and_top_k(x, scores, k):
         # --Take top k
         x_top_k.append(x_unique[indices_sorted[-k:]])
         scores_top_k.append(scores_sorted[-k:])
+        if return_indices:
+            indices.append(indices_unique[indices_sorted[-k:]])
     # [k, num_elements, total_ndims] or [k, num_elements, total_ndims_1 + ... + total_ndims_N]
     x_top_k = torch.stack(x_top_k, dim=1)
     # [k, num_elements]
     scores_top_k = torch.stack(scores_top_k, dim=1)
+    if return_indices:
+        # [k, num_elements]
+        indices = torch.stack(indices, dim=1)
 
     # Check unique
     # for element_id in range(num_elements):
@@ -344,4 +355,11 @@ def get_unique_and_top_k(x, scores, k):
     # --Unflatten scores
     scores_selected = scores_top_k.view(*[k, *shape])
 
-    return x_selected, scores_selected
+    # --Unflatten indices
+    if return_indices:
+        indices = indices.view(*[k, *shape])
+
+    if return_indices:
+        return x_selected, scores_selected, indices
+    else:
+        return x_selected, scores_selected
