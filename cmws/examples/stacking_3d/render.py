@@ -232,7 +232,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             texture = torch.ones_like(cube_vertices) * color# [V, 3]
             # Offset faces (account for diff indexing, b/c treating as one mesh)
             cube_faces = cube_faces + vert_offset
-            vert_offset = cube_vertices.shape[0]
+            vert_offset += cube_vertices.shape[0]
             vertices.append(cube_vertices)
             faces.append(cube_faces)
             textures.append(texture)

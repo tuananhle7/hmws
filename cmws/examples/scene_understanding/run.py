@@ -46,8 +46,8 @@ def get_args_parser():
 
     # Model
     parser.add_argument("--num-primitives", default=5, type=int, help=" ")
-    parser.add_argument("--num-grid-rows", default=3, type=int, help=" ")
-    parser.add_argument("--num-grid-cols", default=3, type=int, help=" ")
+    parser.add_argument("--num-grid-rows", default=2, type=int, help=" ")
+    parser.add_argument("--num-grid-cols", default=2, type=int, help=" ")
     parser.add_argument("--max-num-blocks", default=3, type=int, help=" ")
     parser.add_argument(
         "--model-type", default="scene_understanding", choices=["scene_understanding"], help=" ",
