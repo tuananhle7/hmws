@@ -475,8 +475,8 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
 
     # Flatten
     # [num_samples, num_blocks]
-    raw_locations_flattened = raw_locations.view(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
-    stacking_program_flattened = stacking_program.view(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
+    raw_locations_flattened = raw_locations.reshape(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
+    stacking_program_flattened = stacking_program.reshape(num_samples, num_grid_rows, num_grid_cols, max_num_blocks)
 
     locations_batched = []
     for sample_id in range(num_samples):
