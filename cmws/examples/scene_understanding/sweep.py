@@ -3,15 +3,17 @@ from cmws.examples.scene_understanding import run
 
 
 def get_run_argss():
-    experiment_name = "cmws_vs_rws"
+    experiment_name = "2021_05_13_cmws_vs_rws"
     for seed in range(5):
         # CMWS
         args = run.get_args_parser().parse_args([])
         args.experiment_name = experiment_name
         args.seed = seed
         args.num_particles = 10
-        args.insomnia = 0.75
-        args.algorithm = "cmws"
+        args.memory_size = 3
+        args.num_proposals_mws = 2
+        args.insomnia = 0.50
+        args.algorithm = "cmws_2"
         args.model_type = "scene_understanding"
         args.continue_training = True
         yield args
@@ -21,7 +23,7 @@ def get_run_argss():
         args.experiment_name = experiment_name
         args.seed = seed
         args.num_particles = 50
-        args.insomnia = 0.75
+        args.insomnia = 0.50
         args.algorithm = "rws"
         args.model_type = "scene_understanding"
         args.continue_training = True
