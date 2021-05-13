@@ -152,7 +152,7 @@ def generate_from_true_generative_model(
     num_primitives,
     device,
     num_channels=3,
-    im_size=32,
+    im_size=128,
     fixed_num_blocks=False,
 ):
     """Generate a batch of synthetic observations
@@ -211,7 +211,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         self.num_grid_rows = num_grid_rows
         self.num_grid_cols = num_grid_cols
         self.test = test
-        self.num_train_data = 10000
+        self.num_train_data = 100
         self.num_test_data = 100
         if self.test:
             self.num_data = self.num_test_data

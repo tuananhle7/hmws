@@ -14,7 +14,7 @@ class GenerativeModel(nn.Module):
         num_grid_cols=3,
         num_primitives=5,
         max_num_blocks=3,
-        im_size=32,
+        im_size=128,
         obs_scale=1.0,
         obs_dist_type="normal",
     ):
@@ -290,7 +290,7 @@ class Guide(nn.Module):
     """
 
     def __init__(
-        self, num_grid_rows=3, num_grid_cols=3, num_primitives=5, max_num_blocks=3, im_size=32
+        self, num_grid_rows=3, num_grid_cols=3, num_primitives=5, max_num_blocks=3, im_size=128
     ):
         super().__init__()
 
@@ -303,9 +303,15 @@ class Guide(nn.Module):
         self.im_size = im_size
 
         # Obs embedder
-        self.obs_embedder = util.init_cnn(16, input_num_channels=3)
-        self.obs_embedding_dim = 16  # determined by running the network forward
-        # self.obs_embedding_dim = 400  # determined by running the network forward
+        # 32 x 32
+        # self.obs_embedder = util.init_cnn(16, input_num_channels=3)
+        # self.obs_embedding_dim = 16  # determined by running the network forward
+        # 256 x 256
+        # self.obs_embedder = util.init_cnn(1, input_num_channels=3)
+        # self.obs_embedding_dim = 841  # determined by running the network forward
+        # 128 x 128
+        self.obs_embedder = util.init_cnn(4, input_num_channels=3)
+        self.obs_embedding_dim = 676  # determined by running the network forward
 
         # Mapping from obs embedding to num_blocks params
         self.num_blocks_params_extractor = nn.Linear(
