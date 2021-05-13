@@ -187,8 +187,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     device = sizes.device
 
     # Create camera
-    R, T = look_at_view_transform(4., 0.1, 180,
-                                  at=((-.15, 0.0, 0.0),),)
+    R, T = look_at_view_transform(3.7, 0.1, 180, at=((-0.15, 0.0, 0.1),),)
     # R, T = look_at_view_transform(3.5, 0, 0,
     #                               up=((0.0, 0.0, 0.0),),
     #                               at=((0.0, 0.0, -0.5),))
@@ -292,7 +291,9 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     return imgs.to(device)
 
 
-def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols):
+def convert_raw_locations(
+    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols
+):
     """
     Args
         raw_locations (tensor [num_blocks])
@@ -317,31 +318,34 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
     # adjust z based on cell idx -- place at 0 point within cell
     # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
     # -z = closer to the camera, +z = farther away
-    z_spacing = 1 # spacing in the z direction between cells
-    z = torch.tensor(0.0 + z_spacing*z_cell , device=device)
+    z_spacing = 1  # spacing in the z direction between cells
+    z = torch.tensor(0.0 + z_spacing * z_cell, device=device)
     # z = torch.tensor(num_rows - (z_spacing*z_cell + 1), device=device)
-
 
     # each box is width 1.6 (+/- 0.8)
     min_x = -0.8
     max_x = 0.8
-    screen_width = (max_x - min_x) * num_cols#num_rows
+    screen_width = (max_x - min_x) * num_cols  # num_rows
 
     # get pairs of [min_x, max_x] for screen
     x_bounds = np.linspace(-(screen_width / 2), (screen_width / 2), num_rows * 2)
 
-    cell_x_min = x_bounds[x_cell*2]
-    cell_x_max = x_bounds[(x_cell*2)+1]
+    cell_x_min = x_bounds[x_cell * 2]
+    cell_x_max = x_bounds[(x_cell * 2) + 1]
 
     min_x = cell_x_min
     max_x = cell_x_max
+    shrink_factor = 0.4
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
         size = primitives[primitive_id].size
 
         min_x = min_x - size
-        x = raw_location.sigmoid() * (max_x - min_x) + min_x
+
+        new_min = min_x + (1 - shrink_factor) * (max_x - min_x) / 2
+        new_max = max_x - (1 - shrink_factor) * (max_x - min_x) / 2
+        x = raw_location.sigmoid() * (new_max - new_min) + new_min
 
         locations.append(torch.stack([x, y, z]))
 
