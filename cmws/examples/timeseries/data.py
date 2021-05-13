@@ -1,5 +1,7 @@
 import pathlib
 import pickle
+import functools
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,6 +19,7 @@ def standardize(x):
     return list((x_np - x_np.mean()) / x_np.std())
 
 
+@functools.lru_cache(maxsize=None)
 def load_all_data():
     """
     https://github.com/insperatum/wsvae/blob/master/examples/timeseries/main-timeseries.py#L81
@@ -65,7 +68,8 @@ def get_train_test_data():
     num_train_data, num_test_data = 2000, 2000
     num_non_custom_test_data = num_test_data - len(custom_data)
 
-    train_data = data[:num_train_data]
+    random.seed(0)
+    train_data = random.sample(data[:num_train_data], 200)
     test_data = custom_data + data[num_train_data : (num_train_data + num_non_custom_test_data)]
     return train_data, test_data
 
