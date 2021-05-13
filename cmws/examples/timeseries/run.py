@@ -33,7 +33,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--experiment-name", default="", help=" ")
     parser.add_argument(
-        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws"], help=" ",
+        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws", "cmws_2"], help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=5, type=int, help=" ")
@@ -54,7 +54,7 @@ def get_args_parser():
 
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
-    parser.add_argument("--num-iterations", default=10000, type=int, help=" ")
+    parser.add_argument("--num-iterations", default=1000, type=int, help=" ")
     parser.add_argument("--num-sleep-pretraining-iterations", default=0, type=int, help=" ")
     parser.add_argument("--sleep-pretraining-batch-size", default=0, type=int, help=" ")
     parser.add_argument("--lr", default=1e-3, type=float, help=" ")
@@ -66,7 +66,7 @@ def get_args_parser():
         "otherwise it's inbetween",
     )
     parser.add_argument("--log-interval", default=1, type=int, help=" ")
-    parser.add_argument("--save-interval", default=50, type=int, help=" ")
+    parser.add_argument("--save-interval", default=10, type=int, help=" ")
     parser.add_argument("--test-interval", default=100, type=int, help=" ")
     parser.add_argument("--checkpoint-interval", default=1000, type=int, help=" ")
 
