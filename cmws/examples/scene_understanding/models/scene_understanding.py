@@ -171,6 +171,11 @@ class GenerativeModel(nn.Module):
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
 
+        # Add blocks
+        zero_blocks = num_blocks.sum([-1, -2]) == 0
+        if zero_blocks.sum() > 0:
+            num_blocks[..., 0, 0][zero_blocks] += 1
+
         # Compute stuff
         return render.render(
             self.primitives,
