@@ -280,7 +280,7 @@ def get_scene_understanding_data_loader(
 def plot_data():
     device = torch.device("cuda")
 
-    for num_grid_rows, num_grid_cols in [[1, 1], [2, 2], [3, 3]]:
+    for num_grid_rows, num_grid_cols in [[3, 3], [1, 1], [2, 2]]:
         # Plot train / test data
         timeseries_dataset = {}
 
@@ -300,7 +300,7 @@ def plot_data():
 
             while start < len(timeseries_dataset[mode]):
                 obs, obs_id = timeseries_dataset[mode][start:end]
-                path = f"./data/plots/{num_grid_rows}_{num_grid_cols}/{mode}/{start:05.0f}_{end:05.0f}.png"
+                path = f"./data/{num_grid_rows}_{num_grid_cols}/plots/{mode}/{start:05.0f}_{end:05.0f}.png"
 
                 fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 3))
 
