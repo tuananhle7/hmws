@@ -13,12 +13,12 @@ from cmws.examples.timeseries import data
 from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
-base_kernel_chars = {"W", "R", "E", "C"}
-char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "C": "C"}
-char_to_num = {"W": 0, "R": 1, "E": 2, "C": 3, "*": 4, "+": 5, "(": 6, ")": 7}
+base_kernel_chars = {"W", "R", "E", "L"}
+char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin"}
+char_to_num = {"W": 0, "R": 1, "E": 2, "L": 3, "*": 4, "+": 5, "(": 6, ")": 7}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
-gp_params_dim = 5
+gp_params_dim = 8
 epsilon = 1e-4
 
 
@@ -69,6 +69,39 @@ def get_long_expression(expression):
     return long_expression
 
 
+def get_long_expression_with_params(expression, params):
+    """
+    Args
+        expression (str)
+        params
+
+    Returns (str)
+    """
+    long_expression = ""
+    params_idx = 0
+    for char in expression:
+        if char in base_kernel_chars:
+            param = params[params_idx]
+            params_idx += 1
+            if char == "W":
+                long_expression += f"{char_to_long_char[char]}({param:.2f})"
+            elif char == "R":
+                long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
+            elif char == "E":
+                long_expression += (
+                    f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f}, {param[2]:.2f})"
+                )
+            elif char == "L":
+                long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
+        elif char == "*":
+            long_expression += " × "
+        elif char == "+":
+            long_expression += " + "
+        else:
+            long_expression += char
+    return long_expression
+
+
 def count_base_kernels(raw_expression):
     """How many base kernels are there in the raw_expression?
 
@@ -88,7 +121,7 @@ class ParsingError(Exception):
 
 
 class Kernel(nn.Module):
-    """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | C
+    """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | L
     Adapted from
     https://github.com/insperatum/wsvae/blob/7dee0708587e6a33b7328206ce5edd8262d568b6/gp.py#L12
 
@@ -97,13 +130,16 @@ class Kernel(nn.Module):
             W = WhiteNoise
             R = SquaredExponential
             E = Periodic
-            C = Constant
+            C = Linear
         raw_params [num_base_kernels, gp_params_dim=5]
-            raw_params[i, 0] raw_scale (WhiteNoise)
-            raw_params[i, 1] raw_lengthscale (SE)
-            raw_params[i, 2] raw_period (Per)
-            raw_params[i, 3] raw_lengthscale (Per)
-            raw_params[i, 4] raw_const (Constant)
+            raw_params[i, 0] raw_scale_sq (WhiteNoise)
+            raw_params[i, 1] raw_scale_sq (SE)
+            raw_params[i, 2] raw_lengthscale_sq (SE)
+            raw_params[i, 3] raw_scale_sq (Per)
+            raw_params[i, 4] raw_period (Per)
+            raw_params[i, 5] raw_lengthscale_sq (Per)
+            raw_params[i, 6] raw_scale_sq (Linear)
+            raw_params[i, 7] raw_offset (Linear)
     """
 
     def __init__(self, expression, raw_params):
@@ -113,6 +149,7 @@ class Kernel(nn.Module):
 
         self.raw_params = raw_params
         self.raw_params_index = 0
+        self.params = []
 
         self.value = self.getValue()
 
@@ -181,20 +218,33 @@ class Kernel(nn.Module):
         char = self.peek()
         self.index += 1
         if self.raw_params_index < len(self.raw_params):
-            param = self.raw_params[self.raw_params_index]
+            raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            return {"op": "WhiteNoise", "scale_sq": F.softplus(param[0]) + 1e-4}
+            scale_sq = F.softplus(raw_param[0]) + 1e-4
+            self.params.append(scale_sq.item())
+            return {"op": "WhiteNoise", "scale_sq": scale_sq}
         elif char == "R":
-            return {"op": "RBF", "lengthscale_sq": F.softplus(param[1]) + 1e-4}
+            scale_sq = F.softplus(raw_param[1]) + 1e-4
+            lengthscale_sq = F.softplus(raw_param[2]) + 1e-4
+            self.params.append([scale_sq.item(), lengthscale_sq.item()])
+            return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
         elif char == "E":
+            scale_sq = F.softplus(raw_param[3]) + 1e-4
+            period = F.softplus(raw_param[4]) + 1e-1
+            lengthscale_sq = F.softplus(raw_param[5]) + 1e-4
+            self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
             return {
                 "op": "ExpSinSq",
-                "period": F.softplus(param[2]) + 1e-1,
-                "lengthscale_sq": F.softplus(param[3]) + 1e-4,
+                "scale_sq": scale_sq,
+                "period": period,
+                "lengthscale_sq": lengthscale_sq,
             }
-        if char == "C":
-            return {"op": "Constant", "const": F.softplus(param[4]) + 1e-2}
+        if char == "L":
+            scale_sq = F.softplus(raw_param[6]) + 1e-4
+            offset = raw_param[7]
+            self.params.append([scale_sq.item(), offset.item()])
+            return {"op": "Constant", "scale_sq": scale_sq, "offset": offset}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 
@@ -218,22 +268,21 @@ class Kernel(nn.Module):
             for v in kernel["values"][1:]:
                 t = t * self.forward(x_1, x_2, v)
             result = t
-        elif kernel["op"] == "Constant":
-            batch_size, num_timesteps_1 = x_1.shape[:2]
-            num_timesteps_2 = x_2.shape[-1]
-            result = (
-                torch.ones((batch_size, num_timesteps_1, num_timesteps_2), device=x_1.device)
-                * kernel["const"]
-            )
+        elif kernel["op"] == "Linear":
+            c = kernel["offset"]
+            s2 = kernel["scale_sq"]
+            result = (x_1 - c) * (x_2 - c) * s2
         elif kernel["op"] == "WhiteNoise":
             result = (x_1 == x_2).float() * kernel["scale_sq"]
         elif kernel["op"] == "RBF":
             l2 = kernel["lengthscale_sq"]
-            result = (-((x_1 - x_2) ** 2) / (2 * l2)).exp()
+            s2 = kernel["scale_sq"]
+            result = (-((x_1 - x_2) ** 2) / (2 * l2)).exp() * s2
         elif kernel["op"] == "ExpSinSq":
             t = kernel["period"]
             l2 = kernel["lengthscale_sq"]
-            result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp()
+            s2 = kernel["scale_sq"]
+            result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp() * s2
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
 
