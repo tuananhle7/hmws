@@ -309,7 +309,7 @@ def convert_raw_locations(raw_locations, stacking_program, primitives, cell_idx,
     # adjust z based on cell idx -- place at 0 point within cell
     # cells = unit sized 1 x y x 1 (for x,y,z - y can be > 1 based on vertical stacking)
     # -z = closer to the camera, +z = farther away
-    z_spacing = 2 # spacing in the z direction between cells
+    z_spacing = 1 # spacing in the z direction between cells
     z = torch.tensor(0.0 + z_spacing*z_cell , device=device)
     # z = torch.tensor(num_rows - (z_spacing*z_cell + 1), device=device)
 
