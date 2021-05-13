@@ -31,3 +31,9 @@ def test_condition_mvn_shape():
 
         assert list(loc_new.shape) == shape + [dim_x]
         assert list(cov_new.shape) == shape + [dim_x, dim_x]
+
+
+def test_logit():
+    device = cmws.util.get_device()
+    x = torch.randn((), device=device)
+    assert (cmws.util.logit(x.sigmoid()) - x) < 1e-6

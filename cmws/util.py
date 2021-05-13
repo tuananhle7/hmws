@@ -124,10 +124,6 @@ def plot_normal2d(ax, mean, cov, num_points=100, confidence=0.95, **kwargs):
     return ax
 
 
-def logit(z):
-    return z.log() - (1 - z).log()
-
-
 def lognormexp(values, dim=0):
     """Exponentiates, normalizes and takes log of a tensor.
 
@@ -428,6 +424,13 @@ def tensors_to_list(tensors):
         return [tensors]
     else:
         return tensors
+
+
+def logit(y):
+    """Inverse of sigmoid
+    https://github.com/pytorch/pytorch/issues/37060
+    """
+    return torch.log(y) - torch.log1p(-y)
 
 
 if __name__ == "__main__":
