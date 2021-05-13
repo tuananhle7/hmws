@@ -128,7 +128,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     axss[1, 0].set_ylabel("Reconstruction")
     axss[2, 0].set_ylabel("Hi-res reconstruction")
 
-    util.save_fig(fig, path)
+    util.save_fig(fig, path, dpi=300)
 
 
 def plot_primitives_scene_understanding(path, generative_model):
