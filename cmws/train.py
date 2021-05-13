@@ -160,11 +160,11 @@ def train(model, optimizer, stats, args):
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
-                device, args.batch_size, test=False
+                device, args.num_grid_rows, args.num_grid_cols, args.batch_size, test=False
             )
         )
         test_data_loader = cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
-            device, args.batch_size, test=True
+            device, args.num_grid_rows, args.num_grid_cols, args.batch_size, test=True
         )
     else:
         # Generate test data

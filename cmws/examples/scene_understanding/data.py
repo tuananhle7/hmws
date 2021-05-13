@@ -1,3 +1,5 @@
+import itertools
+import random
 import pyro
 import torch
 from cmws import util
@@ -74,7 +76,14 @@ def sample_raw_locations(stacking_program, address_suffix=""):
 
 
 def generate_from_true_generative_model_single(
-    device, num_primitives, num_channels=3, im_size=32, fixed_num_blocks=False
+    device,
+    num_grid_rows,
+    num_grid_cols,
+    num_primitives,
+    max_num_blocks=3,
+    num_channels=3,
+    im_size=32,
+    fixed_num_blocks=False,
 ):
     """Generate a synthetic observation
 
@@ -95,27 +104,56 @@ def generate_from_true_generative_model_single(
     ][:num_primitives]
     # num_primitives = len(primitives)
 
+    # Determine which cells have stacks
+    cells = list(itertools.product(range(num_grid_rows), range(num_grid_cols)))
+    num_cells = num_grid_rows * num_grid_cols
+    num_stacks = random.randint(1, max(1, num_cells // 2))
+    cells_with_stack = set(random.sample(cells, num_stacks))
+
     # Sample
-    stacking_program = sample_stacking_program(
-        num_primitives, device, fixed_num_blocks=fixed_num_blocks
+    num_blocks = []
+    stacking_program = []
+    raw_locations = []
+    for row in range(num_grid_rows):
+        for col in range(num_grid_cols):
+            if (row, col) in cells_with_stack:
+                stacking_program_ = sample_stacking_program(
+                    num_primitives, device, fixed_num_blocks=fixed_num_blocks
+                )
+                raw_locations_ = sample_raw_locations(stacking_program_)
+                num_blocks.append(len(stacking_program_))
+                stacking_program_padded = torch.zeros(max_num_blocks, device=device).long()
+                stacking_program_padded[: num_blocks[-1]] = stacking_program_
+                raw_locations_padded = torch.zeros(max_num_blocks, device=device)
+                raw_locations_padded[: num_blocks[-1]] = raw_locations_
+                stacking_program.append(stacking_program_padded)
+                raw_locations.append(raw_locations_padded)
+            else:
+                num_blocks.append(0)
+                stacking_program.append(torch.zeros(max_num_blocks, device=device).long())
+                raw_locations.append(torch.zeros(max_num_blocks, device=device))
+    num_blocks = torch.tensor(num_blocks, device=device).long().view(num_grid_rows, num_grid_cols)
+    stacking_program = torch.stack(stacking_program).view(
+        num_grid_rows, num_grid_rows, max_num_blocks
     )
-    raw_locations = sample_raw_locations(stacking_program)
+    raw_locations = torch.stack(raw_locations).view(num_grid_rows, num_grid_rows, max_num_blocks)
 
     # Render
-    img = render.render(
-        primitives,
-        torch.tensor(len(stacking_program), device=device).long()[None, None],
-        stacking_program[None, None],
-        raw_locations[None, None],
-        im_size,
-    )
+    img = render.render(primitives, num_blocks, stacking_program, raw_locations, im_size,)
     assert len(img.shape) == 3
 
     return img
 
 
 def generate_from_true_generative_model(
-    batch_size, num_primitives, device, num_channels=3, im_size=32, fixed_num_blocks=False,
+    batch_size,
+    num_grid_rows,
+    num_grid_cols,
+    num_primitives,
+    device,
+    num_channels=3,
+    im_size=32,
+    fixed_num_blocks=False,
 ):
     """Generate a batch of synthetic observations
 
@@ -124,7 +162,12 @@ def generate_from_true_generative_model(
     return torch.stack(
         [
             generate_from_true_generative_model_single(
-                device, num_primitives, im_size=im_size, fixed_num_blocks=fixed_num_blocks,
+                device,
+                num_grid_rows,
+                num_grid_cols,
+                num_primitives,
+                im_size=im_size,
+                fixed_num_blocks=fixed_num_blocks,
             )
             for _ in range(batch_size)
         ]
@@ -153,14 +196,20 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
 
     Args
         device
+        num_grid_rows
+        num_grid_cols
         test (bool; default: False)
         force_regenerate (bool; default: False): if False, the dataset is loaded if it exists
             if True, the dataset is regenerated regardless
         seed (int): only used for generation
     """
 
-    def __init__(self, device, test=False, force_regenerate=False, seed=1):
+    def __init__(
+        self, device, num_grid_rows=1, num_grid_cols=1, test=False, force_regenerate=False, seed=1
+    ):
         self.device = device
+        self.num_grid_rows = num_grid_rows
+        self.num_grid_cols = num_grid_cols
         self.test = test
         self.num_train_data = 10000
         self.num_test_data = 100
@@ -172,7 +221,11 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         path = (
             pathlib.Path(__file__)
             .parent.absolute()
-            .joinpath("data", "test.pt" if self.test else "train.pt")
+            .joinpath(
+                "data",
+                f"{self.num_grid_rows}_{self.num_grid_cols}",
+                "test.pt" if self.test else "train.pt",
+            )
         )
         if force_regenerate or not path.exists():
             util.logging.info(f"Generating dataset (test = {self.test})...")
@@ -185,7 +238,11 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
 
             # Generate new dataset
             self.obs = generate_from_true_generative_model(
-                self.num_data, num_primitives=3, device=device
+                self.num_data,
+                num_grid_rows=num_grid_rows,
+                num_grid_cols=num_grid_cols,
+                num_primitives=3,
+                device=device,
             )
             self.obs_id = torch.arange(self.num_data, device=device)
 
@@ -206,48 +263,59 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_scene_understanding_data_loader(device, batch_size, test=False):
+def get_scene_understanding_data_loader(
+    device, num_grid_rows, num_grid_cols, batch_size, test=False
+):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        SceneUnderstandingDataset(device, test=test), batch_size=batch_size, shuffle=shuffle
+        SceneUnderstandingDataset(device, num_grid_rows, num_grid_cols, test=test),
+        batch_size=batch_size,
+        shuffle=shuffle,
     )
 
 
 def plot_data():
     device = torch.device("cuda")
 
-    # Plot train / test data
-    timeseries_dataset = {}
+    for num_grid_rows, num_grid_cols in [[1, 1], [2, 2], [3, 3]]:
+        # Plot train / test data
+        timeseries_dataset = {}
 
-    # Train
-    timeseries_dataset["train"] = SceneUnderstandingDataset(device)
+        # Train
+        timeseries_dataset["train"] = SceneUnderstandingDataset(
+            device, num_grid_rows, num_grid_cols
+        )
 
-    # Test
-    timeseries_dataset["test"] = SceneUnderstandingDataset(device, test=True)
+        # Test
+        timeseries_dataset["test"] = SceneUnderstandingDataset(
+            device, num_grid_rows, num_grid_cols, test=True
+        )
 
-    for mode in ["test", "train"]:
-        start = 0
-        end = 100
+        for mode in ["test", "train"]:
+            start = 0
+            end = 100
 
-        while start < len(timeseries_dataset[mode]):
-            obs, obs_id = timeseries_dataset[mode][start:end]
-            path = f"./data/plots/{mode}/{start:05.0f}_{end:05.0f}.png"
+            while start < len(timeseries_dataset[mode]):
+                obs, obs_id = timeseries_dataset[mode][start:end]
+                path = f"./data/plots/{num_grid_rows}_{num_grid_cols}/{mode}/{start:05.0f}_{end:05.0f}.png"
 
-            fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 3))
+                fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 3))
 
-            for i in range(len(obs)):
-                ax = axss.flat[i]
-                ax.imshow(obs[i].permute(1, 2, 0).detach().cpu())
-                ax.set_xticks([])
-                ax.set_yticks([])
+                for i in range(len(obs)):
+                    ax = axss.flat[i]
+                    ax.imshow(obs[i].permute(1, 2, 0).detach().cpu())
+                    ax.set_xticks([])
+                    ax.set_yticks([])
 
-            util.save_fig(fig, path)
+                util.save_fig(fig, path)
 
-            start = end
-            end += 100
+                break
+
+                start = end
+                end += 100
 
 
 if __name__ == "__main__":
