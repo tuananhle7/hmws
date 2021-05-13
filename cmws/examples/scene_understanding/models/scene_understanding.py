@@ -172,14 +172,15 @@ class GenerativeModel(nn.Module):
         num_blocks, stacking_program, raw_locations = latent
 
         # Add blocks
-        zero_blocks = num_blocks.sum([-1, -2]) == 0
+        num_blocks_clone = num_blocks.clone().detach()
+        zero_blocks = num_blocks_clone.sum([-1, -2]) == 0
         if zero_blocks.sum() > 0:
-            num_blocks[..., 0, 0][zero_blocks] = num_blocks[..., 0, 0][zero_blocks] + 1
+            num_blocks_clone[..., 0, 0][zero_blocks] = num_blocks_clone[..., 0, 0][zero_blocks] + 1
 
         # Compute stuff
         return render.render(
             self.primitives,
-            num_blocks,
+            num_blocks_clone,
             stacking_program,
             raw_locations,
             im_size=self.im_size,
