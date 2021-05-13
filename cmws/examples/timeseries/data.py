@@ -127,10 +127,10 @@ def plot_data():
     timeseries_dataset = {}
 
     # Train
-    timeseries_dataset["train"] = TimeseriesDataset(device)
+    timeseries_dataset["train"] = TimeseriesDataset(device, full_data=True)
 
     # Test
-    timeseries_dataset["test"] = TimeseriesDataset(device, test=True)
+    timeseries_dataset["test"] = TimeseriesDataset(device, test=True, full_data=False)
 
     for mode in ["test", "train"]:
         start = 0
@@ -151,25 +151,25 @@ def plot_data():
             end += 100
 
     # Plot all data
-    all_data = standardize_data(filter_data(load_all_data()))
-    start = 0
-    end = 100
-    while start < len(all_data):
-        obs = all_data[start:end]
-        path = f"./data/plots/all/{start:05.0f}_{end:05.0f}.png"
+    # all_data = standardize_data(filter_data(load_all_data()))
+    # start = 0
+    # end = 100
+    # while start < len(all_data):
+    #     obs = all_data[start:end]
+    #     path = f"./data/plots/all/{start:05.0f}_{end:05.0f}.png"
 
-        fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
+    #     fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
 
-        for i in range(len(obs)):
-            ax = axss.flat[i]
-            cmws.examples.timeseries.plot.plot_obs(ax, obs[i])
-            ax.axvline(255, color="gray")
-            ax.set_xlim(0, 355)
+    #     for i in range(len(obs)):
+    #         ax = axss.flat[i]
+    #         cmws.examples.timeseries.plot.plot_obs(ax, obs[i])
+    #         ax.axvline(255, color="gray")
+    #         ax.set_xlim(0, 355)
 
-        util.save_fig(fig, path)
+    #     util.save_fig(fig, path)
 
-        start = end
-        end += 100
+    #     start = end
+    #     end += 100
 
 
 if __name__ == "__main__":
