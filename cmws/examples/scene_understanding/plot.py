@@ -91,7 +91,9 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
         ax = axss[1, sample_id]
         ax.imshow(reconstructed_obs[sample_id].cpu().permute(1, 2, 0))
         num_blocks_s = num_blocks[sample_id]
-        num_blocks_str = "\n".join(["".join([str(y.item()) for y in x]) for x in num_blocks_s])
+        num_blocks_str = "\n".join(
+            reversed(["".join(reversed([str(y.item()) for y in x])) for x in num_blocks_s])
+        )
         ax.text(
             0.95,
             0.95,
