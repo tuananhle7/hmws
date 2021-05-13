@@ -2,6 +2,7 @@ import os
 
 import time
 import cmws
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import textwrap
@@ -249,9 +250,9 @@ def plot_comparison(path, checkpoint_paths):
 
     # Load
     x = []
-    log_ps = {"cmws": [], "rws": []}
-    kls = {"cmws": [], "rws": []}
-    colors = {"cmws": "C0", "rws": "C1"}
+    log_ps = {"cmws_2": [], "cmws": [], "rws": []}
+    kls = {"cmws_2": [], "cmws": [], "rws": []}
+    colors = {"cmws_2": "C0", "cmws": "C2", "rws": "C1"}
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
             # Load checkpoint
@@ -267,21 +268,24 @@ def plot_comparison(path, checkpoint_paths):
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws", "rws"]
+    algorithms = ["cmws_2", "rws", "cmws"]
     log_ps_np = dict(
         [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
     )
     kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
     for algorithm in algorithms:
         for seed in range(num_seeds):
-            log_p = log_ps[algorithm][seed]
-            kl = kls[algorithm][seed]
+            try:
+                log_p = log_ps[algorithm][seed]
+                kl = kls[algorithm][seed]
+            except Exception:
+                log_p = []
+                kl = []
             log_ps_np[algorithm][seed][: len(log_p)] = log_p
             kls_np[algorithm][seed][: len(kl)] = kl
 
     # Plot
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
-    colors = {"cmws": "C0", "rws": "C1"}
     for algorithm in algorithms:
         label = algorithm
         linestyle = "solid"
@@ -302,14 +306,14 @@ def plot_comparison(path, checkpoint_paths):
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
     ax.set_ylim(-500, 600)
-    ax.set_xlim(0, 5000)
+    ax.set_xlim(0, 1000)
     ax.legend()
 
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
     ax.set_ylim(0, 1000000)
-    ax.set_xlim(0, 5000)
+    ax.set_xlim(0, 1000)
     ax.legend()
     for ax in axs:
         # ax.set_xlim(0, 20000)
@@ -328,8 +332,8 @@ def main(args):
         checkpoint_paths = [args.checkpoint_path]
 
     # Plot log p and KL for all checkpoints
-    # plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
-    # return
+    plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
+    # return True
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
     )
@@ -370,7 +374,8 @@ def main(args):
             )
             if run_args.full_training_data:
                 obs["train"], obs_id = train_timeseries_dataset[
-                    [62, 188, 269, 510, 711, 1262, 1790]
+                    # [62, 188, 269, 510, 711, 1262, 1790]
+                    [9, 29, 100, 108, 134, 168, 180, 191]
                 ]
             else:
                 obs["train"], obs_id = train_timeseries_dataset[:]
