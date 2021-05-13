@@ -63,6 +63,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
 
     # Sample latent
     latent = guide.sample(obs)
+    num_blocks, _, _ = latent
 
     # Sample reconstructions
     # --Renders
@@ -89,6 +90,18 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
         # Plot probs
         ax = axss[1, sample_id]
         ax.imshow(reconstructed_obs[sample_id].cpu().permute(1, 2, 0))
+        num_blocks_s = num_blocks[sample_id]
+        num_blocks_str = "\n".join(["".join([str(y.item()) for y in x]) for x in num_blocks_s])
+        ax.text(
+            0.95,
+            0.95,
+            num_blocks_str,
+            transform=ax.transAxes,
+            fontsize=7,
+            va="top",
+            ha="right",
+            color="black",
+        )
 
         # Plot probs > 0.5
         axss[2, sample_id].imshow(reconstructed_obs_hi_res[sample_id].cpu().permute(1, 2, 0))
@@ -171,7 +184,10 @@ def main(args):
 
             # Plot reconstructions and other things
             # Test data
-            obs = data.generate_test_obs(device)
+            test_dataset = data.SceneUnderstandingDataset(
+                device, run_args.num_grid_rows, run_args.num_grid_cols, test=True
+            )
+            obs, _ = test_dataset[:10]
 
             # Plot
             if run_args.model_type == "scene_understanding":
