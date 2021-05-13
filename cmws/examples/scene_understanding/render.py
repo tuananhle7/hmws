@@ -179,8 +179,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     device = sizes.device
 
     # Create camera
-    R, T = look_at_view_transform(2.7, 0, 180,
-                                  at=((0.0, 0.0, 0.0),),)
+    R, T = look_at_view_transform(4., 0.1, 180,
+                                  at=((-.15, 0.0, 0.0),),)
     # R, T = look_at_view_transform(3.5, 0, 0,
     #                               up=((0.0, 0.0, 0.0),),
     #                               at=((0.0, 0.0, -0.5),))
