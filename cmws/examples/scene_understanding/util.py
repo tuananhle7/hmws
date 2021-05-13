@@ -4,6 +4,7 @@ import logging
 import time
 from pathlib import Path
 
+from cmws.examples.scene_understanding import data
 import cmws
 import torch
 from cmws.examples.scene_understanding.models import scene_understanding
@@ -31,7 +32,11 @@ def init(run_args, device):
 
         # Memory
         if "mws" in run_args.algorithm:
-            memory = cmws.memory.Memory(10000, run_args.memory_size, generative_model,).to(device)
+            memory = cmws.memory.Memory(
+                len(data.SceneUnderstandingDataset(device, test=False,)),
+                run_args.memory_size,
+                generative_model,
+            ).to(device)
 
     # Model tuple
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
