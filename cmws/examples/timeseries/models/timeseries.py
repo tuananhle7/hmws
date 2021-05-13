@@ -324,7 +324,10 @@ class GenerativeModel(nn.Module):
         # -- Reshape
         obs_log_prob = obs_log_prob.view([*sample_shape, *shape])
 
-        return latent_log_prob + obs_log_prob
+        # Add penalty factor based on length
+        length_penalty = 10 * num_timesteps_flattened.view([*sample_shape, *shape])
+
+        return latent_log_prob + obs_log_prob - length_penalty
 
     def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
         """Log joint probability of the generative model
