@@ -50,6 +50,8 @@ class LearnableCube(nn.Module):
             self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)))
         self.raw_size = nn.Parameter(torch.randn(()))
+        self.min_size = 0.01
+        self.max_size = 1.0
 
     @property
     def device(self):
@@ -57,13 +59,19 @@ class LearnableCube(nn.Module):
 
     @property
     def size(self):
-        min_size = 0.01
-        max_size = 1.0
-        return self.raw_size.sigmoid() * (max_size - min_size) + min_size
+        return self.raw_size.sigmoid() * (self.max_size - self.min_size) + self.min_size
+
+    @size.setter
+    def size(self, value):
+        self.raw_size.data = util.logit((value - self.min_size) / (self.max_size - self.min_size))
 
     @property
     def color(self):
         return self.raw_color.sigmoid()
+
+    @color.setter
+    def color(self, value):
+        self.raw_color.data = util.logit(value)
 
     def __repr__(self):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"
