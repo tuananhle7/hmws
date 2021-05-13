@@ -46,7 +46,7 @@ def get_num_timesteps(eos):
             num_timesteps.append(
                 (eos_flattened[element_id] == 1).nonzero(as_tuple=False)[0].item() + 1
             )
-    return torch.tensor(num_timesteps, device=device).view(*shape)
+    return torch.tensor(num_timesteps, device=device).view(shape)
 
 
 class TimeseriesDistribution:
