@@ -60,7 +60,7 @@ class LearnableCube(nn.Module):
             self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)))
         self.raw_size = nn.Parameter(torch.randn(()))
-        self.min_size = 0.01
+        self.min_size = 0.1
         self.max_size = 1.0
 
     @property
