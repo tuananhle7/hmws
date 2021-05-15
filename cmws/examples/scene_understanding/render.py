@@ -24,8 +24,18 @@ from pytorch3d.structures.meshes import (
     join_meshes_as_batch,
     join_meshes_as_scene,
 )
+from itertools import tee
+from math import cos, pi, sin
+from typing import Iterator, Optional, Tuple
 import numpy as np
 
+
+def _make_pair_range(N: int, start=-1) -> Iterator[Tuple[int, int]]:
+    # Make an iterator over the adjacent pairs: (-1, 0), (0, 1), ..., (N - 2, N - 1)
+    # from: https://pytorch3d.readthedocs.io/en/latest/_modules/pytorch3d/utils/torus.html
+    i, j = tee(range(start, N))
+    next(j, None)
+    return zip(i, j)
 
 class Cube:
     def __init__(self, name, color, size):
@@ -151,6 +161,109 @@ def get_cube_mesh(position, size):
 
     return vertices, faces
 
+def get_torus_mesh(r, R, sides = 100, rings = 5, device='cuda'):
+    """Computes a torus mesh
+    Modified from:  https://pytorch3d.readthedocs.io/en/latest/_modules/pytorch3d/utils/torus.html
+    Args
+        r: inner radius []
+        R: outer radius []
+        sides: num inner divisions []
+        rings: num outer divisions []
+        device (string)
+    Returns
+        vertices [num_vertices, 3]
+        faces [num_faces, 3]
+    """
+    if not (sides > 0):
+        raise ValueError("sides must be > 0.")
+    if not (rings > 0):
+        raise ValueError("rings must be > 0.")
+    verts = []
+    for i in range(rings):
+        # phi ranges from 0 to 2 pi (rings - 1) / rings
+        phi = 2 * pi * i / rings
+        for j in range(sides):
+            # theta ranges from 0 to 2 pi (sides - 1) / sides
+            theta = 2 * pi * j / sides
+            x = (R + r * cos(theta)) * cos(phi)
+            y = (R + r * cos(theta)) * sin(phi)
+            z = r * sin(theta)
+            # This vertex has index i * sides + j
+            verts.append([x, y, z])
+
+    faces = []
+    for i0, i1 in _make_pair_range(rings):
+        index0 = (i0 % rings) * sides
+        index1 = (i1 % rings) * sides
+        for j0, j1 in _make_pair_range(sides):
+            index00 = index0 + (j0 % sides)
+            index01 = index0 + (j1 % sides)
+            index10 = index1 + (j0 % sides)
+            index11 = index1 + (j1 % sides)
+            faces.append([index00, index10, index11])
+            faces.append([index11, index01, index00])
+    verts = torch.tensor(verts, dtype=torch.float32, device=device)
+    faces = torch.tensor(faces, dtype=torch.int64, device=device)
+    return verts, faces
+
+def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, device='cuda'):
+    """Computes a cylinder mesh
+    Modified from:  https://github.com/hallpaz/3dsystems20/blob/master/extensions_utils/cylinder.py
+    Args
+        radius []
+        height []
+        sides: num inner divisions []
+        rings: num outer divisions []
+        closed: sealed cylinder (Bool)
+        device (string)
+    Returns
+        vertices [num_vertices, 3]
+        faces [num_faces, 3]
+    """
+
+    if not (sides > 0):
+        raise ValueError("sides must be > 0.")
+    if not (rings > 0):
+        raise ValueError("rings must be > 0.")
+
+    verts = []
+    for h in range(rings):
+        z = height * h / (rings - 1) - height / 2
+        for i in range(sides):
+            # theta ranges from 0 to 2 pi (sides - 1) / sides
+            theta = 2 * pi * i / sides
+            x = radius * cos(theta)
+            y = radius * sin(theta)
+            verts.append([x, y, z])
+    if closed:
+        # bottom center
+        verts.append([0, 0, -height / 2])
+        # top center
+        verts.append([0, 0, height / 2])
+
+    faces = []
+    for i0, i1 in _make_pair_range(sides):
+        index0 = i0 % sides
+        index1 = i1 % sides
+        for j in range(rings - 1):
+            index00 = index0 + (j * sides)
+            index01 = index0 + ((j + 1) * sides)
+            index10 = index1 + (j * sides)
+            index11 = index1 + ((j + 1) * sides)
+            faces.append([index00, index10, index11])
+            faces.append([index11, index01, index00])
+
+    if closed:
+        # close bottom and top of cylinder
+        for i0, i1 in _make_pair_range(sides):
+            index0 = i0 % sides
+            index1 = i1 % sides
+            faces.append([index0, len(verts) - 2, index1])
+            faces.append([index1 + (rings - 1) * sides, len(verts) - 1, index0 + (rings - 1) * sides])
+    verts = torch.tensor(verts, dtype=torch.float32, device=device)
+    faces = torch.tensor(faces, dtype=torch.int64, device=device)
+    return verts, faces
+
 
 def render_cube(size, color, position, im_size=32):
     """Renders a cube given cube specs
@@ -201,7 +314,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     raster_settings = RasterizationSettings(
         image_size=im_size,  # crisper objects + texture w/ higher resolution
         blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
-        faces_per_pixel=3,  # increase at cost of GPU memory,
+        faces_per_pixel=10,  # increase at cost of GPU memory,
         bin_size=None
     )
 
@@ -212,7 +325,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
     renderer = MeshRenderer(
         rasterizer=MeshRasterizer(
             cameras=cameras,
-            raster_settings=raster_settings
+            raster_settings=raster_settings,
         ),
         shader=SoftPhongShader(
             device=device,
