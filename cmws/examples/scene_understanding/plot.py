@@ -201,10 +201,11 @@ def main(args):
 
             # Plot reconstructions and other things
             # Test data
-            test_dataset = data.SceneUnderstandingDataset(
-                device, run_args.num_grid_rows, run_args.num_grid_cols, test=True
+            # NOTE: Plotting the train dataset only
+            train_dataset = data.SceneUnderstandingDataset(
+                device, run_args.num_grid_rows, run_args.num_grid_cols, test=False
             )
-            obs, _ = test_dataset[:10]
+            obs, _ = train_dataset[:10]
 
             # Plot
             if run_args.model_type == "scene_understanding":
