@@ -15,7 +15,7 @@ def main(args):
     checkpoint_path = util.get_checkpoint_path(args.experiment_name, get_config_name(args))
     if not (args.continue_training and Path(checkpoint_path).exists()):
         util.logging.info("Training from scratch")
-        model, optimizer, stats = timeseries_util.init(args, device)
+        model, optimizer, stats = timeseries_util.init(args, device, fast=args.fast)
     else:
         model, optimizer, stats, _ = timeseries_util.load_checkpoint(checkpoint_path, device)
 
@@ -71,6 +71,7 @@ def get_args_parser():
     parser.add_argument("--test-interval", default=100, type=int, help=" ")
     parser.add_argument("--checkpoint-interval", default=1000, type=int, help=" ")
 
+    parser.add_argument("--fast", action="store_true", help=" ")
     return parser
 
 

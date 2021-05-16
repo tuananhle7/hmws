@@ -71,7 +71,7 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None, num_particles=10):
+def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None, num_particles=10, seed=None):
     """
     Args:
         path (str)
@@ -127,6 +127,8 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     )
 
     for test_obs_id in range(num_test_obs):
+        if seed is not None:
+            util.set_seed(seed)
         for particle_id in range(num_particles):
             # Plot obs
             ax = axss[particle_id, test_obs_id]
@@ -393,7 +395,8 @@ def main(args):
                         obs["train"],
                         memory,
                         obs_id,
-                        num_particles=run_args.memory_size
+                        num_particles=run_args.memory_size,
+                        seed=1
                     )
                 # for mode in ["train", "test"]:
                 #     plot_predictions_timeseries(

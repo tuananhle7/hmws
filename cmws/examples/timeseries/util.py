@@ -13,14 +13,22 @@ from cmws.examples.timeseries import data
 from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
-base_kernel_chars = {"W", "R", "E", "L", "C"}
-char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin"}
-char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5}
-num_to_char = dict([(v, k) for k, v in char_to_num.items()])
-vocabulary_size = len(char_to_num)
-gp_params_dim = 8
-epsilon = 1e-4
+include_scale = False
+if include_scale:
+    base_kernel_chars = {"W", "R", "E", "L"}
+    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5}
+    num_to_char = dict([(v, k) for k, v in char_to_num.items()])
+    gp_params_dim = 8
+else:
+    base_kernel_chars = {"W", "R", "E", "L", "C"}
+    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "C": "const"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "C":6}
+    num_to_char = dict([(v, k) for k, v in char_to_num.items()])
+    gp_params_dim = 5
 
+vocabulary_size = len(char_to_num)
+epsilon = 1e-4
 
 def get_raw_expression(expression, device):
     """
@@ -93,8 +101,8 @@ def get_long_expression_with_params(expression, params):
                 )
             elif char == "L":
                 long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
-            # elif char == "C":
-                # long_expression += f"{char_to_long_char[char]}({param:.2f})"
+            elif char == "C":
+                long_expression += f"{char_to_long_char[char]}({param:.2f})"
         elif char == "*":
             long_expression += " × "
         elif char == "+":
@@ -219,40 +227,60 @@ class Kernel(nn.Module):
     def parseValue(self):
         char = self.peek()
         self.index += 1
+
         if self.raw_params_index < len(self.raw_params):
             raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
-        if char == "W":
-            scale_sq = F.softplus(raw_param[0])*0.1
-            self.params.append(scale_sq.item())
-            return {"op": "WhiteNoise", "scale_sq": scale_sq}
-        elif char == "R":
-            scale_sq = F.softplus(raw_param[1])*0.1
-            lengthscale_sq = F.softplus(raw_param[2])
-            self.params.append([scale_sq.item(), lengthscale_sq.item()])
-            return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
-        elif char == "E":
-            scale_sq = F.softplus(raw_param[3])*0.1
-            period = torch.sigmoid(raw_param[3])
-            lengthscale_sq = F.softplus(raw_param[4])
-            self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
-            return {
-                "op": "ExpSinSq",
-                "scale_sq": scale_sq,
-                "period": period,
-                "lengthscale_sq": lengthscale_sq,
-            }
-        elif char == "L":
-            scale_sq = F.softplus(raw_param[6])*0.1
-            offset = raw_param[7] + 1
-            self.params.append([scale_sq.item(), offset.item()])
-            return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
-        # elif char == "C":
-        #     value = F.softplus(raw_param[4])
-        #     self.params.append([value.item()])
-        #     return {"op": "Constant", "value": value}
+
+        if include_scale: 
+            if char == "W":
+                scale_sq = F.softplus(raw_param[0])*0.1
+                self.params.append(scale_sq.item())
+                return {"op": "WhiteNoise", "scale_sq": scale_sq}
+            elif char == "R":
+                scale_sq = F.softplus(raw_param[1])*0.1
+                lengthscale_sq = F.softplus(raw_param[2])
+                self.params.append([scale_sq.item(), lengthscale_sq.item()])
+                return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
+            elif char == "E":
+                scale_sq = F.softplus(raw_param[3])*0.1
+                period = torch.sigmoid(raw_param[3])
+                lengthscale_sq = F.softplus(raw_param[4])
+                self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
+                return {
+                    "op": "ExpSinSq",
+                    "scale_sq": scale_sq,
+                    "period": period,
+                    "lengthscale_sq": lengthscale_sq,
+                }
+            elif char == "L":
+                scale_sq = F.softplus(raw_param[6])*0.1
+                offset = raw_param[7] + 1
+                self.params.append([scale_sq.item(), offset.item()])
+                return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
         else:
-            raise ParsingError("Cannot parse char: " + str(char))
+            if char == "W":
+                return {"op": "WhiteNoise"}
+            elif char == "R":
+                lengthscale_sq = F.softplus(raw_param[0])
+                self.params.append(lengthscale_sq.item())
+                return {"op": "RBF", "lengthscale_sq": lengthscale_sq}
+            elif char == "E":
+                period = torch.sigmoid(raw_param[1])
+                lengthscale_sq = F.softplus(raw_param[2])
+                self.params.append([period.item(), lengthscale_sq.item()])
+                return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
+            elif char == "L":
+                offset = raw_param[3] + 1
+                self.params.append(offset.item())
+                return {"op": "Linear",  "offset": offset}  
+            elif char == "C":
+                value = F.softplus(raw_param[4]) * 0.1
+                self.params.append([value.item()])
+                return {"op": "Constant", "value": value}
+
+        raise ParsingError("Cannot parse char: " + str(char))
+        
 
     def forward(self, x_1, x_2, kernel=None):
         """
@@ -276,27 +304,27 @@ class Kernel(nn.Module):
             result = t
         elif kernel["op"] == "Linear":
             c = kernel["offset"]
-            s2 = kernel["scale_sq"]
+            s2 = kernel.get("scale_sq", 1)
             result = (x_1 - c) * (x_2 - c) * s2
             # print(kernel['op'], "c",c, "s2", s2)
         elif kernel["op"] == "WhiteNoise":
-            s2 = kernel["scale_sq"]
+            s2 = kernel.get("scale_sq", 1)
             result = (x_1 == x_2).float() * s2
             # print(kernel['op'], "s2", s2)
         elif kernel["op"] == "RBF":
             l2 = kernel["lengthscale_sq"]
-            s2 = kernel["scale_sq"]
+            s2 = kernel.get("scale_sq", 1)
             result = (-((x_1 - x_2) ** 2) / (2 * l2)).exp() * s2
             # print(kernel['op'], "s2", l2, "s2", s2)
         elif kernel["op"] == "ExpSinSq":
             t = kernel["period"]
             l2 = kernel["lengthscale_sq"]
-            s2 = kernel["scale_sq"]
+            s2 = kernel.get("scale_sq", 1)
             result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp() * s2
             # print(kernel['op'], "t", t, "l2", l2, "s2", s2)
-        # elif kernel["op"] == "Constant":
-        #     c = kernel["value"]
-        #     result = c
+        elif kernel["op"] == "Constant":
+            c = kernel["value"]
+            result = torch.full((x_1-x_2).shape, c, device=x_1.device)
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
 
