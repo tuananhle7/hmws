@@ -245,7 +245,6 @@ class Kernel(nn.Module):
             offset = raw_param[7] + 1
             self.params.append([scale_sq.item(), offset.item()])
             return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
-            return {"op": "Constant", "scale_sq": scale_sq, "offset": offset}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 

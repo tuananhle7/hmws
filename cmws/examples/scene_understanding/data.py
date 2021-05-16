@@ -1,78 +1,10 @@
 import itertools
 import random
-import pyro
 import torch
 from cmws import util
 from cmws.examples.scene_understanding import render
 import pathlib
 import matplotlib.pyplot as plt
-
-
-def sample_stacking_program(num_primitives, device, address_suffix="", fixed_num_blocks=False):
-    """Samples blocks to stack from a set [0, ..., num_primitives - 1]
-    *without* replacement. The number of blocks is stochastic and
-    can be < num_primitives.
-
-    Args
-        num_primitives (int)
-        device
-        address_suffix
-
-    Returns [num_blocks] (where num_blocks is stochastic and between 1 and num_primitives
-        (inclusive))
-    """
-
-    # Init
-    stacking_program = []
-    available_primitive_ids = list(range(num_primitives))
-
-    if fixed_num_blocks:
-        num_blocks = num_primitives
-    else:
-        # Sample num_blocks uniformly from [1, ..., num_primitives] (inclusive)
-        raw_num_blocks_logits = torch.ones((num_primitives,), device=device)
-        raw_num_blocks = pyro.sample(
-            f"raw_num_blocks{address_suffix}",
-            pyro.distributions.Categorical(logits=raw_num_blocks_logits),
-        )
-        num_blocks = raw_num_blocks + 1
-
-    # Sample primitive ids
-    for block_id in range(num_blocks):
-        # Sample primitive
-        raw_primitive_id_logits = torch.ones((len(available_primitive_ids),), device=device)
-        raw_primitive_id = pyro.sample(
-            f"raw_primitive_id_{block_id}{address_suffix}",
-            pyro.distributions.Categorical(logits=raw_primitive_id_logits),
-        )
-        primitive_id = available_primitive_ids.pop(raw_primitive_id)
-
-        # Add to the stacking program based on previous action
-        stacking_program.append(primitive_id)
-
-    return torch.tensor(stacking_program, device=device)
-
-
-def stacking_program_to_str(stacking_program, primitives):
-    return [primitives[primitive_id].name for primitive_id in stacking_program]
-
-
-def sample_raw_locations(stacking_program, address_suffix=""):
-    """
-    Samples the (raw) horizontal location of blocks in the stacking program.
-    p(raw_locations | stacking_program)
-
-    Args
-        stacking_program [num_blocks]
-
-    Returns [num_blocks]
-    """
-    device = stacking_program[0].device
-    dist = pyro.distributions.Independent(
-        pyro.distributions.Normal(torch.zeros((len(stacking_program),), device=device), 1),
-        reinterpreted_batch_ndims=1,
-    )
-    return pyro.sample(f"raw_locations{address_suffix}", dist)
 
 
 def generate_from_true_generative_model_single(
@@ -107,7 +39,7 @@ def generate_from_true_generative_model_single(
     # Determine which cells have stacks
     cells = list(itertools.product(range(num_grid_rows), range(num_grid_cols)))
     num_cells = num_grid_rows * num_grid_cols
-    num_stacks = random.randint(1, max(1, num_cells // 2))
+    num_stacks = random.randint(1, num_cells)
     cells_with_stack = set(random.sample(cells, num_stacks))
 
     # Sample
@@ -117,11 +49,10 @@ def generate_from_true_generative_model_single(
     for row in range(num_grid_rows):
         for col in range(num_grid_cols):
             if (row, col) in cells_with_stack:
-                stacking_program_ = sample_stacking_program(
-                    num_primitives, device, fixed_num_blocks=fixed_num_blocks
-                )
-                raw_locations_ = sample_raw_locations(stacking_program_)
-                num_blocks.append(len(stacking_program_))
+                num_blocks_ = random.randint(1, max_num_blocks)
+                stacking_program_ = torch.randint(0, num_primitives, [num_blocks_], device=device)
+                raw_locations_ = torch.randn(num_blocks_, device=device)
+                num_blocks.append(num_blocks_)
                 stacking_program_padded = torch.zeros(max_num_blocks, device=device).long()
                 stacking_program_padded[: num_blocks[-1]] = stacking_program_
                 raw_locations_padded = torch.zeros(max_num_blocks, device=device)

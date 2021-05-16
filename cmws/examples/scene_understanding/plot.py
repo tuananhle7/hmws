@@ -49,6 +49,23 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
+def latent_to_str(latent):
+    num_blocks, stacking_program, raw_locations = latent
+    num_grid_rows, num_grid_cols, max_num_blocks = stacking_program.shape
+    latent_str = []
+    for row in reversed(range(num_grid_rows)):
+        tmp = []
+        for col in reversed(range(num_grid_cols)):
+            s = ["." for _ in range(max_num_blocks)]
+            s[: num_blocks[row, col]] = "".join(
+                [str(x.item()) for x in stacking_program[row, col, : num_blocks[row, col]]]
+            )
+            tmp.append("".join(s))
+        latent_str.append("|".join(tmp))
+
+    return "\n".join(latent_str)
+
+
 def plot_reconstructions_scene_understanding(path, generative_model, guide, obs):
     """
     Args:
@@ -63,7 +80,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
 
     # Sample latent
     latent = guide.sample(obs)
-    num_blocks, _, _ = latent
+    num_blocks, stacking_program, raw_locations = latent
 
     # Sample reconstructions
     # --Renders
@@ -90,14 +107,12 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
         # Plot probs
         ax = axss[1, sample_id]
         ax.imshow(reconstructed_obs[sample_id].cpu().permute(1, 2, 0))
-        num_blocks_s = num_blocks[sample_id]
-        num_blocks_str = "\n".join(
-            reversed(["".join(reversed([str(y.item()) for y in x])) for x in num_blocks_s])
-        )
         ax.text(
             0.95,
             0.95,
-            num_blocks_str,
+            latent_to_str(
+                (num_blocks[sample_id], stacking_program[sample_id], raw_locations[sample_id])
+            ),
             transform=ax.transAxes,
             fontsize=7,
             va="top",
@@ -113,7 +128,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     axss[1, 0].set_ylabel("Reconstruction")
     axss[2, 0].set_ylabel("Hi-res reconstruction")
 
-    util.save_fig(fig, path)
+    util.save_fig(fig, path, dpi=300)
 
 
 def plot_primitives_scene_understanding(path, generative_model):
@@ -186,10 +201,11 @@ def main(args):
 
             # Plot reconstructions and other things
             # Test data
-            test_dataset = data.SceneUnderstandingDataset(
-                device, run_args.num_grid_rows, run_args.num_grid_cols, test=True
+            # NOTE: Plotting the train dataset only
+            train_dataset = data.SceneUnderstandingDataset(
+                device, run_args.num_grid_rows, run_args.num_grid_cols, test=False
             )
-            obs, _ = test_dataset[:10]
+            obs, _ = train_dataset[:10]
 
             # Plot
             if run_args.model_type == "scene_understanding":
