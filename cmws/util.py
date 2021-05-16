@@ -184,6 +184,11 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
 
     Returns distribution with batch_shape [*shape] and event_shape [dim]
     """
+    jitter = covariance_matrix.max()*1e-3
+    cov_with_jitter = covariance_matrix + jitter * torch.eye(covariance_matrix.shape[-1], device=loc.device)
+    return torch.distributions.MultivariateNormal(loc, cov_with_jitter)
+
+    # import pdb; pdb.set_trace()
     # Extract
     shape = loc.shape[:-1]
     dim = loc.shape[-1]

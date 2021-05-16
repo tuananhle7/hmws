@@ -71,7 +71,7 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None):
+def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None, num_particles=10):
     """
     Args:
         path (str)
@@ -85,15 +85,15 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     num_test_obs, num_timesteps = obs.shape
 
     # Sample latent
-    num_svi_iterations = 10
+    num_svi_iterations = 0
     if memory is None:
-        num_particles = 10
+        # num_particles = 10
         latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
             num_particles, num_svi_iterations, obs, generative_model, guide
         )
     else:
         assert obs_id is not None
-        num_particles = 10
+        # num_particles = 10
         # latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
         #     num_svi_iterations, obs, obs_id, generative_model, guide, memory
         # )
@@ -109,7 +109,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
 
     # Sample predictions
     # -- Expand obs
-    obs_expanded = obs[None].expand(num_particles, num_test_obs, num_timesteps)
+    obs_expanded = obs[None].expand(x.shape[0], num_test_obs, num_timesteps)
 
     # -- Sample predictions
     obs_predictions = generative_model.sample_obs_predictions(latent, obs_expanded, [num_samples])
@@ -250,9 +250,9 @@ def plot_comparison(path, checkpoint_paths):
 
     # Load
     x = []
-    log_ps = {"cmws_2": [], "cmws": [], "rws": []}
-    kls = {"cmws_2": [], "cmws": [], "rws": []}
-    colors = {"cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    log_ps = {"cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    kls = {"cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    colors = {"cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
             # Load checkpoint
@@ -268,7 +268,7 @@ def plot_comparison(path, checkpoint_paths):
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws_2", "rws", "cmws"]
+    algorithms = ["cmws_3", "cmws_2", "rws", "cmws"]
     log_ps_np = dict(
         [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
     )
@@ -328,6 +328,7 @@ def main(args):
     # Checkpoint paths
     if args.checkpoint_path is None:
         checkpoint_paths = list(util.get_checkpoint_paths(args.experiment_name))
+        print("Plotting using checkpoint paths:", ",".join(checkpoint_paths))
     else:
         checkpoint_paths = [args.checkpoint_path]
 
@@ -373,19 +374,16 @@ def main(args):
                 device, test=False, full_data=run_args.full_training_data
             )
             if run_args.full_training_data:
-                obs["train"], obs_id = train_timeseries_dataset[
-                    # [62, 188, 269, 510, 711, 1262, 1790]
-                    [9, 29, 100, 108, 134, 168, 180, 191]
-                ]
+                obs["train"], obs_id = train_timeseries_dataset[::5]
             else:
                 obs["train"], obs_id = train_timeseries_dataset[:]
 
             # Plot
             if run_args.model_type == "timeseries":
                 # Plot prior
-                plot_prior_timeseries(
-                    f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=100
-                )
+                # plot_prior_timeseries(
+                    # f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=100
+                # )
                 # Plot predictions
                 if memory is not None:
                     plot_predictions_timeseries(
@@ -395,14 +393,16 @@ def main(args):
                         obs["train"],
                         memory,
                         obs_id,
+                        num_particles=run_args.memory_size
                     )
-                for mode in ["train", "test"]:
-                    plot_predictions_timeseries(
-                        f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
-                        generative_model,
-                        guide,
-                        obs[mode],
-                    )
+                # for mode in ["train", "test"]:
+                #     plot_predictions_timeseries(
+                #         f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
+                #         generative_model,
+                #         guide,
+                #         obs[mode],
+                #         num_particles=run_args.num_particles
+                #     )
 
             plotted_something = True
         else:

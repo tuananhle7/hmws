@@ -34,7 +34,9 @@ def load_all_data():
     with open(path, "rb") as f:
         d_in = pickle.load(f)
 
-    data = [x for X in d_in for x in X["data"]]
+    exclude_categories = ["Lighting2_TRAIN", "Lighting7_TRAIN", "SmallKitchenAppliances_TRAIN", "CinC_ECG_torso_TRAIN", "Earthquakes_TRAIN", "ScreenType_TRAIN", "Haptics_TRAIN", "NonInvasiveFatalECG_Thorax1_TRAIN", "Computers_TRAIN", "Cricket_Z_TRAIN", "LargeKitchenAppliances_TRAIN", "RefrigerationDevices_TRAIN", "Trace_TRAIN"]
+    data = [x for X in d_in if X['source'] not in exclude_categories for x in X["data"]]
+
     util.logging.info(f"Loaded {len(data)} timeseries")
     return data
 
@@ -65,12 +67,12 @@ def get_train_test_data():
     """
     data = standardize_data(cut_data(filter_data(load_all_data())))
     custom_data = standardize_data(cut_data(filter_data(load_custom_data())))
-    num_train_data, num_test_data = 2000, 2000
+    num_train_data, num_test_data = 200, 200
     num_non_custom_test_data = num_test_data - len(custom_data)
 
-    random.seed(0)
-    train_data = random.sample(data[:num_train_data], 200)
-    test_data = custom_data + data[num_train_data : (num_train_data + num_non_custom_test_data)]
+    step = len(data)//(num_train_data + num_non_custom_test_data)
+    train_data = data[:num_train_data*step:step]
+    test_data = custom_data + data[num_train_data*step:(num_train_data+num_non_custom_test_data)*step:step]
     return train_data, test_data
 
 
@@ -93,11 +95,13 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         if self.test:
             self.obs = torch.tensor(test_obs, device=self.device).float()
             if not full_data:
-                self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
+                # self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
+                self.obs = self.obs[::10]
         else:
             self.obs = torch.tensor(train_obs, device=self.device).float()
             if not full_data:
-                self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
+                self.obs = self.obs[::10]
+                #self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
         self.num_data = len(self.obs)
         self.obs_id = torch.arange(self.num_data, device=device)
 

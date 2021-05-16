@@ -269,14 +269,17 @@ def importance_sample_memory(
         generative_model, guide, discrete_latent, obs, num_particles
     )
 
-    # Sample svi-optimized q(z_c | z_d, x)
-    # -- Expand obs
-    # [memory_size, batch_size, num_timesteps]
-    obs_expanded = obs[None].expand([memory_size, batch_size, timeseries_data.num_timesteps])
-    # -- SVI
-    continuous_latent, _ = svi(
-        num_svi_iterations, obs_expanded, discrete_latent, generative_model, guide
-    )
+    if num_svi_iterations == 0:
+        continuous_latent = guide.sample_continuous(obs, discrete_latent)
+    else:
+        # Sample svi-optimized q(z_c | z_d, x)
+        # -- Expand obs
+        # [memory_size, batch_size, num_timesteps]
+        obs_expanded = obs[None].expand([memory_size, batch_size, timeseries_data.num_timesteps])
+        # -- SVI
+        continuous_latent, _ = svi(
+            num_svi_iterations, obs_expanded, discrete_latent, generative_model, guide
+        )
 
     # Combine latents
     latent = discrete_latent[0], discrete_latent[1], continuous_latent

@@ -13,9 +13,9 @@ from cmws.examples.timeseries import data
 from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
-base_kernel_chars = {"W", "R", "E", "L"}
+base_kernel_chars = {"W", "R", "E", "L", "C"}
 char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin"}
-char_to_num = {"W": 0, "R": 1, "E": 2, "L": 3, "*": 4, "+": 5, "(": 6, ")": 7}
+char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
 gp_params_dim = 8
@@ -93,6 +93,8 @@ def get_long_expression_with_params(expression, params):
                 )
             elif char == "L":
                 long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
+            # elif char == "C":
+                # long_expression += f"{char_to_long_char[char]}({param:.2f})"
         elif char == "*":
             long_expression += " × "
         elif char == "+":
@@ -221,18 +223,18 @@ class Kernel(nn.Module):
             raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            scale_sq = F.softplus(raw_param[0]) + 1e-4
+            scale_sq = F.softplus(raw_param[0])*0.1
             self.params.append(scale_sq.item())
             return {"op": "WhiteNoise", "scale_sq": scale_sq}
         elif char == "R":
-            scale_sq = F.softplus(raw_param[1]) + 1e-4
-            lengthscale_sq = F.softplus(raw_param[2]) + 1e-4
+            scale_sq = F.softplus(raw_param[1])*0.1
+            lengthscale_sq = F.softplus(raw_param[2])
             self.params.append([scale_sq.item(), lengthscale_sq.item()])
             return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
         elif char == "E":
-            scale_sq = F.softplus(raw_param[3]) + 1e-4
-            period = F.softplus(raw_param[4]) + 1e-1
-            lengthscale_sq = F.softplus(raw_param[5]) + 1e-4
+            scale_sq = F.softplus(raw_param[3])*0.1
+            period = torch.sigmoid(raw_param[3])
+            lengthscale_sq = F.softplus(raw_param[4])
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
             return {
                 "op": "ExpSinSq",
@@ -240,11 +242,15 @@ class Kernel(nn.Module):
                 "period": period,
                 "lengthscale_sq": lengthscale_sq,
             }
-        if char == "L":
-            scale_sq = F.softplus(raw_param[6]) + 1e-4
-            offset = raw_param[7]
+        elif char == "L":
+            scale_sq = F.softplus(raw_param[6])*0.1
+            offset = raw_param[7] + 1
             self.params.append([scale_sq.item(), offset.item()])
-            return {"op": "Constant", "scale_sq": scale_sq, "offset": offset}
+            return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
+        # elif char == "C":
+        #     value = F.softplus(raw_param[4])
+        #     self.params.append([value.item()])
+        #     return {"op": "Constant", "value": value}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 
@@ -272,17 +278,25 @@ class Kernel(nn.Module):
             c = kernel["offset"]
             s2 = kernel["scale_sq"]
             result = (x_1 - c) * (x_2 - c) * s2
+            # print(kernel['op'], "c",c, "s2", s2)
         elif kernel["op"] == "WhiteNoise":
-            result = (x_1 == x_2).float() * kernel["scale_sq"]
+            s2 = kernel["scale_sq"]
+            result = (x_1 == x_2).float() * s2
+            # print(kernel['op'], "s2", s2)
         elif kernel["op"] == "RBF":
             l2 = kernel["lengthscale_sq"]
             s2 = kernel["scale_sq"]
             result = (-((x_1 - x_2) ** 2) / (2 * l2)).exp() * s2
+            # print(kernel['op'], "s2", l2, "s2", s2)
         elif kernel["op"] == "ExpSinSq":
             t = kernel["period"]
             l2 = kernel["lengthscale_sq"]
             s2 = kernel["scale_sq"]
             result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp() * s2
+            # print(kernel['op'], "t", t, "l2", l2, "s2", s2)
+        # elif kernel["op"] == "Constant":
+        #     c = kernel["value"]
+        #     result = c
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
 
@@ -310,7 +324,7 @@ def init(run_args, device, fast=False):
         if not fast:
             # Pretrain the prior
             cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-                generative_model, batch_size=10, num_iterations=2000
+                generative_model, guide, batch_size=10, num_iterations=2000
             )
 
         # Memory
@@ -330,8 +344,16 @@ def init(run_args, device, fast=False):
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
-    parameters = itertools.chain(generative_model.parameters(), guide.parameters())
-    optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
+    continuous_latent_parameters = list(guide.gp_params_extractor.parameters())
+    other_parameters = [
+            *generative_model.parameters(),
+            *(set(guide.parameters()) - set(continuous_latent_parameters))
+        ]
+
+    optimizer = torch.optim.Adam([
+        {'params': continuous_latent_parameters, 'lr':run_args.lr_continuous_latents},
+        {'params': other_parameters},
+    ], lr=run_args.lr)
 
     # Stats
     stats = Stats([], [], [], [])

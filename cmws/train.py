@@ -1,9 +1,9 @@
-import pyro
+# import pyro
 import torch
 
 import cmws
 from cmws import losses, util
-
+from tqdm import tqdm
 
 def train(model, optimizer, stats, args):
     # Extract
@@ -53,9 +53,9 @@ def train(model, optimizer, stats, args):
             sleep_pretraining_batch_size = args.sleep_pretraining_batch_size
     else:
         sleep_pretraining_batch_size = args.num_particles * args.batch_size
-    for iteration in range(
+    for iteration in tqdm(range(
         num_sleep_pretraining_iterations_so_far, args.num_sleep_pretraining_iterations
-    ):
+    )):
         if "_pyro" in args.model_type:
             raise NotImplementedError
         else:
@@ -77,7 +77,7 @@ def train(model, optimizer, stats, args):
             stats.sleep_pretraining_losses.append(loss.item())
 
         # Log
-        if iteration % args.log_interval == 0:
+        if iteration % 100==0: #args.log_interval == 0:
             util.logging.info(
                 f"Sleep Pretraining Iteration {iteration} | "
                 f"Loss = {stats.sleep_pretraining_losses[-1]:.0f} | "
@@ -245,6 +245,16 @@ def train(model, optimizer, stats, args):
                     args.num_proposals_mws,
                     insomnia=args.insomnia,
                 ).mean()
+            elif args.algorithm == "cmws_3":
+                loss = losses.get_cmws_3_loss(
+                    generative_model,
+                    guide,
+                    memory,
+                    obs,
+                    obs_id,
+                    args.num_particles,
+                    args.num_proposals_mws
+                ).mean()
 
             # Compute gradient
             loss.backward()
@@ -310,6 +320,10 @@ def train(model, optimizer, stats, args):
                 f"Log p = {stats.log_ps[-1][1]:.0f} | KL = {stats.kls[-1][1]:.0f} | "
                 f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
             )
+        else:
+            util.logging.info(
+                f"Iteration {iteration} | Loss = {stats.losses[-1]:.0f}"
+            )     
 
         # Make a model tuple
         model = {"generative_model": generative_model, "guide": guide, "memory": memory}
