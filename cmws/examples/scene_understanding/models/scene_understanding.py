@@ -17,6 +17,7 @@ class GenerativeModel(nn.Module):
         im_size=128,
         obs_scale=1.0,
         obs_dist_type="normal",
+        remove_color = False
     ):
         super().__init__()
 
@@ -28,6 +29,7 @@ class GenerativeModel(nn.Module):
         self.num_channels = 3
         self.im_size = im_size
         self.obs_scale = obs_scale
+        self.remove_color = remove_color
         if obs_dist_type == "normal":
             self.obs_dist = torch.distributions.Normal
         elif obs_dist_type == "laplace":
@@ -35,7 +37,7 @@ class GenerativeModel(nn.Module):
 
         # Primitive parameters (parameters of symbols)
         self.primitives = nn.ModuleList(
-            [render.LearnableCube(f"{i}") for i in range(self.num_primitives)]
+            [render.LearnableCube(f"{i}", fixed_color=remove_color) for i in range(self.num_primitives)]
         )
 
         # Rendering parameters
@@ -186,6 +188,7 @@ class GenerativeModel(nn.Module):
             im_size=self.im_size,
             sigma=self.sigma,
             gamma=self.gamma,
+            remove_color=self.remove_color
         )
 
     def log_prob(self, latent, obs):

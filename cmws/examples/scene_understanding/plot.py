@@ -133,7 +133,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     util.save_fig(fig, path, dpi=300)
 
 
-def plot_primitives_scene_understanding(path, generative_model):
+def plot_primitives_scene_understanding(path, generative_model, remove_color=False):
     device = generative_model.device
     im_size = generative_model.im_size
     hi_res_im_size = 256
@@ -157,12 +157,14 @@ def plot_primitives_scene_understanding(path, generative_model):
             generative_model.primitives[i].color,
             location,
             im_size=im_size,
+            remove_color=remove_color
         )
         obs_high_res = render.render_cube(
             generative_model.primitives[i].size,
             generative_model.primitives[i].color,
             location,
             im_size=hi_res_im_size,
+            remove_color=remove_color
         )
         axss[0, i].imshow(obs.cpu())
         axss[1, i].imshow(obs_high_res.cpu())
@@ -215,10 +217,10 @@ def main(args):
                     f"{save_dir}/reconstructions/{num_iterations}.png",
                     generative_model,
                     guide,
-                    obs,
+                    obs
                 )
                 plot_primitives_scene_understanding(
-                    f"{save_dir}/primitives/{num_iterations}.png", generative_model,
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (args.remove_color == 1)
                 )
 
         else:

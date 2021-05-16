@@ -221,18 +221,18 @@ class Kernel(nn.Module):
             raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            scale_sq = F.softplus(raw_param[0]) + 1e-4
+            scale_sq = F.softplus(raw_param[0])*0.1
             self.params.append(scale_sq.item())
             return {"op": "WhiteNoise", "scale_sq": scale_sq}
         elif char == "R":
-            scale_sq = F.softplus(raw_param[1]) + 1e-4
-            lengthscale_sq = F.softplus(raw_param[2]) + 1e-4
+            scale_sq = F.softplus(raw_param[1])*0.1
+            lengthscale_sq = F.softplus(raw_param[2])
             self.params.append([scale_sq.item(), lengthscale_sq.item()])
             return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
         elif char == "E":
-            scale_sq = F.softplus(raw_param[3]) + 1e-4
-            period = F.softplus(raw_param[4]) + 1e-1
-            lengthscale_sq = F.softplus(raw_param[5]) + 1e-4
+            scale_sq = F.softplus(raw_param[3])*0.1
+            period = torch.sigmoid(raw_param[3])
+            lengthscale_sq = F.softplus(raw_param[4])
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
             return {
                 "op": "ExpSinSq",
@@ -240,11 +240,11 @@ class Kernel(nn.Module):
                 "period": period,
                 "lengthscale_sq": lengthscale_sq,
             }
-        if char == "L":
-            scale_sq = F.softplus(raw_param[6]) + 1e-4
-            offset = raw_param[7]
+        elif char == "L":
+            scale_sq = F.softplus(raw_param[6])*0.1
+            offset = raw_param[7] + 1
             self.params.append([scale_sq.item(), offset.item()])
-            return {"op": "Constant", "scale_sq": scale_sq, "offset": offset}
+            return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 

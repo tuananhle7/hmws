@@ -26,7 +26,7 @@ def main(args):
 
 
 def get_config_name(args):
-    return f"{args.algorithm}_{args.num_grid_rows}"
+    return f"{args.algorithm}_{args.num_grid_rows}_{args.seed}"
 
 
 def get_args_parser():
@@ -52,6 +52,8 @@ def get_args_parser():
     parser.add_argument(
         "--model-type", default="scene_understanding", choices=["scene_understanding"], help=" ",
     )
+    parser.add_argument("--remove_color", default=0, type=int, # not a boolean just to be sure don't encounter bool => string issues
+                        help="Control whether color is rendered. Either 0 (don't remove color) or 1 (remove color).")
 
     # Data
     parser.add_argument("--data-num-primitives", default=3, type=int, help=" ")
