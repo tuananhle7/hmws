@@ -26,7 +26,7 @@ def main(args):
 
 
 def get_config_name(args):
-    return f"{args.algorithm}_{args.num_grid_rows}"
+    return f"{args.algorithm}_{args.num_grid_rows}_{args.seed}"
 
 
 def get_args_parser():

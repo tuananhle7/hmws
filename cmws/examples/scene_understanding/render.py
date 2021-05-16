@@ -60,7 +60,7 @@ class LearnableCube(nn.Module):
             self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)))
         self.raw_size = nn.Parameter(torch.randn(()))
-        self.min_size = 0.1
+        self.min_size = 0.2
         self.max_size = 1.0
 
     @property
@@ -355,7 +355,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
                                                            colors[batch_idx, cell_idx, :n_cubes, :])):
                 cube_vertices, cube_faces = get_cube_mesh(position, size)
                 # For now, apply same color to each mesh vertex (v \in V)
-                if remove_color: texture = torch.ones_like(cube_vertices)
+                if remove_color: texture = torch.ones_like(cube_vertices) * torch.tensor([0,0,0.8]) # soft blue
                 else: texture = torch.ones_like(cube_vertices) * color# [V, 3]
                 # Offset faces (account for diff indexing, b/c treating as one mesh)
                 cube_faces = cube_faces + vert_offset
