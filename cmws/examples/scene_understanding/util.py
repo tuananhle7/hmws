@@ -20,6 +20,7 @@ def init(run_args, device):
             num_grid_cols=run_args.num_grid_cols,
             num_primitives=run_args.num_primitives,
             max_num_blocks=run_args.max_num_blocks,
+            remove_color=(run_args.remove_color == 1) # map from int to bool
         ).to(device)
 
         # Guide
