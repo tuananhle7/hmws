@@ -245,6 +245,17 @@ def train(model, optimizer, stats, args):
                     args.num_proposals_mws,
                     insomnia=args.insomnia,
                 ).mean()
+            elif args.algorithm == "cmws_4":
+                loss = losses.get_cmws_4_loss(
+                    generative_model,
+                    guide,
+                    memory,
+                    obs,
+                    obs_id,
+                    args.num_particles,
+                    args.num_proposals_mws,
+                    insomnia=args.insomnia,
+                ).mean()
 
             # Compute gradient
             loss.backward()
