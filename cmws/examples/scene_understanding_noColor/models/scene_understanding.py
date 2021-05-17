@@ -17,7 +17,7 @@ class GenerativeModel(nn.Module):
         im_size=128,
         obs_scale=1.0,
         obs_dist_type="normal",
-        remove_color=False
+        remove_color = False
     ):
         super().__init__()
 
@@ -37,7 +37,7 @@ class GenerativeModel(nn.Module):
 
         # Primitive parameters (parameters of symbols)
         self.primitives = nn.ModuleList(
-            [render.LearnableCube(f"{i}", learn_color=not remove_color) for i in range(self.num_primitives)]
+            [render.LearnableCube(f"{i}", fixed_color=not remove_color) for i in range(self.num_primitives)]
         )
 
         # Rendering parameters

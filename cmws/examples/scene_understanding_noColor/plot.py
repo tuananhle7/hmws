@@ -205,8 +205,7 @@ def main(args):
             # Test data
             # NOTE: Plotting the train dataset only
             train_dataset = data.SceneUnderstandingDataset(
-                device, run_args.num_grid_rows, run_args.num_grid_cols, test=False,
-                remove_color=(run_args.remove_color == 1)
+                device, run_args.num_grid_rows, run_args.num_grid_cols, test=False
             )
             obs, _ = train_dataset[:10]
 
@@ -219,7 +218,7 @@ def main(args):
                     obs
                 )
                 plot_primitives_scene_understanding(
-                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (run_args.remove_color == 1)
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, False#(args.remove_color == 1)
                 )
 
         else:
@@ -249,7 +248,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         if args.delay:
             # delay start to ensure checkpoints exist before plotting
-            time.sleep(5 * 60)  # units of seconds
+            time.sleep(10 * 60)  # units of seconds
 
         if args.repeat:
             while True:
