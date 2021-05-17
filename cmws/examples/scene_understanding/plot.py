@@ -94,7 +94,9 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     # Plot
     num_rows = 3
     num_cols = num_test_obs
-    fig, axss = plt.subplots(num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows))
+    fig, axss = plt.subplots(
+        num_rows, num_cols, figsize=(2 * num_cols, 2 * num_rows), squeeze=False
+    )
     for ax in axss.flat:
         ax.set_xticks([])
         ax.set_yticks([])
