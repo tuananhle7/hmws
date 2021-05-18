@@ -93,7 +93,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
         )
     else:
         assert obs_id is not None
-        num_particles = 10
+        num_particles = memory.size
         # latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
         #     num_svi_iterations, obs, obs_id, generative_model, guide, memory
         # )

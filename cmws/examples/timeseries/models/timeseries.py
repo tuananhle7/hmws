@@ -29,8 +29,8 @@ class GenerativeModel(nn.Module):
         self.gp_params_extractor = nn.Linear(
             self.lstm_hidden_dim, 2 * timeseries_util.gp_params_dim
         )
-        self.gp_params_extractor.weight.data.fill_(0)
-        self.gp_params_extractor.bias.data.fill_(0)
+        # self.gp_params_extractor.weight.data.fill_(0)
+        # self.gp_params_extractor.bias.data.fill_(0)
 
     @property
     def device(self):
@@ -582,8 +582,8 @@ class Guide(nn.Module):
         self.gp_params_extractor = nn.Linear(
             self.lstm_hidden_dim, 2 * timeseries_util.gp_params_dim
         )
-        self.gp_params_extractor.weight.data.fill_(0)
-        self.gp_params_extractor.bias.data.fill_(0)
+        # self.gp_params_extractor.weight.data.fill_(0)
+        # self.gp_params_extractor.bias.data.fill_(0)
 
     @property
     def device(self):
