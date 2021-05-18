@@ -221,18 +221,18 @@ class Kernel(nn.Module):
             raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            scale_sq = F.softplus(raw_param[0])*0.1
+            scale_sq = F.softplus(raw_param[0]) + 1e-4
             self.params.append(scale_sq.item())
             return {"op": "WhiteNoise", "scale_sq": scale_sq}
         elif char == "R":
-            scale_sq = F.softplus(raw_param[1])*0.1
-            lengthscale_sq = F.softplus(raw_param[2])
+            scale_sq = F.softplus(raw_param[1]) + 1e-4
+            lengthscale_sq = F.softplus(raw_param[2]) + 1e-4
             self.params.append([scale_sq.item(), lengthscale_sq.item()])
             return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
         elif char == "E":
-            scale_sq = F.softplus(raw_param[3])*0.1
-            period = torch.sigmoid(raw_param[3])
-            lengthscale_sq = F.softplus(raw_param[4])
+            scale_sq = F.softplus(raw_param[3]) + 1e-4
+            period = F.softplus(raw_param[4]) + 1e-1
+            lengthscale_sq = F.softplus(raw_param[5]) + 1e-4
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
             return {
                 "op": "ExpSinSq",
@@ -240,11 +240,11 @@ class Kernel(nn.Module):
                 "period": period,
                 "lengthscale_sq": lengthscale_sq,
             }
-        elif char == "L":
-            scale_sq = F.softplus(raw_param[6])*0.1
-            offset = raw_param[7] + 1
+        if char == "L":
+            scale_sq = F.softplus(raw_param[6]) + 1e-4
+            offset = raw_param[7]
             self.params.append([scale_sq.item(), offset.item()])
-            return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
+            return {"op": "Constant", "scale_sq": scale_sq, "offset": offset}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 
@@ -330,8 +330,24 @@ def init(run_args, device, fast=False):
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
-    parameters = itertools.chain(generative_model.parameters(), guide.parameters())
-    optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
+    guide_continuous_params = itertools.chain(
+        guide.gp_params_lstm.parameters(), guide.gp_params_extractor.parameters()
+    )
+    guide_non_continuous_params = itertools.chain(
+        guide.obs_embedder.parameters(),
+        guide.expression_embedder.parameters(),
+        guide.expression_lstm.parameters(),
+        guide.expression_extractor.parameters(),
+    )
+    optimizer = torch.optim.Adam(
+        [
+            {"params": itertools.chain(generative_model.parameters(), guide_non_continuous_params)},
+            {"params": guide_continuous_params, "lr": 1e-2},
+        ],
+        lr=run_args.lr,
+    )
+    # parameters = itertools.chain(generative_model.parameters(), guide.parameters())
+    # optimizer = torch.optim.Adam(parameters, lr=run_args.lr)
 
     # Stats
     stats = Stats([], [], [], [])
