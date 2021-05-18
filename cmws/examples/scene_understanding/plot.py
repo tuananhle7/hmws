@@ -193,9 +193,11 @@ def main(args):
 
         if os.path.exists(checkpoint_path):
             # Load checkpoint
-            model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
-                checkpoint_path, device=device
-            )
+            try:
+                model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
+                    checkpoint_path, device=device
+                )
+            except: continue
             generative_model, guide = model["generative_model"], model["guide"]
             num_iterations = len(stats.losses)
             save_dir = util.get_save_dir(run_args.experiment_name, run.get_config_name(run_args))
