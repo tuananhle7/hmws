@@ -467,7 +467,7 @@ class GenerativeModel(nn.Module):
             ).sample(sample_shape)
         except Exception as e:
             raise RuntimeError(f"MVN sample error: {e}")
-            
+
         return obs
 
     @torch.no_grad()
@@ -484,6 +484,22 @@ class GenerativeModel(nn.Module):
 
         Returns
             obs_predictions [*sample_shape, *shape, num_timesteps]
+        """
+        return self.get_predictive_dist(latent, obs).sample(sample_shape)
+
+    @torch.no_grad()
+    def get_predictive_dist(self, latent, obs):
+        """p(x' | z, x)
+
+        Args
+            latent:
+                raw_expression [*shape, max_num_chars]
+                eos [*shape, max_num_chars]
+                raw_gp_params [*shape, max_num_chars, gp_params_dim]
+            obs [*shape, num_timesteps]
+
+        Returns
+            distribution of batch_shape [*shape] and event_shape [num_timesteps]
         """
         # Extract
         raw_expression, eos, raw_gp_params = latent
@@ -537,16 +553,10 @@ class GenerativeModel(nn.Module):
         loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)
 
         # Sample obs
-        try:
-            joint_dist = cmws.util.get_multivariate_normal_dist(
-                loc, covariance_matrix=covariance_matrix
-            )
-            predictive_dist = cmws.util.condition_mvn(joint_dist, obs)
-            obs_predictions = predictive_dist.sample(sample_shape)
-        except Exception as e:
-            raise RuntimeError(f"MVN sample predictions error: {e}")
-
-        return obs_predictions
+        joint_dist = cmws.util.get_multivariate_normal_dist(
+            loc, covariance_matrix=covariance_matrix
+        )
+        return cmws.util.condition_mvn(joint_dist, obs)
 
 
 class Guide(nn.Module):
