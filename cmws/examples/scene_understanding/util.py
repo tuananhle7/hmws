@@ -8,7 +8,7 @@ from cmws.examples.scene_understanding import data
 import cmws
 import torch
 from cmws.examples.scene_understanding.models import scene_understanding
-
+import os
 
 # Init, saving, etc
 def init(run_args, device):
@@ -73,8 +73,11 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
 
 
 def load_checkpoint(path, device, num_tries=3):
+    print("current path: ", path)
+    print("path exists: ", os.path.exists(path))
     for i in range(num_tries):
         try:
+            print("load: ", torch.load(path, map_location=device))
             checkpoint = torch.load(path, map_location=device)
             break
         except Exception as e:
