@@ -45,3 +45,20 @@ def test_timeseries_dataset_synthetic():
     timeseries_dataset = TimeseriesDataset(device, test=True)
     assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_data, 256]
     assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
+
+
+def test_stacking_data_loader_synthetic():
+    device = cmws.util.get_device()
+    batch_size = 7
+
+    # Train
+    data_loader = get_timeseries_data_loader(device, batch_size, synthetic=True)
+    obs, obs_id = next(iter(data_loader))
+    assert list(obs.shape) == [batch_size, 256]
+    assert list(obs_id.shape) == [batch_size]
+
+    # Train
+    data_loader = get_timeseries_data_loader(device, batch_size, test=True, synthetic=True)
+    obs, obs_id = next(iter(data_loader))
+    assert list(obs.shape) == [batch_size, 256]
+    assert list(obs_id.shape) == [batch_size]
