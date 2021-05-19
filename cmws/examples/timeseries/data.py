@@ -100,7 +100,10 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         self.test = test
         self.synthetic = synthetic
         if self.synthetic:
-            self.num_data = 200
+            if self.test:
+                self.num_data = 20
+            else:
+                self.num_data = 200
             path = (
                 pathlib.Path(__file__)
                 .parent.absolute()

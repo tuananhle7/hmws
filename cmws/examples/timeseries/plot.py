@@ -388,16 +388,22 @@ def main(args):
             obs = {}
 
             # -- Test
-            test_timeseries_dataset = data.TimeseriesDataset(device, test=True)
+            test_timeseries_dataset = data.TimeseriesDataset(
+                device, test=True, synthetic=run_args.synthetic_data
+            )
             obs["test"], _ = test_timeseries_dataset[:]
 
             # -- Train
             train_timeseries_dataset = data.TimeseriesDataset(
-                device, test=False, full_data=run_args.full_training_data
+                device,
+                test=False,
+                full_data=run_args.full_training_data,
+                synthetic=run_args.synthetic_data,
             )
             if run_args.full_training_data:
                 obs["train"], obs_id = train_timeseries_dataset[
                     # [62, 188, 269, 510, 711, 1262, 1790]
+                    # [29]
                     [9, 29, 100, 108, 134, 168, 180, 191]
                 ]
             else:

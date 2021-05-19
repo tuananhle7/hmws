@@ -47,6 +47,7 @@ def get_args_parser():
 
     # Data
     parser.add_argument("--full-training-data", action="store_true", help=" ")
+    parser.add_argument("--synthetic-data", action="store_true", help=" ")
 
     # Model
     parser.add_argument("--max-num-chars", default=10, type=int, help=" ")
