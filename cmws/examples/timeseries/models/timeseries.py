@@ -318,6 +318,21 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).log_prob(obs_expanded)
         except Exception as e:
+            error_str = str(e)
+            end = error_str.find("U(") - 2
+            start = error_str.find("batch ") + len("batch ")
+            bad_batch_id = int(error_str[start:end])
+            bad_sample_id = bad_batch_id // num_elements
+            bad_element_id = bad_batch_id % num_elements
+            try:
+                covariance_matrix[bad_sample_id, bad_element_id].cholesky()
+            except Exception:
+                bad_kernel = timeseries_util.get_full_expression(
+                    raw_expression_flattened[bad_sample_id, bad_element_id],
+                    eos_flattened[bad_sample_id, bad_element_id],
+                    raw_gp_params_flattened[bad_sample_id, bad_element_id],
+                )
+                cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
             raise RuntimeError(f"MVN log prob error: {e}")
 
         # -- Mask out zero log probs
@@ -466,6 +481,19 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).sample(sample_shape)
         except Exception as e:
+            error_str = str(e)
+            end = error_str.find("U(") - 2
+            start = error_str.find("batch ") + len("batch ")
+            bad_element_id = int(error_str[start:end])
+            try:
+                covariance_matrix[bad_element_id].cholesky()
+            except Exception:
+                bad_kernel = timeseries_util.get_full_expression(
+                    raw_expression_flattened[bad_element_id],
+                    eos_flattened[bad_element_id],
+                    raw_gp_params_flattened[bad_element_id],
+                )
+                cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
             raise RuntimeError(f"MVN sample error: {e}")
 
         return obs
