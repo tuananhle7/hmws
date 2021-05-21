@@ -15,40 +15,126 @@ def generate_from_true_generative_model_single(
     max_num_blocks=3,
     im_size=32,
     remove_color=False,
+    mode="cube",
 ):
     """Generate a synthetic observation
+    Args
+        mode (str): cube or block
 
     Returns [3, im_size, im_size]
     """
     assert num_primitives <= 3
 
-    if remove_color:
-        # all primitives = same color
-        primitive_color = [0.0, 0.0, 0.8]
-        primitives = [
-            render.Cube(
-                "A", torch.tensor(primitive_color, device=device), torch.tensor(0.3, device=device)
-            ),
-            render.Cube(
-                "B", torch.tensor(primitive_color, device=device), torch.tensor(0.4, device=device)
-            ),
-            render.Cube(
-                "C", torch.tensor(primitive_color, device=device), torch.tensor(0.5, device=device)
-            ),
-        ][:num_primitives]
-    else:
-        # Define params
-        primitives = [
-            render.Cube(
-                "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.3, device=device)
-            ),
-            render.Cube(
-                "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.4, device=device)
-            ),
-            render.Cube(
-                "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.5, device=device)
-            ),
-        ][:num_primitives]
+    if mode == "cube":
+        if remove_color:
+            # all primitives = same color
+            primitive_color = [0.0, 0.0, 0.8]
+            primitives = [
+                render.Cube(
+                    "A",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor(0.3, device=device),
+                ),
+                render.Cube(
+                    "B",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor(0.4, device=device),
+                ),
+                render.Cube(
+                    "C",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor(0.5, device=device),
+                ),
+            ][:num_primitives]
+        else:
+            # Define params
+            primitives = [
+                render.Cube(
+                    "A",
+                    torch.tensor([1.0, 0.0, 0.0], device=device),
+                    torch.tensor(0.3, device=device),
+                ),
+                render.Cube(
+                    "B",
+                    torch.tensor([0.0, 1.0, 0.0], device=device),
+                    torch.tensor(0.4, device=device),
+                ),
+                render.Cube(
+                    "C",
+                    torch.tensor([0.0, 0.0, 1.0], device=device),
+                    torch.tensor(0.5, device=device),
+                ),
+            ][:num_primitives]
+    elif mode == "block":
+        if remove_color:
+            # all primitives = same color
+            primitive_color = [0.0, 0.0, 0.8]
+            primitives = [
+                render.Block(
+                    "A",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor([0.3, 0.3, 0.3], device=device),
+                ),
+                render.Block(
+                    "B",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor([0.4, 0.4, 0.4], device=device),
+                ),
+                render.Block(
+                    "C",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor([0.5, 0.5, 0.5], device=device),
+                ),
+                render.Block(
+                    "D",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor([0.5, 0.3, 0.3], device=device),
+                ),
+                render.Block(
+                    "E",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor([0.3, 0.5, 0.3], device=device),
+                ),
+                render.Block(
+                    "F",
+                    torch.tensor(primitive_color, device=device),
+                    torch.tensor([0.3, 0.3, 0.5], device=device),
+                ),
+            ][:num_primitives]
+        else:
+            # Define params
+            primitives = [
+                render.Block(
+                    "A",
+                    torch.tensor([1.0, 0.0, 0.0], device=device),
+                    torch.tensor([0.3, 0.3, 0.3], device=device),
+                ),
+                render.Block(
+                    "B",
+                    torch.tensor([0.0, 1.0, 0.0], device=device),
+                    torch.tensor([0.4, 0.4, 0.4], device=device),
+                ),
+                render.Block(
+                    "C",
+                    torch.tensor([0.0, 0.0, 1.0], device=device),
+                    torch.tensor([0.5, 0.5, 0.5], device=device),
+                ),
+                render.Block(
+                    "D",
+                    torch.tensor([1.0, 0.0, 0.0], device=device),
+                    torch.tensor([0.3, 0.3, 0.5], device=device),
+                ),
+                render.Block(
+                    "E",
+                    torch.tensor([1.0, 0.0, 0.0], device=device),
+                    torch.tensor([0.3, 0.3, 0.5], device=device),
+                ),
+                render.Block(
+                    "F",
+                    torch.tensor([1.0, 0.0, 0.0], device=device),
+                    torch.tensor([0.3, 0.3, 0.5], device=device),
+                ),
+            ][:num_primitives]
     # num_primitives = len(primitives)
 
     # Determine which cells have stacks
