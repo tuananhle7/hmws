@@ -342,7 +342,7 @@ def init(run_args, device, fast=False):
     optimizer = torch.optim.Adam(
         [
             {"params": itertools.chain(generative_model.parameters(), guide_non_continuous_params)},
-            {"params": guide_continuous_params, "lr": 1e-2},
+            {"params": guide_continuous_params, "lr": run_args.continuous_guide_lr},
         ],
         lr=run_args.lr,
     )
