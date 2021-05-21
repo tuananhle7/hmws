@@ -50,6 +50,19 @@ class Cube:
     def __repr__(self):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"
 
+class Block:
+    def __init__(self, name, color, size):
+        self.name = name
+        self.color = color
+        self.size = size # [width, height, length]
+
+    @property
+    def device(self):
+        return self.size.device
+
+    def __repr__(self):
+        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist():.1f})"
+
 
 class LearnableCube(nn.Module):
     def __init__(self, name=None, learn_color=True):
@@ -85,6 +98,41 @@ class LearnableCube(nn.Module):
 
     def __repr__(self):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"
+
+class LearnableBlock(nn.Module):
+    def __init__(self, name=None, learn_color=True):
+        super().__init__()
+        if name is None:
+            self.name = "LearnableCube"
+        else:
+            self.name = name
+        self.raw_color = nn.Parameter(torch.randn((3,)),requires_grad=learn_color) # if False, don't learn color
+        self.raw_size = nn.Parameter(torch.randn((3,)))
+        self.min_size = 0.2 # for each dimension
+        self.max_size = 1.0
+
+    @property
+    def device(self):
+        return self.raw_size.device
+
+    @property
+    def size(self):
+        return self.raw_size.sigmoid() * (self.max_size - self.min_size) + self.min_size
+
+    @size.setter
+    def size(self, value):
+        self.raw_size.data = util.logit((value - self.min_size) / (self.max_size - self.min_size))
+
+    @property
+    def color(self):
+        return self.raw_color.sigmoid()
+
+    @color.setter
+    def color(self, value):
+        self.raw_color.data = util.logit(value)
+
+    def __repr__(self):
+        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist():.1f})"
 
 
 def get_cube_mesh(position, size):

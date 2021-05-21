@@ -14,9 +14,6 @@ import os
 def init(run_args, device):
     memory = None
     if run_args.model_type == "scene_understanding":
-
-        print("color status, in util: ", (run_args.remove_color == 1))
-
         # Generative model
         generative_model = scene_understanding.GenerativeModel(
             num_grid_rows=run_args.num_grid_rows,
@@ -73,11 +70,8 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
 
 
 def load_checkpoint(path, device, num_tries=3):
-    print("current path: ", path)
-    print("path exists: ", os.path.exists(path))
     for i in range(num_tries):
         try:
-            print("load: ", torch.load(path, map_location=device))
             checkpoint = torch.load(path, map_location=device)
             break
         except Exception as e:
