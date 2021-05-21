@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -250,10 +251,10 @@ class GenerativeModel(nn.Module):
 
         # Log p(x | z)
         # -- Create x_1 and x_2
-        x_1 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
             None, :, None
         ].expand(1, timeseries_data.num_timesteps, 1)
-        x_2 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
             None, None, :
         ].expand(1, 1, timeseries_data.num_timesteps)
 
@@ -318,6 +319,7 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).log_prob(obs_expanded)
         except Exception as e:
+            import pdb; pdb.set_trace()
             raise RuntimeError(f"MVN log prob error: {e}")
 
         # -- Mask out zero log probs
@@ -415,10 +417,10 @@ class GenerativeModel(nn.Module):
         num_elements = cmws.util.get_num_elements(shape)
 
         # Create x_1 and x_2
-        x_1 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_1 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
             None, :, None
         ].expand(1, timeseries_data.num_timesteps, 1)
-        x_2 = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)[
+        x_2 = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)[
             None, None, :
         ].expand(1, 1, timeseries_data.num_timesteps)
 
@@ -492,7 +494,7 @@ class GenerativeModel(nn.Module):
         num_elements = cmws.util.get_num_elements(shape)
 
         # Create x_1 and x_2
-        x_old = torch.linspace(-2, 2, steps=timeseries_data.num_timesteps, device=self.device)
+        x_old = torch.linspace(0, 1, steps=timeseries_data.num_timesteps, device=self.device)
         x_new = x_old + (x_old[-1] - x_old[0]) + (x_old[1] - x_old[0])
         x = torch.cat([x_old, x_new])
         joint_num_timesteps = len(x)
@@ -560,8 +562,14 @@ class Guide(nn.Module):
         self.lstm_hidden_dim = lstm_hidden_dim
 
         # Obs embedder
-        self.obs_embedder = nn.LSTM(1, self.lstm_hidden_dim)
+        # self.obs_embedder = nn.LSTM(1, self.lstm_hidden_dim)
         self.obs_embedding_dim = self.lstm_hidden_dim
+        self.obs_embedder = nn.Sequential(
+            nn.Conv1d(1,self.obs_embedding_dim,2,2), 
+            *[x for _ in range(int(math.log(timeseries_data.num_timesteps, 2))-1)
+                for x in [
+                    nn.ReLU(),
+                    nn.Conv1d(self.obs_embedding_dim,self.obs_embedding_dim,2,2) ]])
 
         # Expression embedder
         self.expression_embedder = nn.LSTM(timeseries_util.vocabulary_size, self.lstm_hidden_dim)
@@ -602,9 +610,10 @@ class Guide(nn.Module):
         num_timesteps = obs.shape[-1]
 
         # Flatten
-        obs_flattened = obs.reshape(-1, num_timesteps)
+        # obs_flattened = obs.reshape(-1, num_timesteps)
 
-        _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
+        # _, (h, c) = self.obs_embedder(obs_flattened.T.view(num_timesteps, -1, 1))
+        h = self.obs_embedder(obs.reshape(-1, 1, num_timesteps))
         return h.view([*shape, self.obs_embedding_dim])
 
     def get_expression_embedding(self, raw_expression, eos):

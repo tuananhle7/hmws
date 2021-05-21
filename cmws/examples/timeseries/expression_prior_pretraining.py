@@ -58,22 +58,6 @@ def pretrain_expression_prior(generative_model, guide, batch_size, num_iteration
         loss.backward()
         optimizer.step()
 
-def pretrain_recognition_model(guide, batch_size, num_iterations):
-    cmws.util.logging.info("Pretraining the guide")
-    optimizer = torch.optim.Adam(
-        itertools.chain(
-            guide.expression_lstm.parameters(),
-            guide.expression_extractor.parameters(),
-        )
-    )
-    for i in tqdm(range(num_iterations)):
-        obs, obs_id = next(train_data_iterator)
-        x, eos = generate_data(batch_size, generative_model.max_num_chars, generative_model.device)
-        optimizer.zero_grad()
-        loss = -guide.log_prob(x, eos).mean()
-        loss.backward()
-        optimizer.step() 
-
 
 def sample_expression(generative_model, num_samples):
     x, eos = generative_model.expression_dist.sample([num_samples])

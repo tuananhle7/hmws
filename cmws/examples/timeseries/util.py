@@ -15,17 +15,17 @@ import cmws.examples.timeseries.expression_prior_pretraining
 
 include_scale = False
 if include_scale:
-    base_kernel_chars = {"W", "R", "E", "L"}
-    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin"}
-    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5}
+    base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5"}
+    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "1":6, "2":7, "3":8, "4":9, "5":10}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
     gp_params_dim = 8
 else:
-    base_kernel_chars = {"W", "R", "E", "L", "C"}
-    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "C": "const"}
-    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "C":6}
+    base_kernel_chars = {"W", "R", "L", "C", "1", "2", "3", "4", "5"}
+    char_to_long_char = {"W": "WN", "R": "SE", "L": "Lin", "C": "const", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "L":4, "C":5, "1":6, "2":7, "3":8, "4":9, "5":10}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
-    gp_params_dim = 5
+    gp_params_dim = 13
 
 vocabulary_size = len(char_to_num)
 epsilon = 1e-4
@@ -90,19 +90,15 @@ def get_long_expression_with_params(expression, params):
     for char in expression:
         if char in base_kernel_chars:
             param = params[params_idx]
+            if not isinstance(param, list):
+                param = [param]
+
             params_idx += 1
-            if char == "W":
-                long_expression += f"{char_to_long_char[char]}({param:.2f})"
-            elif char == "R":
-                long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
-            elif char == "E":
-                long_expression += (
-                    f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f}, {param[2]:.2f})"
+            if char in ["W", "R", "E", "L", "C", "1", "2", "3", "4", "5"]:
+                long_expression += "{}({})".format(
+                    char_to_long_char[char],
+                    ", ".join(f"{p:.2f}" for p in param) 
                 )
-            elif char == "L":
-                long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
-            elif char == "C":
-                long_expression += f"{char_to_long_char[char]}({param:.2f})"
         elif char == "*":
             long_expression += " × "
         elif char == "+":
@@ -152,7 +148,7 @@ class Kernel(nn.Module):
             raw_params[i, 7] raw_offset (Linear)
     """
 
-    def __init__(self, expression, raw_params):
+    def __init__(self, expression, raw_params, mean_prior_sd=0.1):
         super().__init__()
         self.expression = expression
         self.index = 0
@@ -162,6 +158,7 @@ class Kernel(nn.Module):
         self.params = []
 
         self.value = self.getValue()
+        self.mean_prior_sd = mean_prior_sd
 
     @property
     def device(self):
@@ -242,10 +239,12 @@ class Kernel(nn.Module):
                 lengthscale_sq = F.softplus(raw_param[2])
                 self.params.append([scale_sq.item(), lengthscale_sq.item()])
                 return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
-            elif char == "E":
+            elif char in ["E", "1", "2", "3", "4", "5"]:
+                raise NotImplementedError()
+                period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
                 scale_sq = F.softplus(raw_param[3])*0.1
-                period = torch.sigmoid(raw_param[3])
-                lengthscale_sq = F.softplus(raw_param[4])
+                period = period_limits[0] + torch.sigmoid(raw_param[4])*(period_limits[1]-period_limits[0])
+                lengthscale_sq = F.softplus(raw_param[5])
                 self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
                 return {
                     "op": "ExpSinSq",
@@ -260,29 +259,50 @@ class Kernel(nn.Module):
                 return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
         else:
             if char == "W":
+                self.params.append([])
                 return {"op": "WhiteNoise"}
             elif char == "R":
                 lengthscale_sq = F.softplus(raw_param[0])
                 self.params.append(lengthscale_sq.item())
                 return {"op": "RBF", "lengthscale_sq": lengthscale_sq}
-            elif char == "E":
-                period = torch.sigmoid(raw_param[1])
-                lengthscale_sq = F.softplus(raw_param[2])
+            elif char in ["E", "1", "2", "3", "4", "5"]:
+                if char == "E":
+                    raise NotImplementedError()
+                    # period_limits = (1/128, 1)
+                elif char=="1":
+                    period_limits = (1/32, 1/16)
+                    period_param, lengthscale_param = raw_param[1], raw_param[2]
+                elif char=="2":
+                    period_limits = (1/16, 1/8)
+                    period_param, lengthscale_param = raw_param[3], raw_param[4]
+                elif char=="3":
+                    period_limits = (1/8, 1/4)
+                    period_param, lengthscale_param = raw_param[5], raw_param[6]
+                elif char=="4":
+                    period_limits = (1/4, 1/2)
+                    period_param, lengthscale_param = raw_param[7], raw_param[8]
+                elif char=="5":
+                    period_limits = (1/2, 1)
+                    period_param, lengthscale_param = raw_param[9], raw_param[10]
+                # period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
+                # period = torch.sigmoid(raw_param[1] - 1)
+                period = period_limits[0] + torch.sigmoid(period_param)*(period_limits[1]-period_limits[0])
+                lengthscale_sq = F.softplus(lengthscale_param) * period
                 self.params.append([period.item(), lengthscale_sq.item()])
                 return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
             elif char == "L":
-                offset = raw_param[3] + 1
+                offset = raw_param[11] + 1
                 self.params.append(offset.item())
                 return {"op": "Linear",  "offset": offset}  
             elif char == "C":
-                value = F.softplus(raw_param[4]) * 0.1
-                self.params.append([value.item()])
+                value = F.softplus(raw_param[12]) * 0.5
+                self.params.append(value.item())
                 return {"op": "Constant", "value": value}
 
         raise ParsingError("Cannot parse char: " + str(char))
         
 
-    def forward(self, x_1, x_2, kernel=None):
+    def forward(self, x_1, x_2, kernel=None, top_level=True):
         """
         Args
             x_1 [batch_size, num_timesteps_1, 1]
@@ -295,10 +315,10 @@ class Kernel(nn.Module):
         if kernel["op"] == "+":
             t = self.forward(x_1, x_2, kernel["values"][0])
             for v in kernel["values"][1:]:
-                t = t + self.forward(x_1, x_2, v)
+                t = t + self.forward(x_1, x_2, v, top_level=False)
             result = t
         elif kernel["op"] == "*":
-            t = self.forward(x_1, x_2, kernel["values"][0])
+            t = self.forward(x_1, x_2, kernel["values"][0], top_level=False)
             for v in kernel["values"][1:]:
                 t = t * self.forward(x_1, x_2, v)
             result = t
@@ -331,6 +351,9 @@ class Kernel(nn.Module):
         # Test nan
         if torch.isnan(result).any():
             raise RuntimeError("Covariance nan")
+
+        if top_level:
+            result = result + self.mean_prior_sd**2
 
         return result
 

@@ -53,6 +53,11 @@ def train(model, optimizer, stats, args):
             sleep_pretraining_batch_size = args.sleep_pretraining_batch_size
     else:
         sleep_pretraining_batch_size = args.num_particles * args.batch_size
+
+    sleep_pretraining_optimizer = torch.optim.Adam(
+        [*generative_model.parameters(), *guide.parameters()],
+        lr=args.lr_sleep_pretraining or args.lr
+    )
     for iteration in tqdm(range(
         num_sleep_pretraining_iterations_so_far, args.num_sleep_pretraining_iterations
     )):
@@ -60,7 +65,7 @@ def train(model, optimizer, stats, args):
             raise NotImplementedError
         else:
             # Zero grad
-            optimizer.zero_grad()
+            sleep_pretraining_optimizer.zero_grad()
 
             # Evaluate loss
             loss = losses.get_sleep_loss(
@@ -71,7 +76,7 @@ def train(model, optimizer, stats, args):
             loss.backward()
 
             # Step gradient
-            optimizer.step()
+            sleep_pretraining_optimizer.step()
 
             # Record stats
             stats.sleep_pretraining_losses.append(loss.item())
@@ -153,6 +158,9 @@ def train(model, optimizer, stats, args):
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
             device, args.batch_size, test=True
+        )
+        train_timeseries_dataset = cmws.examples.timeseries.data.TimeseriesDataset(
+            device, test=False, full_data=args.full_training_data
         )
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
         type(generative_model)
@@ -245,8 +253,8 @@ def train(model, optimizer, stats, args):
                     args.num_proposals_mws,
                     insomnia=args.insomnia,
                 ).mean()
-            elif args.algorithm == "cmws_3":
-                loss = losses.get_cmws_3_loss(
+            elif args.algorithm == "cmws_iwae":
+                loss = losses.get_cmws_iwae_loss(
                     generative_model,
                     guide,
                     memory,
@@ -255,12 +263,24 @@ def train(model, optimizer, stats, args):
                     args.num_particles,
                     args.num_proposals_mws
                 ).mean()
+            elif args.algorithm == "cmws_4":
+                loss = losses.get_cmws_4_loss(
+                    generative_model,
+                    guide,
+                    memory,
+                    obs,
+                    obs_id,
+                    args.num_particles,
+                    args.num_proposals_mws,
+                    insomnia=args.insomnia
+                ).mean()
 
             # Compute gradient
             loss.backward()
 
             # Step gradient
             optimizer.step()
+
 
             # Record stats
             stats.losses.append(loss.item())

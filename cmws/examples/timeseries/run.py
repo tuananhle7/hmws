@@ -33,7 +33,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--experiment-name", default="", help=" ")
     parser.add_argument(
-        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3"], help=" ",
+        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3", "cmws_4", "cmws_iwae"], help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=5, type=int, help=" ")
@@ -59,6 +59,7 @@ def get_args_parser():
     parser.add_argument("--sleep-pretraining-batch-size", default=0, type=int, help=" ")
     parser.add_argument("--lr", default=1e-3, type=float, help=" ")
     parser.add_argument("--lr-continuous-latents", default=None, type=float, help=" ")
+    parser.add_argument("--lr-sleep-pretraining", default=None, type=float, help=" ")
     parser.add_argument(
         "--insomnia",
         default=1.0,

@@ -71,7 +71,7 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None, num_particles=10, seed=None):
+def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None, seed=None, num_particles=None, svi=False):
     """
     Args:
         path (str)
@@ -87,20 +87,23 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     # Sample latent
     num_svi_iterations = 0
     if memory is None:
-        # num_particles = 10
+        num_particles = 10
         latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
             num_particles, num_svi_iterations, obs, generative_model, guide
         )
     else:
         assert obs_id is not None
-        # num_particles = 10
-        # latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
-        #     num_svi_iterations, obs, obs_id, generative_model, guide, memory
-        # )
-        latent, log_weight = cmws.examples.timeseries.inference.importance_sample_memory(
-            num_particles, num_svi_iterations, obs, obs_id, generative_model, guide, memory
-        )
-    x, eos, _ = latent
+        if svi:
+            num_particles = num_particles or 10
+            num_svi_iterations = 100
+            latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
+                num_svi_iterations, obs, obs_id, generative_model, guide, memory
+            )
+        else:
+            latent, log_weight = cmws.examples.timeseries.inference.importance_sample_memory(
+                num_particles, obs, obs_id, generative_model, guide, memory
+            )
+    x, eos, raw_gp_params = latent
     num_chars = lstm_util.get_num_timesteps(eos)
 
     # Sort by log weight
@@ -115,7 +118,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     obs_predictions = generative_model.sample_obs_predictions(latent, obs_expanded, [num_samples])
 
     # Plot
-    num_rows = num_particles
+    num_rows = log_weight.shape[0]
     num_cols = num_test_obs
     fig, axss = plt.subplots(
         num_rows,
@@ -129,7 +132,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     for test_obs_id in range(num_test_obs):
         if seed is not None:
             util.set_seed(seed)
-        for particle_id in range(num_particles):
+        for particle_id in range(log_weight.shape[0]):
             # Plot obs
             ax = axss[particle_id, test_obs_id]
             plot_obs(ax, obs[test_obs_id])
@@ -137,11 +140,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
             # Compute sorted particle id
             sorted_particle_id = sorted_indices[test_obs_id, particle_id]
 
-            long_expression = timeseries_util.get_long_expression(
-                timeseries_util.get_expression(
-                    x[sorted_particle_id, test_obs_id][: num_chars[sorted_particle_id, test_obs_id]]
-                )
-            )
+            long_expression = get_full_expression(x[sorted_particle_id, test_obs_id], eos[sorted_particle_id, test_obs_id], raw_gp_params[sorted_particle_id, test_obs_id])
             ax.text(
                 0.05,
                 0.95,
@@ -170,10 +169,61 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
                     alpha=0.5,
                 )
 
-    for particle_id in range(num_particles):
+    for particle_id in range(log_weight.shape[0]):
         axss[particle_id, 0].set_ylabel(f"Particle {particle_id}")
 
     util.save_fig(fig, path)
+
+
+def get_full_expression(raw_expression, eos, raw_gp_params):
+    num_chars = lstm_util.get_num_timesteps(eos)
+    num_base_kernels = get_num_base_kernels(
+        raw_expression, eos
+    )
+    long_expression = timeseries_util.get_long_expression(
+        timeseries_util.get_expression(
+            raw_expression[: num_chars]
+        )
+    )
+    try:
+        kernel = timeseries_util.Kernel(
+            timeseries_util.get_expression(raw_expression[: num_chars]),
+            raw_gp_params[ : num_base_kernels],
+        )
+        return timeseries_util.get_long_expression_with_params(timeseries_util.get_expression(raw_expression[: num_chars]), kernel.params)
+    except timeseries_util.ParsingError as e:
+        print(e)
+        return long_expression
+def get_num_base_kernels(raw_expression, eos):
+    """
+    Args:
+        raw_expression [*shape, max_num_chars]
+        eos [*shape, max_num_chars]
+
+    Returns: [*shape]
+    """
+    # Extract
+    device = raw_expression.device
+    max_num_chars = raw_expression.shape[-1]
+    shape = raw_expression.shape[:-1]
+    num_elements = cmws.util.get_num_elements(shape)
+
+    # Flatten
+    raw_expression_flattened = raw_expression.view(-1, max_num_chars)
+    eos_flattened = eos.view(-1, max_num_chars)
+
+    # Compute num timesteps
+    # [num_elements]
+    num_timesteps_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+    result = []
+    for element_id in range(num_elements):
+        result.append(
+            timeseries_util.count_base_kernels(
+                raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
+            )
+        )
+    return torch.tensor(result, device=device).long().view(shape)
 
 
 def plot_prior_timeseries(path, generative_model, num_samples):
@@ -184,7 +234,7 @@ def plot_prior_timeseries(path, generative_model, num_samples):
         num_samples
     """
     latent, obs = generative_model.sample([num_samples])
-    raw_expression, eos, _ = latent
+    raw_expression, eos, raw_gp_params = latent
     num_chars = lstm_util.get_num_timesteps(eos)
 
     # Plot
@@ -203,6 +253,7 @@ def plot_prior_timeseries(path, generative_model, num_samples):
         # Plot obs
         ax = axss[0, sample_id]
         plot_obs(ax, obs[sample_id])
+        
         long_expression = timeseries_util.get_long_expression(
             timeseries_util.get_expression(raw_expression[sample_id][: num_chars[sample_id]])
         )
@@ -252,9 +303,9 @@ def plot_comparison(path, checkpoint_paths):
 
     # Load
     x = []
-    log_ps = {"cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    kls = {"cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    colors = {"cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    log_ps = {"cmws_iwae":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    kls = {"cmws_iwae":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    colors = {"cmws_iwae":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
             # Load checkpoint
@@ -270,7 +321,7 @@ def plot_comparison(path, checkpoint_paths):
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws_3", "cmws_2", "rws", "cmws"]
+    algorithms = ["cmws_iwae", "cmws_4", "cmws_3", "cmws_2", "rws", "cmws"]
     log_ps_np = dict(
         [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
     )
@@ -376,35 +427,50 @@ def main(args):
                 device, test=False, full_data=run_args.full_training_data
             )
             if run_args.full_training_data:
-                obs["train"], obs_id = train_timeseries_dataset[::5]
+                if data.datafile=="data.p":
+                    obs["train"], obs_id = train_timeseries_dataset[::5]
+                else:
+                    obs["train"], obs_id = train_timeseries_dataset[:25]
             else:
                 obs["train"], obs_id = train_timeseries_dataset[:]
 
             # Plot
             if run_args.model_type == "timeseries":
                 # Plot prior
-                # plot_prior_timeseries(
-                    # f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=100
-                # )
+                plot_prior_timeseries(
+                    f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=25
+                )
                 # Plot predictions
                 if memory is not None:
-                    plot_predictions_timeseries(
-                        f"{save_dir}/predictions/train/memory/{num_iterations}.png",
-                        generative_model,
-                        guide,
-                        obs["train"],
-                        memory,
-                        obs_id,
-                        num_particles=run_args.memory_size,
-                        seed=1
-                    )
+                    if args.long:
+                        num_particles = 200
+                        plot_predictions_timeseries(
+                            f"{save_dir}/predictions/train/memory/{num_iterations}iter_{num_particles}particles.png",
+                            generative_model,
+                            guide,
+                            obs["train"],
+                            memory,
+                            obs_id,
+                            seed=1,
+                            num_particles=num_particles
+                        )
+                    else:
+                        plot_predictions_timeseries(
+                            f"{save_dir}/predictions/train/memory/{num_iterations}.png",
+                            generative_model,
+                            guide,
+                            obs["train"],
+                            memory,
+                            obs_id,
+                            seed=1,
+                            num_particles=10
+                        )
                 # for mode in ["train", "test"]:
                 #     plot_predictions_timeseries(
                 #         f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
                 #         generative_model,
                 #         guide,
                 #         obs[mode],
-                #         num_particles=run_args.num_particles
                 #     )
 
             plotted_something = True
@@ -425,6 +491,7 @@ def get_parser():
 
     parser.add_argument("--experiment-name", type=str, default="", help=" ")
     parser.add_argument("--repeat", action="store_true", help="")
+    parser.add_argument("--long", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
 
     return parser

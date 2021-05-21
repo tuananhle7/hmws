@@ -9,7 +9,11 @@ import torch
 from cmws import util
 import cmws.examples.timeseries.plot
 
-num_timesteps = 256
+# datafile = "data.p"
+# num_timesteps = 256
+
+datafile = "data/data_new.p"
+num_timesteps = 128
 
 
 def standardize(x):
@@ -28,7 +32,7 @@ def load_all_data():
         list of timeseries where each timeseries is a list of floats
     """
     # Init
-    path = str(pathlib.Path(__file__).parent.joinpath("data.p"))
+    path = str(pathlib.Path(__file__).parent.joinpath(datafile))
 
     # Read file
     with open(path, "rb") as f:
@@ -67,12 +71,18 @@ def get_train_test_data():
     """
     data = standardize_data(cut_data(filter_data(load_all_data())))
     custom_data = standardize_data(cut_data(filter_data(load_custom_data())))
-    num_train_data, num_test_data = 200, 200
-    num_non_custom_test_data = num_test_data - len(custom_data)
 
-    step = len(data)//(num_train_data + num_non_custom_test_data)
-    train_data = data[:num_train_data*step:step]
-    test_data = custom_data + data[num_train_data*step:(num_train_data+num_non_custom_test_data)*step:step]
+    if datafile == "data.p":
+        num_train_data, num_test_data = 200, 200
+        num_non_custom_test_data = num_test_data - len(custom_data)
+
+        step = len(data)//(num_train_data + num_non_custom_test_data)
+        train_data = data[:num_train_data*step:step]
+        test_data = custom_data + data[num_train_data*step:(num_train_data+num_non_custom_test_data)*step:step]
+    elif datafile == "data/data_new.p":
+        train_data = data[:10*(len(data)//10)-50]
+        test_data = data[10*(len(data)//10)-50:]
+
     return train_data, test_data
 
 
@@ -96,11 +106,11 @@ class TimeseriesDataset(torch.utils.data.Dataset):
             self.obs = torch.tensor(test_obs, device=self.device).float()
             if not full_data:
                 # self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
-                self.obs = self.obs[::10]
+                self.obs = self.obs[::25]
         else:
             self.obs = torch.tensor(train_obs, device=self.device).float()
             if not full_data:
-                self.obs = self.obs[::10]
+                self.obs = self.obs[::25]
                 #self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
         self.num_data = len(self.obs)
         self.obs_id = torch.arange(self.num_data, device=device)
@@ -116,7 +126,8 @@ def get_timeseries_data_loader(device, batch_size, test=False, full_data=False):
     if test:
         shuffle = False
     else:
-        shuffle = True
+        shuffle = datafile!="data/data_new.p"
+        
     return torch.utils.data.DataLoader(
         TimeseriesDataset(device, test=test, full_data=full_data),
         batch_size=batch_size,
