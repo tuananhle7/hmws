@@ -3,13 +3,13 @@ import cmws.examples.scene_understanding.run
 
 
 def get_run_argss():
-    experiment_name = "cmws_vs_rws_learnColor"
+    experiment_name = "cmws_vs_rws_learnColor"#"cmws4_vs_rws_learnColor"
     for seed in range(10):
         for num_grid_rows, num_grid_cols in [[2, 2], [3, 3]]:
 
             if num_grid_rows == 3:
                 num_primitives = 10 # increase primitives
-                if seed >= 5: continue # only run 5 seeds for 3x3 for now
+                #if seed >= 5: continue # only run 5 seeds for 3x3 for now
             else: num_primitives = 5
 
             # CMWS
