@@ -196,9 +196,12 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
 
     # Extracting bad batch id
     def get_bad_batch_id(error_str):
-        end = error_str.find("U(") - 2
-        start = error_str.find("batch ") + len("batch ")
-        return int(error_str[start:end])
+        if num_elements == 1:
+            return 0
+        else:
+            end = error_str.find("U(") - 2
+            start = error_str.find("batch ") + len("batch ")
+            return int(error_str[start:end])
 
     try:
         return torch.distributions.MultivariateNormal(loc, covariance_matrix)

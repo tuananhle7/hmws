@@ -319,7 +319,21 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).log_prob(obs_expanded)
         except Exception as e:
-            import pdb; pdb.set_trace()
+            error_str = str(e)
+            end = error_str.find("U(") - 2
+            start = error_str.find("batch ") + len("batch ")
+            bad_batch_id = int(error_str[start:end])
+            bad_sample_id = bad_batch_id // num_elements
+            bad_element_id = bad_batch_id % num_elements
+            try:
+                covariance_matrix[bad_sample_id, bad_element_id].cholesky()
+            except Exception:
+                bad_kernel = timeseries_util.get_full_expression(
+                    raw_expression_flattened[bad_sample_id, bad_element_id],
+                    eos_flattened[bad_sample_id, bad_element_id],
+                    raw_gp_params_flattened[bad_sample_id, bad_element_id],
+                )
+                cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
             raise RuntimeError(f"MVN log prob error: {e}")
 
         # -- Mask out zero log probs
@@ -468,6 +482,19 @@ class GenerativeModel(nn.Module):
                 loc, covariance_matrix=covariance_matrix
             ).sample(sample_shape)
         except Exception as e:
+            error_str = str(e)
+            end = error_str.find("U(") - 2
+            start = error_str.find("batch ") + len("batch ")
+            bad_element_id = int(error_str[start:end])
+            try:
+                covariance_matrix[bad_element_id].cholesky()
+            except Exception:
+                bad_kernel = timeseries_util.get_full_expression(
+                    raw_expression_flattened[bad_element_id],
+                    eos_flattened[bad_element_id],
+                    raw_gp_params_flattened[bad_element_id],
+                )
+                cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
             raise RuntimeError(f"MVN sample error: {e}")
             
 
@@ -487,6 +514,22 @@ class GenerativeModel(nn.Module):
 
         Returns
             obs_predictions [*sample_shape, *shape, num_timesteps]
+        """
+        return self.get_predictive_dist(latent, obs).sample(sample_shape)
+
+    @torch.no_grad()
+    def get_predictive_dist(self, latent, obs):
+        """p(x' | z, x)
+
+        Args
+            latent:
+                raw_expression [*shape, max_num_chars]
+                eos [*shape, max_num_chars]
+                raw_gp_params [*shape, max_num_chars, gp_params_dim]
+            obs [*shape, num_timesteps]
+
+        Returns
+            distribution of batch_shape [*shape] and event_shape [num_timesteps]
         """
         # Extract
         raw_expression, eos, raw_gp_params = latent
@@ -540,17 +583,10 @@ class GenerativeModel(nn.Module):
         loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)
 
         # Sample obs
-        try:
-            joint_dist = cmws.util.get_multivariate_normal_dist(
-                loc, covariance_matrix=covariance_matrix
-            )
-            predictive_dist = cmws.util.condition_mvn(joint_dist, obs)
-            obs_predictions = predictive_dist.sample(sample_shape)
-        except Exception as e:
-            raise RuntimeError(f"MVN sample predictions error: {e}")
-
-        return obs_predictions
-
+        joint_dist = cmws.util.get_multivariate_normal_dist(
+            loc, covariance_matrix=covariance_matrix
+        )
+        return cmws.util.condition_mvn(joint_dist, obs)
 
 class Guide(nn.Module):
     """

@@ -8,22 +8,19 @@ from cmws.examples.scene_understanding import data
 import cmws
 import torch
 from cmws.examples.scene_understanding.models import scene_understanding
-import os
+
 
 # Init, saving, etc
 def init(run_args, device):
     memory = None
     if run_args.model_type == "scene_understanding":
-
-        print("color status, in util: ", (run_args.remove_color == 1))
-
         # Generative model
         generative_model = scene_understanding.GenerativeModel(
             num_grid_rows=run_args.num_grid_rows,
             num_grid_cols=run_args.num_grid_cols,
             num_primitives=run_args.num_primitives,
             max_num_blocks=run_args.max_num_blocks,
-            remove_color=(run_args.remove_color == 1) # map from int to bool
+            #remove_color=(run_args.remove_color == 1) # map from int to bool
         ).to(device)
 
         # Guide
@@ -37,7 +34,7 @@ def init(run_args, device):
         # Memory
         if "mws" in run_args.algorithm:
             memory = cmws.memory.Memory(
-                len(data.SceneUnderstandingDataset(device, test=False,remove_color=(run_args.remove_color == 1))),
+                len(data.SceneUnderstandingDataset(device, test=False,)),
                 run_args.memory_size,
                 generative_model,
             ).to(device)
@@ -73,11 +70,8 @@ def save_checkpoint(path, model, optimizer, stats, run_args=None):
 
 
 def load_checkpoint(path, device, num_tries=3):
-    print("current path: ", path)
-    print("path exists: ", os.path.exists(path))
     for i in range(num_tries):
         try:
-            print("load: ", torch.load(path, map_location=device))
             checkpoint = torch.load(path, map_location=device)
             break
         except Exception as e:

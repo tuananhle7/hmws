@@ -116,6 +116,11 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
 
     # -- Sample predictions
     obs_predictions = generative_model.sample_obs_predictions(latent, obs_expanded, [num_samples])
+    predictive_dist = generative_model.get_predictive_dist(latent, obs_expanded)
+    predictive_mean = predictive_dist.loc
+    predictive_std = predictive_dist.covariance_matrix.diagonal(dim1=-2, dim2=-1).sqrt()
+    predictive_low = predictive_mean - 2 * predictive_std
+    predictive_high = predictive_mean + 2 * predictive_std
 
     # Plot
     num_rows = log_weight.shape[0]
@@ -140,7 +145,13 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
             # Compute sorted particle id
             sorted_particle_id = sorted_indices[test_obs_id, particle_id]
 
-            long_expression = get_full_expression(x[sorted_particle_id, test_obs_id], eos[sorted_particle_id, test_obs_id], raw_gp_params[sorted_particle_id, test_obs_id])
+
+            long_expression = timeseries_util.get_full_expression(
+                x[sorted_particle_id, test_obs_id],
+                eos[sorted_particle_id, test_obs_id],
+                raw_gp_params[sorted_particle_id, test_obs_id],
+            )
+            
             ax.text(
                 0.05,
                 0.95,
@@ -166,7 +177,20 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
                     torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
                     obs_predictions[sample_id, sorted_particle_id, test_obs_id].cpu().detach(),
                     color="C1",
-                    alpha=0.5,
+                    alpha=0.3,
+                )
+                ax.plot(
+                    torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                    predictive_mean[sorted_particle_id, test_obs_id].cpu().detach(),
+                    color="C1",
+                    alpha=1.0,
+                )
+                ax.fill_between(
+                    torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                    predictive_low[sorted_particle_id, test_obs_id].cpu().detach(),
+                    predictive_high[sorted_particle_id, test_obs_id].cpu().detach(),
+                    color="C1",
+                    alpha=0.1,
                 )
 
     for particle_id in range(log_weight.shape[0]):
@@ -419,16 +443,26 @@ def main(args):
             obs = {}
 
             # -- Test
-            test_timeseries_dataset = data.TimeseriesDataset(device, test=True)
+            test_timeseries_dataset = data.TimeseriesDataset(
+                device, test=True, synthetic=run_args.synthetic_data
+            )
             obs["test"], _ = test_timeseries_dataset[:]
 
             # -- Train
             train_timeseries_dataset = data.TimeseriesDataset(
-                device, test=False, full_data=run_args.full_training_data
+                device,
+                test=False,
+                full_data=run_args.full_training_data,
+                synthetic=run_args.synthetic_data,
             )
             if run_args.full_training_data:
                 if data.datafile=="data.p":
-                    obs["train"], obs_id = train_timeseries_dataset[::5]
+                    # obs["train"], obs_id = train_timeseries_dataset[::5]
+                    obs["train"], obs_id = train_timeseries_dataset[
+                        # [62, 188, 269, 510, 711, 1262, 1790]
+                        # [29]
+                        [9, 29, 100, 108, 134, 168, 180, 191]
+                    ]
                 else:
                     obs["train"], obs_id = train_timeseries_dataset[:25]
             else:

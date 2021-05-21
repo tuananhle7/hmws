@@ -1,6 +1,7 @@
-import torch
-import json
 import itertools
+import json
+
+import torch
 
 
 def read_pcfg(pcfg_path, device):

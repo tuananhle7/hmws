@@ -350,3 +350,69 @@ def importance_sample_memory_3(
     latent = discrete_latent[0], discrete_latent[1], _continuous_latent[0]
 
     return latent, log_marginal_joint
+
+
+def importance_sample_memory_3(
+    num_particles,
+    num_svi_iterations,
+    obs,
+    obs_id,
+    generative_model,
+    guide,
+    memory,
+    num_continuous_optim_iterations,
+    continuous_optim_lr,
+):
+    """
+    Args
+        num_particles
+        num_svi_iterations
+        obs [batch_size, num_timesteps]
+        obs_id [batch_size]
+        generative_model
+        guide
+        memory
+
+    Returns
+        latent
+            raw_expression [memory_size, batch_size, max_num_chars]
+            eos [memory_size, batch_size, max_num_chars]
+            raw_gp_params [memory_size, batch_size, max_num_chars, gp_params_dim]
+        log_marginal_joint [memory_size, batch_size]
+    """
+    # Sample discrete latent
+    # [memory_size, batch_size, ...]
+    discrete_latent = memory.select(obs_id)
+
+    # COMPUTE SCORES s_i = log p(d_i, x) for i  {1, ..., (R + M)}
+    # -- c ~ q(c | d, x)
+    # [num_particles, memory_size, batch_size, ...]
+    _continuous_latent = guide.sample_continuous(obs, discrete_latent, [num_particles])
+
+    # OPTIMIZE CONTINUOUS LATENT
+    _continuous_latent = cmws.losses.optimize_continuous(
+        generative_model,
+        obs,
+        discrete_latent,
+        _continuous_latent,
+        num_iterations=num_continuous_optim_iterations,
+        lr=continuous_optim_lr,
+    )
+
+    # -- log q(c | d)
+    # [num_particles, memory_size, batch_size]
+    _log_q_continuous = guide.log_prob_continuous(obs, discrete_latent, _continuous_latent,)
+
+    # -- log p(d, c, x)
+    # [num_particles, memory_size, batch_size]
+    _log_p = generative_model.log_prob_discrete_continuous(discrete_latent, _continuous_latent, obs)
+
+    # [memory_size, batch_size]
+    log_marginal_joint = torch.logsumexp(_log_p - _log_q_continuous, dim=0) - math.log(
+        num_particles
+    )
+
+    # Combine latents
+    latent = discrete_latent[0], discrete_latent[1], _continuous_latent[0]
+
+    return latent, log_marginal_joint

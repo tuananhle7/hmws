@@ -1,14 +1,17 @@
-import cmws.examples.timeseries.pcfg_util as pcfg_util
+import itertools
+import pathlib
+
 import cmws
+import cmws.examples.timeseries.lstm_util as lstm_util
+import cmws.examples.timeseries.pcfg_util as pcfg_util
 import cmws.examples.timeseries.util as timeseries_util
 import torch
-import itertools
 from tqdm import tqdm
-import cmws.examples.timeseries.lstm_util as lstm_util
 
 
 def generate_data(batch_size, max_num_chars, device, verbose=False):
-    pcfg = pcfg_util.read_pcfg("kernel_pcfg.json", device)
+    path = pathlib.Path(__file__).parent.absolute().joinpath("kernel_pcfg.json")
+    pcfg = pcfg_util.read_pcfg(path, device)
 
     x = torch.zeros((batch_size, max_num_chars), device=device).long()
     eos = torch.zeros((batch_size, max_num_chars), device=device).long()

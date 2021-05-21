@@ -153,11 +153,15 @@ def train(model, optimizer, stats, args):
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.timeseries.data.get_timeseries_data_loader(
-                device, args.batch_size, test=False, full_data=args.full_training_data
+                device,
+                args.batch_size,
+                test=False,
+                full_data=args.full_training_data,
+                synthetic=args.synthetic_data,
             )
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
-            device, args.batch_size, test=True
+            device, args.batch_size, test=True, synthetic=args.synthetic_data
         )
         train_timeseries_dataset = cmws.examples.timeseries.data.TimeseriesDataset(
             device, test=False, full_data=args.full_training_data
@@ -165,14 +169,26 @@ def train(model, optimizer, stats, args):
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
         type(generative_model)
     ):
+        print("color status: ", args.remove_color, (args.remove_color == 1))
+
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
-                device, args.num_grid_rows, args.num_grid_cols, args.batch_size, test=False
+                device,
+                args.num_grid_rows,
+                args.num_grid_cols,
+                args.batch_size,
+                test=False,
+                remove_color=(args.remove_color == 1),
             )
         )
         test_data_loader = cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
-            device, args.num_grid_rows, args.num_grid_cols, args.batch_size, test=True
+            device,
+            args.num_grid_rows,
+            args.num_grid_cols,
+            args.batch_size,
+            test=True,
+            remove_color=(args.remove_color == 1),
         )
     else:
         # Generate test data
@@ -253,16 +269,6 @@ def train(model, optimizer, stats, args):
                     args.num_proposals_mws,
                     insomnia=args.insomnia,
                 ).mean()
-            elif args.algorithm == "cmws_iwae":
-                loss = losses.get_cmws_iwae_loss(
-                    generative_model,
-                    guide,
-                    memory,
-                    obs,
-                    obs_id,
-                    args.num_particles,
-                    args.num_proposals_mws
-                ).mean()
             elif args.algorithm == "cmws_4":
                 loss = losses.get_cmws_4_loss(
                     generative_model,
@@ -272,7 +278,7 @@ def train(model, optimizer, stats, args):
                     obs_id,
                     args.num_particles,
                     args.num_proposals_mws,
-                    insomnia=args.insomnia
+                    insomnia=args.insomnia,
                 ).mean()
 
             # Compute gradient
