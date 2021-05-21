@@ -3,8 +3,8 @@ import cmws.examples.scene_understanding.run
 
 
 def get_run_argss():
-    experiment_name = "cmws_vs_rws_learnColor"
-    for seed in range(10):
+    experiment_name = "cmws_vs_rws_noColor"
+    for seed in range(5):
         for num_grid_rows, num_grid_cols in [[2, 2], [3, 3]]:
 
             if num_grid_rows == 3:
@@ -26,6 +26,7 @@ def get_run_argss():
             args.algorithm = "cmws_2"
             args.model_type = "scene_understanding"
             args.continue_training = True
+            args.remove_color=1
             yield args
 
             # RWS
@@ -40,6 +41,7 @@ def get_run_argss():
             args.algorithm = "rws"
             args.model_type = "scene_understanding"
             args.continue_training = True
+            args.remove_color = 1
             yield args
 
 

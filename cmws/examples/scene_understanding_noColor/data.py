@@ -16,41 +16,24 @@ def generate_from_true_generative_model_single(
     num_channels=3,
     im_size=32,
     fixed_num_blocks=False,
-    remove_color = False
 ):
     """Generate a synthetic observation
 
     Returns [num_channels, im_size, im_size]
     """
     assert num_primitives <= 3
-
-    if remove_color:
-        # all primitives = same color
-        primitive_color = [0.0, 0.0, 0.8]
-        primitives = [
-            render.Cube(
-                "A", torch.tensor(primitive_color, device=device), torch.tensor(0.3, device=device)
-            ),
-            render.Cube(
-                "B", torch.tensor(primitive_color, device=device), torch.tensor(0.4, device=device)
-            ),
-            render.Cube(
-                "C", torch.tensor(primitive_color, device=device), torch.tensor(0.5, device=device)
-            ),
-        ][:num_primitives]
-    else:
-        # Define params
-        primitives = [
-            render.Cube(
-                "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.3, device=device)
-            ),
-            render.Cube(
-                "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.4, device=device)
-            ),
-            render.Cube(
-                "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.5, device=device)
-            ),
-        ][:num_primitives]
+    # Define params
+    primitives = [
+        render.Cube(
+            "A", torch.tensor([1.0, 0.0, 0.0], device=device), torch.tensor(0.3, device=device)
+        ),
+        render.Cube(
+            "B", torch.tensor([0.0, 1.0, 0.0], device=device), torch.tensor(0.4, device=device)
+        ),
+        render.Cube(
+            "C", torch.tensor([0.0, 0.0, 1.0], device=device), torch.tensor(0.5, device=device)
+        ),
+    ][:num_primitives]
     # num_primitives = len(primitives)
 
     # Determine which cells have stacks
@@ -87,7 +70,7 @@ def generate_from_true_generative_model_single(
     raw_locations = torch.stack(raw_locations).view(num_grid_rows, num_grid_rows, max_num_blocks)
 
     # Render
-    img = render.render(primitives, num_blocks, stacking_program, raw_locations, im_size,remove_color=remove_color)
+    img = render.render(primitives, num_blocks, stacking_program, raw_locations, im_size,)
     assert len(img.shape) == 3
 
     return img
@@ -102,7 +85,6 @@ def generate_from_true_generative_model(
     num_channels=3,
     im_size=128,
     fixed_num_blocks=False,
-    remove_color=False
 ):
     """Generate a batch of synthetic observations
 
@@ -117,7 +99,6 @@ def generate_from_true_generative_model(
                 num_primitives,
                 im_size=im_size,
                 fixed_num_blocks=fixed_num_blocks,
-                remove_color=remove_color
             )
             for _ in range(batch_size)
         ]
@@ -125,12 +106,12 @@ def generate_from_true_generative_model(
 
 
 @torch.no_grad()
-def generate_obs(num_obs, device, seed=None, remove_color=False):
+def generate_obs(num_obs, device, seed=None):
     if seed is not None:
         # Fix seed
         util.set_seed(seed)
 
-    obs = generate_from_true_generative_model(num_obs, num_primitives=3, device=device, remove_color=remove_color)
+    obs = generate_from_true_generative_model(num_obs, num_primitives=3, device=device)
 
     return obs
 
@@ -155,8 +136,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
     """
 
     def __init__(
-        self, device, num_grid_rows=1, num_grid_cols=1, test=False, force_regenerate=False, seed=1,
-            remove_color=False
+        self, device, num_grid_rows=1, num_grid_cols=1, test=False, force_regenerate=False, seed=1
     ):
         self.device = device
         self.num_grid_rows = num_grid_rows
@@ -164,11 +144,6 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         self.test = test
         self.num_train_data = 100
         self.num_test_data = 100
-        self.remove_color = remove_color
-
-        print("color status: ", remove_color)
-
-
         if self.test:
             self.num_data = self.num_test_data
         else:
@@ -180,11 +155,9 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
             .joinpath(
                 "data",
                 f"{self.num_grid_rows}_{self.num_grid_cols}",
-                "colorless" if self.remove_color else "",
                 "test.pt" if self.test else "train.pt",
             )
         )
-        print("path: ", path)
         if force_regenerate or not path.exists():
             util.logging.info(f"Generating dataset (test = {self.test})...")
 
@@ -201,7 +174,6 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
                 num_grid_cols=num_grid_cols,
                 num_primitives=3,
                 device=device,
-                remove_color=remove_color
             )
             self.obs_id = torch.arange(self.num_data, device=device)
 
@@ -223,15 +195,14 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
 
 
 def get_scene_understanding_data_loader(
-    device, num_grid_rows, num_grid_cols, batch_size, test=False,
-remove_color=False
+    device, num_grid_rows, num_grid_cols, batch_size, test=False
 ):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        SceneUnderstandingDataset(device, num_grid_rows, num_grid_cols, test=test,remove_color=remove_color),
+        SceneUnderstandingDataset(device, num_grid_rows, num_grid_cols, test=test),
         batch_size=batch_size,
         shuffle=shuffle,
     )

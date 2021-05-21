@@ -1,3 +1,4 @@
+from cmws.examples.timeseries.models.timeseries import GenerativeModel
 import pathlib
 import pickle
 import functools
@@ -8,6 +9,7 @@ import numpy as np
 import torch
 from cmws import util
 import cmws.examples.timeseries.plot
+import cmws.examples.timeseries.expression_prior_pretraining
 
 num_timesteps = 256
 
@@ -74,6 +76,14 @@ def get_train_test_data():
     return train_data, test_data
 
 
+def generate_synthetic_data(num_data, max_num_chars, lstm_hidden_dim, device):
+    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim).to(device)
+    cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
+        generative_model, batch_size=50, num_iterations=500
+    )
+    return torch.stack([generative_model.sample()[1] for _ in range(num_data)])
+
+
 class TimeseriesDataset(torch.utils.data.Dataset):
     """Loads or generates a dataset
 
@@ -85,21 +95,60 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         seed (int): only used for generation
     """
 
-    def __init__(self, device, test=False, full_data=False):
+    def __init__(self, device, test=False, full_data=False, synthetic=False):
         self.device = device
         self.test = test
-        train_obs, test_obs = get_train_test_data()
+        self.synthetic = synthetic
+        if self.synthetic:
+            if self.test:
+                self.num_data = 20
+            else:
+                self.num_data = 200
+            path = (
+                pathlib.Path(__file__)
+                .parent.absolute()
+                .joinpath("data", "synthetic", "test.pt" if self.test else "train.pt")
+            )
+            if not path.exists():
+                util.logging.info(f"Generating dataset (test = {self.test})...")
 
-        if self.test:
-            self.obs = torch.tensor(test_obs, device=self.device).float()
-            if not full_data:
-                self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
+                # Make path
+                pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+                # Set seed
+                util.set_seed(0)
+
+                self.obs = generate_synthetic_data(self.num_data, 20, 128, device)
+                self.obs_id = torch.arange(self.num_data, device=device)
+
+                # Save dataset
+                torch.save([self.obs, self.obs_id], path)
+                util.logging.info(f"Dataset (test = {self.test}) generated and saved to {path}")
+            else:
+                util.logging.info(f"Loading dataset (test = {self.test})...")
+
+                # Load dataset
+                self.obs, self.obs_id = torch.load(path, map_location=device)
+                util.logging.info(f"Dataset (test = {self.test}) loaded {path}")
         else:
-            self.obs = torch.tensor(train_obs, device=self.device).float()
-            if not full_data:
-                self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
-        self.num_data = len(self.obs)
-        self.obs_id = torch.arange(self.num_data, device=device)
+            train_obs, test_obs = get_train_test_data()
+
+            # self.obs = torch.tensor(train_obs, device=self.device).float()
+            # if not full_data:
+            #     self.obs = self.obs[[9, 29, 100, 108, 134, 168, 180, 191]]
+
+            if self.test:
+                self.obs = torch.tensor(test_obs, device=self.device).float()
+                if not full_data:
+                    self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
+            else:
+                self.obs = torch.tensor(train_obs, device=self.device).float()
+                if not full_data:
+                    self.obs = self.obs[[9, 29, 100, 108, 134, 168, 180, 191]]
+                    # self.obs = self.obs[[80]]
+                    # self.obs = self.obs[[29]]
+            self.num_data = len(self.obs)
+            self.obs_id = torch.arange(self.num_data, device=device)
 
     def __getitem__(self, idx):
         return self.obs[idx], self.obs_id[idx]
@@ -108,13 +157,13 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_timeseries_data_loader(device, batch_size, test=False, full_data=False):
+def get_timeseries_data_loader(device, batch_size, test=False, full_data=False, synthetic=False):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        TimeseriesDataset(device, test=test, full_data=full_data),
+        TimeseriesDataset(device, test=test, full_data=full_data, synthetic=synthetic),
         batch_size=batch_size,
         shuffle=shuffle,
     )

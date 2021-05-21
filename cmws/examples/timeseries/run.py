@@ -33,7 +33,10 @@ def get_args_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--experiment-name", default="", help=" ")
     parser.add_argument(
-        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws", "cmws_2"], help=" ",
+        "--algorithm",
+        default="rws",
+        choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3", "cmws_4"],
+        help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=5, type=int, help=" ")
@@ -44,9 +47,10 @@ def get_args_parser():
 
     # Data
     parser.add_argument("--full-training-data", action="store_true", help=" ")
+    parser.add_argument("--synthetic-data", action="store_true", help=" ")
 
     # Model
-    parser.add_argument("--max-num-chars", default=20, type=int, help=" ")
+    parser.add_argument("--max-num-chars", default=10, type=int, help=" ")
     parser.add_argument("--lstm-hidden-dim", default=128, type=int, help=" ")
     parser.add_argument(
         "--model-type", default="timeseries", choices=["timeseries",], help=" ",
