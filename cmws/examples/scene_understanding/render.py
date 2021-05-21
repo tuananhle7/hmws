@@ -54,7 +54,7 @@ class Block:
     def __init__(self, name, color, size):
         self.name = name
         self.color = color
-        self.size = size # [width, height, length]
+        self.size = size # [width, length, height]
 
     @property
     def device(self):
@@ -107,7 +107,7 @@ class LearnableBlock(nn.Module):
         else:
             self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)),requires_grad=learn_color) # if False, don't learn color
-        self.raw_size = nn.Parameter(torch.randn((3,)))
+        self.raw_size = nn.Parameter(torch.randn((3,))) #[width, length, height]
         self.min_size = 0.2 # for each dimension
         self.max_size = 1.0
 
@@ -161,6 +161,80 @@ def get_cube_mesh(position, size):
     )
     translation = position.clone()
     translation[-1] += size / 2
+    vertices = centered_vertices * size + translation[None]
+
+    # hardcoded face indices
+    faces = torch.tensor(
+        [
+            1,
+            3,
+            0,
+            4,
+            1,
+            0,
+            0,
+            3,
+            2,
+            2,
+            4,
+            0,
+            1,
+            7,
+            3,
+            5,
+            1,
+            4,
+            5,
+            7,
+            1,
+            3,
+            7,
+            2,
+            6,
+            4,
+            2,
+            2,
+            7,
+            6,
+            6,
+            5,
+            4,
+            7,
+            5,
+            6,
+        ],
+        dtype=torch.int32,
+        device=device,
+    ).view(-1, 3)
+
+    return vertices, faces
+
+def get_block_mesh(position, size):
+    """Computes a rectangular block mesh
+    Adapted from https://github.com/mikedh/trimesh/blob/master/trimesh/creation.py#L566
+
+    Args
+        position [3]
+        size [3] # [width (x), length (z), height (y)]
+
+    Returns
+        vertices [num_vertices, 3]
+        faces [num_faces, 3]
+    """
+    # Extract
+    device = position.device
+
+    # vertices of the cube
+    centered_vertices = (
+        torch.tensor(
+            [0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+            dtype=torch.float,
+            device=device,
+        ).view(-1, 3)
+        - 0.5
+    )
+    translation = position.clone()
+    translation[-1] += size[1] / 2 # adjust based on length (z-dir) (?)
     vertices = centered_vertices * size + translation[None]
 
     # hardcoded face indices
