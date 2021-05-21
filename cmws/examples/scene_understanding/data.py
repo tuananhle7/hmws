@@ -122,12 +122,12 @@ def generate_from_true_generative_model_single(
                 render.Block(
                     "D",
                     torch.tensor([1.0, 0.0, 0.0], device=device),
-                    torch.tensor([0.3, 0.3, 0.5], device=device),
+                    torch.tensor([0.5, 0.3, 0.3], device=device),
                 ),
                 render.Block(
                     "E",
                     torch.tensor([1.0, 0.0, 0.0], device=device),
-                    torch.tensor([0.3, 0.3, 0.5], device=device),
+                    torch.tensor([0.3, 0.5, 0.3], device=device),
                 ),
                 render.Block(
                     "F",
