@@ -18,7 +18,7 @@ class GenerativeModel(nn.Module):
         obs_scale=1.0,
         obs_dist_type="normal",
         remove_color=False,
-        mode=mode
+        mode="cube"
     ):
         super().__init__()
 
