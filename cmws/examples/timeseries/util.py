@@ -31,7 +31,7 @@ def init_symbols(include_symbols):
         char_to_num = {k:i for i,k in enumerate(["+", "*", *base_kernel_chars])}
         num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 
-        num_params = {"W":0, "R":1, "C":1, **{k:2 for k in "p12345"}, **{k:1 for k in "xabcdef"}, **{k:1 for k in "l12345"}}
+        num_params = {"W":0, "R":1, "C":1, **{k:2 for k in "p12345"}, **{k:1 for k in "xabcdef"}, **{k:1 for k in "l!@#$%"}}
         param_idxs = {}
         gp_params_dim = 0
         for k, v in num_params.items():

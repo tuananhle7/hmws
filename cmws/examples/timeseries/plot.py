@@ -552,16 +552,26 @@ if __name__ == "__main__":
     with torch.no_grad():
         if args.repeat:
             num_iterationss_prev = None
+            n_wait = 0
             while True:
                 plotted_something, num_iterationss = main(args)
                 if plotted_something:
                     if num_iterationss == num_iterationss_prev:
-                        print("Finished plotting. Exiting")
+                        print("Finished plotting.")
+                        if not args.long:
+                            print("Running once more with --long")
+                            args.long = True
+                            main(args)
+                        print("Exiting")
                         break
                     else:
                         num_iterationss_prev = num_iterationss
                 else:
-                    util.logging.info("Didn't plot anything ... waiting 30 seconds")
+                    n_wait += 1
+                    if n_wait >= 60:
+                        util.logging.info("Giving up...")
+                    else:
+                        util.logging.info("Didn't plot anything ... waiting 30 seconds")
                     time.sleep(30)
         else:
             main(args)
