@@ -532,7 +532,7 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
 
 
 def convert_raw_locations(
-    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols
+    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols, mode="cube"
 ):
     """
     Args
@@ -579,9 +579,17 @@ def convert_raw_locations(
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
-        size = primitives[primitive_id].size
 
-        min_x = min_x - size
+        # size hack for primitives
+        if mode == "block":
+            size = primitives[primitive_id].size # [width (x), length (z), height (y)]
+            x_size = size[0]
+            y_size = size[-1]
+        else:
+            x_size = primitives[primitive_id].size # same scalar
+            y_size = primitives[primitive_id].size
+
+        min_x = min_x - x_size
 
         new_min = min_x + (1 - shrink_factor) * (max_x - min_x) / 2
         new_max = max_x - (1 - shrink_factor) * (max_x - min_x) / 2
@@ -589,9 +597,9 @@ def convert_raw_locations(
 
         locations.append(torch.stack([x, y, z]))
 
-        y = y + size
+        y = y + y_size
         min_x = x
-        max_x = min_x + size
+        max_x = min_x + x_size
     return torch.stack(locations)
 
 
@@ -667,9 +675,6 @@ def render(
     square_size = torch.stack([primitive.size for primitive in primitives])
     # [num_primitives, 3]
     square_color = torch.stack([primitive.color for primitive in primitives])
-
-    print("raw_locations: ", raw_locations.shape)
-    print("stacking_program: ", stacking_program.shape)
 
     # Convert [*shape, max_num_blocks, 3]
     locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
