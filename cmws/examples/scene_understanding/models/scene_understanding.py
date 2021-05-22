@@ -180,6 +180,8 @@ class GenerativeModel(nn.Module):
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
 
+        print("raw locations OBS: ", raw_locations.shape)
+
         # Add blocks
         num_blocks_clone = num_blocks.clone().detach()
         zero_blocks = num_blocks_clone.sum([-1, -2]) == 0

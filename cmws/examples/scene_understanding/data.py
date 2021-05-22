@@ -172,7 +172,7 @@ def generate_from_true_generative_model_single(
 
     # Render
     img = render.render(
-        primitives, num_blocks, stacking_program, raw_locations, im_size, remove_color=remove_color
+        primitives, num_blocks, stacking_program, raw_locations, im_size, remove_color=remove_color, mode=mode
     )
     assert len(img.shape) == 3
 
@@ -297,6 +297,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
                 num_primitives=3,
                 device=device,
                 remove_color=remove_color,
+                mode=mode
             )
             self.obs_id = torch.arange(self.num_data, device=device)
 
@@ -343,12 +344,12 @@ def plot_data():
 
         # Train
         timeseries_dataset["train"] = SceneUnderstandingDataset(
-            device, num_grid_rows, num_grid_cols
+            device, num_grid_rows, num_grid_cols, remove_color=remove_color, mode=mode
         )
 
         # Test
         timeseries_dataset["test"] = SceneUnderstandingDataset(
-            device, num_grid_rows, num_grid_cols, test=True
+            device, num_grid_rows, num_grid_cols, test=True, remove_color=remove_color, mode=mode
         )
 
         for mode in ["test", "train"]:

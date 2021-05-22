@@ -103,7 +103,7 @@ class LearnableBlock(nn.Module):
     def __init__(self, name=None, learn_color=True):
         super().__init__()
         if name is None:
-            self.name = "LearnableCube"
+            self.name = "LearnableBlock"
         else:
             self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)),requires_grad=learn_color) # if False, don't learn color
@@ -667,6 +667,9 @@ def render(
     square_size = torch.stack([primitive.size for primitive in primitives])
     # [num_primitives, 3]
     square_color = torch.stack([primitive.color for primitive in primitives])
+
+    print("raw_locations: ", raw_locations.shape)
+    print("stacking_program: ", stacking_program.shape)
 
     # Convert [*shape, max_num_blocks, 3]
     locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)

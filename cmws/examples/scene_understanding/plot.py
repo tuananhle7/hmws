@@ -135,7 +135,7 @@ def get_analysis_plots(experiment_name, grid_sizes=[2, 3], cmws_version="cmws_2"
             if os.path.exists(checkpoint_path):
                 # Load checkpoint
                 try:
-                    model, optimizer, stats, run_args = scene3d_util.load_checkpoint(
+                    model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
                         checkpoint_path, device="cpu"
                     )
                 except:
