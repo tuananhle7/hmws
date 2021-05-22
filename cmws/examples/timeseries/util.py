@@ -21,11 +21,11 @@ if include_scale:
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
     gp_params_dim = 8
 else:
-    base_kernel_chars = {"W", "R", "L", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
-    char_to_long_char = {"W": "WN", "R": "SE", "L": "Lin", "C": "const", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5"}
-    char_to_num = {"+":0, "*":1, "W":2, "R":3, "L":4, "C":5, "1":6, "2":7, "3":8, "4":9, "5":10, "a":11, "b":12, "c":13, "d":14, "e":15}
+    base_kernel_chars = {"W", "R", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e", "!", "@", "#", "$", "%"}
+    char_to_long_char = {"W": "WN", "R": "SE", "C": "const", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "!":"Lin1", "@":"Lin2", "#":"Lin3", "$":"Lin4", "%":"Lin5"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "C":4, "1":5, "2":6, "3":7, "4":8, "5":9, "a":10, "b":11, "c":12, "d":13, "e":14, "!":15, "@":16, "#":17, "$":18, "%":19}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
-    gp_params_dim = 18
+    gp_params_dim = 22
 
 vocabulary_size = len(char_to_num)
 epsilon = 1e-4
@@ -94,7 +94,7 @@ def get_long_expression_with_params(expression, params):
                 param = [param]
 
             params_idx += 1
-            if char in ["W", "R", "E", "L", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"]:
+            if char in ["W", "R", "E", "L", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e", "!", "@", "#", "$", "%"]:
                 long_expression += "{}({})".format(
                     char_to_long_char[char],
                     ", ".join(f"{p:.2f}" for p in param) 
@@ -257,6 +257,7 @@ class Kernel(nn.Module):
                 offset = raw_param[7] + 1
                 self.params.append([scale_sq.item(), offset.item()])
                 return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
+            raise NotImplementedError
         else:
             if char == "W":
                 self.params.append([])
@@ -311,12 +312,31 @@ class Kernel(nn.Module):
                 period = period_limits[0] + torch.sigmoid(period_param)*(period_limits[1]-period_limits[0])
                 self.params.append([period.item()])
                 return {"op": "Cosine", "period": period}
-            elif char == "L":
-                offset = raw_param[16] + 0.5
+            # elif char == "L":
+            #     offset = raw_param[16] + 0.5
+            #     self.params.append(offset.item())
+            #     return {"op": "Linear",  "offset": offset}  
+            elif char in ["!", "@", "#", "$", "%"]:
+                if char=="!":
+                    offset_limits = (-1.5, -0.5)
+                    offset_param = raw_param[16]
+                elif char=="@":
+                    offset_limits = (-0.5, 0.25)
+                    offset_param = raw_param[17]
+                elif char=="#":
+                    offset_limits = (0.25, 0.75)
+                    offset_param = raw_param[18]
+                elif char=="$":
+                    offset_limits = (0.75, 1.5)
+                    offset_param = raw_param[19]
+                elif char=="%":
+                    offset_limits = (1.5, 2.5)
+                    offset_param = raw_param[20] 
+                offset = offset_limits[0] + torch.sigmoid(offset_param)*(offset_limits[1]-offset_limits[0])
                 self.params.append(offset.item())
                 return {"op": "Linear",  "offset": offset}  
             elif char == "C":
-                value = F.softplus(raw_param[17])
+                value = F.softplus(raw_param[21])
                 self.params.append(value.item())
                 return {"op": "Constant", "value": value}
 
