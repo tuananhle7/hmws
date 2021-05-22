@@ -18,7 +18,9 @@ for num_particles in 10 20; do
 			    --max-num-chars=7
 			    --lr=0.001
 			    --lr-continuous-latents=$lr_continuous_latents
-			    --lr-sleep-pretraining=0.01"
+			    --lr-sleep-pretraining=0.01
+				--include-symbols=$include_symbols
+				"
 			echo $cmd
 			eval $cmd
 		done
