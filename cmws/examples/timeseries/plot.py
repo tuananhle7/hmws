@@ -13,7 +13,7 @@ from cmws.examples.timeseries import data, run
 from cmws.examples.timeseries import util as timeseries_util
 from cmws.examples.timeseries import lstm_util
 import cmws.examples.timeseries.inference
-
+import pathlib
 
 def plot_obs(ax, obs):
     """
@@ -417,6 +417,7 @@ def main(args):
 
     # Plot for all checkpoints
     plotted_something = False
+    num_iterationss = ()
     for checkpoint_path in checkpoint_paths:
         # Fix seed
         util.set_seed(1)
@@ -432,6 +433,7 @@ def main(args):
                 model["memory"],
             )
             num_iterations = len(stats.losses)
+            num_iterationss = tuple([*num_iterationss, num_iterations])
             save_dir = util.get_save_dir(run_args.experiment_name, run.get_config_name(run_args))
 
             # Plot stats
@@ -477,28 +479,36 @@ def main(args):
                 if memory is not None:
                     if args.long:
                         num_particles = 200
-                        plot_predictions_timeseries(
-                            f"{save_dir}/predictions/train/memory/{num_iterations}iter_{num_particles}particles.png",
-                            generative_model,
-                            guide,
-                            obs["train"],
-                            memory,
-                            obs_id,
-                            seed=1,
-                            num_particles=num_particles
-                        )
+                        filename = f"{save_dir}/predictions/train/memory/{num_iterations}iter_{num_particles}particles.png"
+                        if pathlib.Path(filename).is_file():
+                            print(f"{filename} already exists. Skipping")
+                        else:
+                            plot_predictions_timeseries(
+                                filename,
+                                generative_model,
+                                guide,
+                                obs["train"],
+                                memory,
+                                obs_id,
+                                seed=1,
+                                num_particles=num_particles
+                            )
                     else:
                         num_particles = run_args.num_particles
-                        plot_predictions_timeseries(
-                            f"{save_dir}/predictions/train/memory/{num_iterations}_{num_particles}particles.png",
-                            generative_model,
-                            guide,
-                            obs["train"],
-                            memory,
-                            obs_id,
-                            seed=1,
-                            num_particles=num_particles,
-                        )
+                        filename = f"{save_dir}/predictions/train/memory/{num_iterations}_{num_particles}particles.png"
+                        if pathlib.Path(filename).is_file():
+                            print(f"{filename} already exists. Skipping")
+                        else:
+                            plot_predictions_timeseries(
+                                filename,
+                                generative_model,
+                                guide,
+                                obs["train"],
+                                memory,
+                                obs_id,
+                                seed=1,
+                                num_particles=num_particles,
+                            )
                 # for mode in ["train", "test"]:
                 #     plot_predictions_timeseries(
                 #         f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
@@ -515,7 +525,7 @@ def main(args):
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
     )
-    return plotted_something
+    return plotted_something, num_iterationss
 
 
 def get_parser():
@@ -537,10 +547,18 @@ if __name__ == "__main__":
 
     with torch.no_grad():
         if args.repeat:
+            num_iterationss_prev = None
             while True:
-                plotted_something = main(args)
-                if not plotted_something:
+                plotted_something, num_iterationss = main(args)
+                if plotted_something:
+                    if num_iterationss == num_iterationss_prev:
+                        print("Finished plotting. Exiting")
+                        break
+                    else:
+                        num_iterationss_prev = num_iterationss
+                else:
                     util.logging.info("Didn't plot anything ... waiting 30 seconds")
                     time.sleep(30)
         else:
             main(args)
+
