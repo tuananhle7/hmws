@@ -11,6 +11,8 @@ def main(args):
     # Seed
     util.set_seed(args.seed)
 
+    print("mode: ", args.mode)
+
     # Initialize models, optimizer, stats, data
     checkpoint_path = util.get_checkpoint_path(args.experiment_name, get_config_name(args))
     if not (args.continue_training and Path(checkpoint_path).exists()):
@@ -43,6 +45,10 @@ def get_args_parser():
     parser.add_argument("--memory-size", default=10, type=int, help=" ")
     parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
     parser.add_argument("--test-num-particles", default=10, type=int, help=" ")
+    parser.add_argument(
+        "--mode", default="cube", choices=["block", "cube"],
+        help="which primitives populate scene",
+    )
 
     # Model
     parser.add_argument("--num-primitives", default=5, type=int, help=" ")

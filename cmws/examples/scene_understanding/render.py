@@ -103,7 +103,7 @@ class LearnableBlock(nn.Module):
     def __init__(self, name=None, learn_color=True):
         super().__init__()
         if name is None:
-            self.name = "LearnableCube"
+            self.name = "LearnableBlock"
         else:
             self.name = name
         self.raw_color = nn.Parameter(torch.randn((3,)),requires_grad=learn_color) # if False, don't learn color
@@ -387,7 +387,7 @@ def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, devic
     return verts, faces
 
 
-def render_cube(size, color, position, im_size=32, remove_color=False):
+def render_block(size, color, position, im_size=32, remove_color=False,mode="cube"):
     """Renders a cube given cube specs
 
     Args
@@ -395,20 +395,24 @@ def render_cube(size, color, position, im_size=32, remove_color=False):
         color [3]
         position [3]
         im_size (int)
+        remove_color (= True -- all blocks are same color)
+        mode = type of primitive (e.g., cube, block, etc)
 
     Returns rgb image [im_size, im_size, 3]
     """
     num_cubes = torch.IntTensor([1])
-    imgs = render_cubes(num_cubes[None], size[None,None,None], color[None,None,None], position[None,None,None], im_size, remove_color=remove_color)
+    imgs = render_blocks(num_cubes[None], size[None,None,None], color[None,None,None], position[None,None,None], im_size,
+                         remove_color=remove_color,mode=mode)
     return imgs[0]
 
 
-def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6, remove_color=False):
-    """Renders cubes given cube specs
+def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6, remove_color=False,
+                 mode="cube"):
+    """Renders blocks given cube specs
 
     Args
         num_cubes [batch_size, num_cells]
-        sizes [batch_size, num_cells, max_num_cubes]
+        sizes [batch_size, num_cells, max_num_cubes] (if mode == block, extra dim of size 3)
         colors [batch_size, num_cells, max_num_cubes, 3]
         positions [batch_size, num_cells, max_num_cubes, 3]
         im_size (int)
@@ -475,15 +479,16 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             if n_cubes == 0: continue # empty cell
             for i, (position, size,color) in enumerate(zip(positions[batch_idx, cell_idx, :n_cubes, :], sizes[batch_idx, cell_idx, :n_cubes],
                                                            colors[batch_idx, cell_idx, :n_cubes, :])):
-                cube_vertices, cube_faces = get_cube_mesh(position, size)
+                if mode == "cube": primitive_vertices, primitive_faces = get_cube_mesh(position, size)
+                else: primitive_vertices, primitive_faces = get_block_mesh(position, size)
                 # For now, apply same color to each mesh vertex (v \in V)
-                if remove_color: texture = torch.ones_like(cube_vertices) * torch.tensor([0,0,0.8]).to(device) # soft blue
-                else: texture = torch.ones_like(cube_vertices) * color# [V, 3]
+                if remove_color: texture = torch.ones_like(primitive_vertices) * torch.tensor([0,0,0.8]).to(device) # soft blue
+                else: texture = torch.ones_like(primitive_vertices) * color# [V, 3]
                 # Offset faces (account for diff indexing, b/c treating as one mesh)
-                cube_faces = cube_faces + vert_offset
-                vert_offset += cube_vertices.shape[0]
-                vertices.append(cube_vertices)
-                faces.append(cube_faces)
+                primitive_faces = primitive_faces + vert_offset
+                vert_offset += primitive_vertices.shape[0]
+                vertices.append(primitive_vertices)
+                faces.append(primitive_faces)
                 textures.append(texture)
 
         # Concatenate data into single mesh
@@ -527,7 +532,7 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 
 
 def convert_raw_locations(
-    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols
+    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols, mode="cube"
 ):
     """
     Args
@@ -570,13 +575,21 @@ def convert_raw_locations(
 
     min_x = cell_x_min
     max_x = cell_x_max
-    shrink_factor = 0.4
+    shrink_factor = 0.01#0.4
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
-        size = primitives[primitive_id].size
 
-        min_x = min_x - size
+        # size hack for primitives
+        if mode == "block":
+            size = primitives[primitive_id].size # [width (x), length (z), height (y)]
+            x_size = size[0]
+            y_size = size[-1]
+        else:
+            x_size = primitives[primitive_id].size # same scalar
+            y_size = primitives[primitive_id].size
+
+        min_x = min_x - x_size
 
         new_min = min_x + (1 - shrink_factor) * (max_x - min_x) / 2
         new_max = max_x - (1 - shrink_factor) * (max_x - min_x) / 2
@@ -584,9 +597,9 @@ def convert_raw_locations(
 
         locations.append(torch.stack([x, y, z]))
 
-        y = y + size
+        y = y + y_size
         min_x = x
-        max_x = min_x + size
+        max_x = min_x + x_size
     return torch.stack(locations)
 
 
@@ -633,7 +646,7 @@ def convert_raw_sigma(sigma):
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
-    sigma=1e-10, gamma=1e-6, remove_color=False
+    sigma=1e-10, gamma=1e-6, remove_color=False, mode="cube"
 ):
     """
     Args
@@ -673,8 +686,8 @@ def render(
     stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols, max_num_blocks))
     locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols, max_num_blocks, 3))
 
-    imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
-                        sigma,gamma, remove_color=remove_color)
+    imgs = render_blocks(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
+                        sigma,gamma, remove_color=remove_color, mode=mode)
     imgs = imgs.permute(0, 3, 1, 2)
 
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])
