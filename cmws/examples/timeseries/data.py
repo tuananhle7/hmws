@@ -88,10 +88,10 @@ def get_train_test_data():
     return train_data, test_data
 
 
-def generate_synthetic_data(num_data, max_num_chars, lstm_hidden_dim, device):
+def generate_synthetic_data(num_data, max_num_chars, lstm_hidden_dim, include_symbols, device):
     generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim).to(device)
     cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-        generative_model, batch_size=50, num_iterations=500
+        generative_model, batch_size=50, num_iterations=500, include_symbols=include_symbols
     )
     return torch.stack([generative_model.sample()[1] for _ in range(num_data)])
 

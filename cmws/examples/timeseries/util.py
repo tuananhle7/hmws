@@ -15,17 +15,19 @@ import cmws.examples.timeseries.expression_prior_pretraining
 
 include_scale = False
 if include_scale:
+    raise NotImplementedError()
     base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
     char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5"}
     char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "1":6, "2":7, "3":8, "4":9, "5":10, "a":11, "b":12, "c":13, "d":14, "e":15}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
     gp_params_dim = 8
 else:
-    base_kernel_chars = {"W", "R", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e", "!", "@", "#", "$", "%"}
-    char_to_long_char = {"W": "WN", "R": "SE", "C": "const", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "!":"Lin1", "@":"Lin2", "#":"Lin3", "$":"Lin4", "%":"Lin5"}
-    char_to_num = {"+":0, "*":1, "W":2, "R":3, "C":4, "1":5, "2":6, "3":7, "4":8, "5":9, "a":10, "b":11, "c":12, "d":13, "e":14, "!":15, "@":16, "#":17, "$":18, "%":19}
+    base_kernel_chars = {"W", "R", "C", "p", "1", "2", "3", "4", "5", "x", "a", "b", "c", "d", "e", "l", "!", "@", "#", "$", "%"}
+    char_to_long_char = {"W": "WN", "R": "SE", "C": "const", "p":"Per", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "x":"Cos", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "l":"Lin", "!":"Lin1", "@":"Lin2", "#":"Lin3", "$":"Lin4", "%":"Lin5"}
+
+    char_to_num = {k:i for i,k in enumerate("+*WRCp12345xabcdel12345")}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
-    gp_params_dim = 22
+    gp_params_dim = 26
 
 vocabulary_size = len(char_to_num)
 epsilon = 1e-4
@@ -94,7 +96,7 @@ def get_long_expression_with_params(expression, params):
                 param = [param]
 
             params_idx += 1
-            if char in ["W", "R", "E", "L", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e", "!", "@", "#", "$", "%"]:
+            if char in ["W", "R", "C", "p", "1", "2", "3", "4", "5", "x", "a", "b", "c", "d", "e", "l", "!", "@", "#", "$", "%"]:
                 long_expression += "{}({})".format(
                     char_to_long_char[char],
                     ", ".join(f"{p:.2f}" for p in param) 
@@ -266,47 +268,50 @@ class Kernel(nn.Module):
                 lengthscale_sq = F.softplus(raw_param[0])
                 self.params.append(lengthscale_sq.item())
                 return {"op": "RBF", "lengthscale_sq": lengthscale_sq}
-            elif char in ["E", "1", "2", "3", "4", "5"]:
-                if char == "E":
-                    raise NotImplementedError()
-                    # period_limits = (1/128, 1)
+            elif char in ["p", "1", "2", "3", "4", "5"]:
+                if char == "p":
+                    period_limits = (1/32, 1)
+                    period_param, lengthscale_param = raw_param[1], raw_param[2]
                 elif char=="1":
                     period_limits = (1/32, 1/16)
-                    period_param, lengthscale_param = raw_param[1], raw_param[2]
+                    period_param, lengthscale_param = raw_param[3], raw_param[4]
                 elif char=="2":
                     period_limits = (1/16, 1/8)
-                    period_param, lengthscale_param = raw_param[3], raw_param[4]
+                    period_param, lengthscale_param = raw_param[5], raw_param[6]
                 elif char=="3":
                     period_limits = (1/8, 1/4)
-                    period_param, lengthscale_param = raw_param[5], raw_param[6]
+                    period_param, lengthscale_param = raw_param[7], raw_param[8]
                 elif char=="4":
                     period_limits = (1/4, 1/2)
-                    period_param, lengthscale_param = raw_param[7], raw_param[8]
+                    period_param, lengthscale_param = raw_param[9], raw_param[10]
                 elif char=="5":
                     period_limits = (1/2, 1)
-                    period_param, lengthscale_param = raw_param[9], raw_param[10]
+                    period_param, lengthscale_param = raw_param[11], raw_param[12]
                 # period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
                 # period = torch.sigmoid(raw_param[1] - 1)
                 period = period_limits[0] + torch.sigmoid(period_param)*(period_limits[1]-period_limits[0])
                 lengthscale_sq = F.softplus(lengthscale_param) * period
                 self.params.append([period.item(), lengthscale_sq.item()])
                 return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
-            elif char in ["a", "b", "c", "d", "e"]:
+            elif char in ["x", "a", "b", "c", "d", "e"]:
+                if char=="x":
+                    period_limits = (1/32, 1)
+                    period_params = raw_param[13]
                 if char=="a":
                     period_limits = (1/32, 1/16)
-                    period_param = raw_param[11]
+                    period_param = raw_param[14]
                 elif char=="b":
                     period_limits = (1/16, 1/8)
-                    period_param = raw_param[12]
+                    period_param = raw_param[15]
                 elif char=="c":
                     period_limits = (1/8, 1/4)
-                    period_param = raw_param[13]
+                    period_param = raw_param[16]
                 elif char=="d":
                     period_limits = (1/4, 1/2)
-                    period_param = raw_param[14]
+                    period_param = raw_param[17]
                 elif char=="e":
                     period_limits = (1/2, 1)
-                    period_param = raw_param[15]
+                    period_param = raw_param[18]
                 # period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
                 # period = torch.sigmoid(raw_param[1] - 1)
                 period = period_limits[0] + torch.sigmoid(period_param)*(period_limits[1]-period_limits[0])
@@ -316,27 +321,30 @@ class Kernel(nn.Module):
             #     offset = raw_param[16] + 0.5
             #     self.params.append(offset.item())
             #     return {"op": "Linear",  "offset": offset}  
-            elif char in ["!", "@", "#", "$", "%"]:
+            elif char in ["l", "!", "@", "#", "$", "%"]:
+                if char=="l":
+                    offset_limits = (-1.5, 1.5)
+                    offset_param = raw_param[19] 
                 if char=="!":
                     offset_limits = (-1.5, -0.5)
-                    offset_param = raw_param[16]
+                    offset_param = raw_param[20]
                 elif char=="@":
                     offset_limits = (-0.5, 0.25)
-                    offset_param = raw_param[17]
+                    offset_param = raw_param[21]
                 elif char=="#":
                     offset_limits = (0.25, 0.75)
-                    offset_param = raw_param[18]
+                    offset_param = raw_param[22]
                 elif char=="$":
                     offset_limits = (0.75, 1.5)
-                    offset_param = raw_param[19]
+                    offset_param = raw_param[23]
                 elif char=="%":
                     offset_limits = (1.5, 2.5)
-                    offset_param = raw_param[20] 
+                    offset_param = raw_param[24] 
                 offset = offset_limits[0] + torch.sigmoid(offset_param)*(offset_limits[1]-offset_limits[0])
                 self.params.append(offset.item())
                 return {"op": "Linear",  "offset": offset}  
             elif char == "C":
-                value = F.softplus(raw_param[21])
+                value = F.softplus(raw_param[25])
                 self.params.append(value.item())
                 return {"op": "Constant", "value": value}
 
@@ -421,7 +429,7 @@ def init(run_args, device, fast=False):
         if not fast:
             # Pretrain the prior
             cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-                generative_model, guide, batch_size=10, num_iterations=4000
+                generative_model, guide, batch_size=10, num_iterations=4000, include_symbols=run_args.include_symbols or None
             )
 
         # Memory

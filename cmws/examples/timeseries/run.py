@@ -45,6 +45,7 @@ def get_args_parser():
     parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
     parser.add_argument("--test-num-particles", default=100, type=int, help=" ")
 
+    parser.add_argument('--include-symbols', default="KTPXL+*WRCp12345xabcdel!@#$%", type=str)
     # Data
     parser.add_argument("--full-training-data", action="store_true", help=" ")
     parser.add_argument("--synthetic-data", action="store_true", help=" ")
