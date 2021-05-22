@@ -9,6 +9,7 @@ def read_pcfg(pcfg_path, device, include_symbols=None):
         data = json.load(json_data)
 
     if include_symbols is not None:
+        include_symbols = include_symbols + "+*KT"
         if any([x not in include_symbols for x in data['terminals']]):
             print("Ignoring terminals: ", [x for x in data['terminals'] if x not in include_symbols])
             data['terminals'] = [x for x in data['terminals'] if x in include_symbols]
