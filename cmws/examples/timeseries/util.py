@@ -296,7 +296,7 @@ class Kernel(nn.Module):
             elif char in ["x", "a", "b", "c", "d", "e"]:
                 if char=="x":
                     period_limits = (1/32, 1)
-                    period_params = raw_param[13]
+                    period_param = raw_param[13]
                 if char=="a":
                     period_limits = (1/32, 1/16)
                     period_param = raw_param[14]
