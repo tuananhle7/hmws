@@ -86,7 +86,7 @@ def get_analysis_plots(experiment_name, grid_sizes=[2, 3], cmws_version="cmws_2"
             if os.path.exists(checkpoint_path):
                 # Load checkpoint
                 try:
-                    model, optimizer, stats, run_args = scene3d_util.load_checkpoint(
+                    model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
                         checkpoint_path, device="cpu"
                     )
                 except:
@@ -123,8 +123,6 @@ def get_analysis_plots(experiment_name, grid_sizes=[2, 3], cmws_version="cmws_2"
         for ax in axs:
             sns.despine(ax=ax, trim=True)
         util.save_fig(fig, f"{save_dir}/losses_{grid_size}.png", dpi=200)
-
-    experiment_name = "cmws_vs_rws_noColor2"
 
     for grid_size in grid_sizes:  # grid size
         # Load
@@ -286,7 +284,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     util.save_fig(fig, path, dpi=300)
 
 
-def plot_primitives_scene_understanding(path, generative_model, remove_color=False):
+def plot_primitives_scene_understanding(path, generative_model, remove_color=False, mode="cube"):
     device = generative_model.device
     im_size = generative_model.im_size
     hi_res_im_size = 256
@@ -305,19 +303,21 @@ def plot_primitives_scene_understanding(path, generative_model, remove_color=Fal
 
     for i in range(generative_model.num_primitives):
         util.logging.info(f"Primitive {i} = {generative_model.primitives[i]}")
-        obs = render.render_cube(
+        obs = render.render_block(
             generative_model.primitives[i].size,
             generative_model.primitives[i].color,
             location,
             im_size=im_size,
-            remove_color=remove_color
+            remove_color=remove_color,
+            mode=mode
         )
-        obs_high_res = render.render_cube(
+        obs_high_res = render.render_block(
             generative_model.primitives[i].size,
             generative_model.primitives[i].color,
             location,
             im_size=hi_res_im_size,
-            remove_color=remove_color
+            remove_color=remove_color,
+            mode=mode
         )
         axss[0, i].imshow(obs.cpu())
         axss[1, i].imshow(obs_high_res.cpu())
@@ -363,7 +363,8 @@ def main(args):
             # NOTE: Plotting the train dataset only
             train_dataset = data.SceneUnderstandingDataset(
                 device, run_args.num_grid_rows, run_args.num_grid_cols, test=False,
-                remove_color=(run_args.remove_color == 1)
+                remove_color=(run_args.remove_color == 1),
+                mode=run_args.mode
             )
             obs, _ = train_dataset[:10]
 
@@ -376,7 +377,8 @@ def main(args):
                     obs
                 )
                 plot_primitives_scene_understanding(
-                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (run_args.remove_color == 1)
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (run_args.remove_color == 1),
+                    run_args.mode
                 )
 
         else:

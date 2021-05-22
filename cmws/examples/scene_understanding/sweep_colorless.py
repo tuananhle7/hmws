@@ -3,7 +3,7 @@ import cmws.examples.scene_understanding.run
 
 
 def get_run_argss():
-    experiment_name = "cmws_vs_rws_learnColor_block"#"cmws_vs_rws_learnColor_shrink001"
+    experiment_name = "cmws_vs_rws_noColor_block"#"cmws_vs_rws_noColor_shrink001"
 
     mode = "block"
 
@@ -29,6 +29,7 @@ def get_run_argss():
             args.algorithm = "cmws_2"
             args.model_type = "scene_understanding"
             args.continue_training = True
+            args.remove_color=1
             args.mode = mode
             yield args
 
@@ -46,6 +47,7 @@ def get_run_argss():
             args.algorithm = "cmws_4"
             args.model_type = "scene_understanding"
             args.continue_training = True
+            args.remove_color=1
             args.mode = mode
             yield args
 
@@ -61,6 +63,7 @@ def get_run_argss():
             args.algorithm = "rws"
             args.model_type = "scene_understanding"
             args.continue_training = True
+            args.remove_color = 1
             args.mode = mode
             yield args
 

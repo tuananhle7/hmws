@@ -44,6 +44,12 @@ def get_args_parser():
     parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
     parser.add_argument("--test-num-particles", default=10, type=int, help=" ")
 
+
+    parser.add_argument(
+        "--mode", default="cube", choices=["block", "cube"],
+        help="which primitives populate scene",
+    )
+
     # Model
     parser.add_argument("--num-primitives", default=5, type=int, help=" ")
     parser.add_argument("--num-grid-rows", default=2, type=int, help=" ")

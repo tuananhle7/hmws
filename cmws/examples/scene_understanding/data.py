@@ -187,6 +187,7 @@ def generate_from_true_generative_model(
     device,
     im_size=128,
     remove_color=False,
+    mode="cube"
 ):
     """Generate a batch of synthetic observations
 
@@ -201,6 +202,7 @@ def generate_from_true_generative_model(
                 num_primitives,
                 im_size=im_size,
                 remove_color=remove_color,
+                mode=mode
             )
             for _ in range(batch_size)
         ]
@@ -208,13 +210,13 @@ def generate_from_true_generative_model(
 
 
 @torch.no_grad()
-def generate_obs(num_obs, device, seed=None, remove_color=False):
+def generate_obs(num_obs, device, seed=None, remove_color=False, mode="cube"):
     if seed is not None:
         # Fix seed
         util.set_seed(seed)
 
     obs = generate_from_true_generative_model(
-        num_obs, num_primitives=3, device=device, remove_color=remove_color
+        num_obs, num_primitives=3, device=device, remove_color=remove_color, mode=mode
     )
 
     return obs
@@ -248,6 +250,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         force_regenerate=False,
         seed=1,
         remove_color=False,
+        mode="cube"
     ):
         self.device = device
         self.num_grid_rows = num_grid_rows
@@ -256,6 +259,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         self.num_train_data = 100
         self.num_test_data = 100
         self.remove_color = remove_color
+        self.mode=mode
 
         print("color status: ", remove_color)
 
@@ -270,6 +274,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
             .joinpath(
                 "data",
                 f"{self.num_grid_rows}_{self.num_grid_cols}",
+                mode,
                 "colorless" if self.remove_color else "",
                 "test.pt" if self.test else "train.pt",
             )
@@ -313,7 +318,8 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
 
 
 def get_scene_understanding_data_loader(
-    device, num_grid_rows, num_grid_cols, batch_size, test=False, remove_color=False
+    device, num_grid_rows, num_grid_cols, batch_size, test=False, remove_color=False,
+        mode="cube"
 ):
     if test:
         shuffle = False
@@ -321,7 +327,7 @@ def get_scene_understanding_data_loader(
         shuffle = True
     return torch.utils.data.DataLoader(
         SceneUnderstandingDataset(
-            device, num_grid_rows, num_grid_cols, test=test, remove_color=remove_color
+            device, num_grid_rows, num_grid_cols, test=test, remove_color=remove_color, mode=mode
         ),
         batch_size=batch_size,
         shuffle=shuffle,
