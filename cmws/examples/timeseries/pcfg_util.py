@@ -4,9 +4,24 @@ import json
 import torch
 
 
-def read_pcfg(pcfg_path, device):
+def read_pcfg(pcfg_path, device, include_symbols=None):
     with open(pcfg_path) as json_data:
         data = json.load(json_data)
+
+    if include_symbols is not None:
+        if any([x not in include_symbols for x in data['terminals']]):
+            print("Ignoring terminals: ", [x for x in data['terminals'] if x not in include_symbols])
+            data['terminals'] = [x for x in data['terminals'] if x in include_symbols]
+        if any([x not in include_symbols for x in data['non_terminals']]):
+            print("Ignoring non-terminals: ", [x for x in data['non_terminals'] if x not in include_symbols])
+            data['non_terminals'] = [x for x in data['non_terminals'] if x in include_symbols]
+
+        for k in data['productions']:
+            data['production_probs'][k] = [prob
+                                           for prod, prob in zip(data['productions'][k], data['production_probs'][k])
+                                           if all(x in include_symbols for x in prod)]
+            data['productions'][k] = [prod for prod in data['productions'][k]
+                                      if all(x in include_symbols for x in prod)]
 
     grammar = {
         "terminals": set(data["terminals"]),
@@ -31,7 +46,7 @@ def production_probs_to_tensor(production_probs, device):
     lists.
     """
     return {
-        k: torch.tensor(v, dtype=torch.float, device=device) for k, v in production_probs.items()
+        k: torch.tensor(v, dtype=torch.float, device=device)/sum(v) for k, v in production_probs.items()
     }
 
 

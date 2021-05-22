@@ -472,9 +472,13 @@ def main(args):
             # Plot
             if run_args.model_type == "timeseries":
                 # Plot prior
-                plot_prior_timeseries(
-                    f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=25
-                )
+                filename = f"{save_dir}/prior/{num_iterations}.png"
+                if pathlib.Path(filename).is_file():
+                    print(f"{filename} already exists. Skipping")
+                else:
+                    plot_prior_timeseries(
+                        filename, generative_model, num_samples=25
+                    )
                 # Plot predictions
                 if memory is not None:
                     if args.long:

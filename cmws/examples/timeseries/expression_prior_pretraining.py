@@ -9,10 +9,7 @@ import torch
 from tqdm import tqdm
 
 
-def generate_data(batch_size, max_num_chars, device, verbose=False):
-    path = pathlib.Path(__file__).parent.absolute().joinpath("kernel_pcfg_coarse_ordered.json")
-    pcfg = pcfg_util.read_pcfg(path, device)
-
+def generate_data(batch_size, max_num_chars, pcfg, device, verbose=False):
     x = torch.zeros((batch_size, max_num_chars), device=device).long()
     eos = torch.zeros((batch_size, max_num_chars), device=device).long()
 
@@ -33,7 +30,7 @@ def generate_data(batch_size, max_num_chars, device, verbose=False):
 
 
 @torch.enable_grad()
-def pretrain_expression_prior(generative_model, guide, batch_size, num_iterations):
+def pretrain_expression_prior(generative_model, guide, batch_size, num_iterations, include_symbols):
     cmws.util.logging.info("Pretraining the expression prior")
     optimizer = torch.optim.Adam(
         itertools.chain(
@@ -49,8 +46,10 @@ def pretrain_expression_prior(generative_model, guide, batch_size, num_iteration
         )
     )
 
+    path = pathlib.Path(__file__).parent.absolute().joinpath("kernel_pcfg_coarse_ordered.json")
+    pcfg = pcfg_util.read_pcfg(path, generative_model.device, include_symbols=include_symbols)
     for i in tqdm(range(num_iterations)):
-        x, eos = generate_data(batch_size, generative_model.max_num_chars, generative_model.device, verbose=i==0)
+        x, eos = generate_data(batch_size, generative_model.max_num_chars, pcfg, generative_model.device, verbose=i==0)
         optimizer.zero_grad()
         
         loss = -generative_model.expression_dist.log_prob(x, eos).mean()
