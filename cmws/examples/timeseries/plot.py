@@ -95,7 +95,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
         assert obs_id is not None
         if svi:
             num_particles = num_particles or 10
-            num_svi_iterations = 100
+            num_svi_iterations = None
             latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
                 num_svi_iterations, obs, obs_id, generative_model, guide, memory
             )
@@ -145,8 +145,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
             # Compute sorted particle id
             sorted_particle_id = sorted_indices[test_obs_id, particle_id]
 
-
-            long_expression = timeseries_util.get_full_expression(
+            long_expression = get_full_expression(
                 x[sorted_particle_id, test_obs_id],
                 eos[sorted_particle_id, test_obs_id],
                 raw_gp_params[sorted_particle_id, test_obs_id],
@@ -327,9 +326,9 @@ def plot_comparison(path, checkpoint_paths):
 
     # Load
     x = []
-    log_ps = {"cmws_iwae":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    kls = {"cmws_iwae":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    colors = {"cmws_iwae":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
             # Load checkpoint
@@ -345,7 +344,7 @@ def plot_comparison(path, checkpoint_paths):
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws_iwae", "cmws_4", "cmws_3", "cmws_2", "rws", "cmws"]
+    algorithms = ["cmws_5", "cmws_4", "cmws_3", "cmws_2", "rws", "cmws"]
     log_ps_np = dict(
         [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
     )
@@ -489,15 +488,16 @@ def main(args):
                             num_particles=num_particles
                         )
                     else:
+                        num_particles = run_args.num_particles
                         plot_predictions_timeseries(
-                            f"{save_dir}/predictions/train/memory/{num_iterations}.png",
+                            f"{save_dir}/predictions/train/memory/{num_iterations}_{num_particles}particles.png",
                             generative_model,
                             guide,
                             obs["train"],
                             memory,
                             obs_id,
                             seed=1,
-                            num_particles=10
+                            num_particles=num_particles,
                         )
                 # for mode in ["train", "test"]:
                 #     plot_predictions_timeseries(

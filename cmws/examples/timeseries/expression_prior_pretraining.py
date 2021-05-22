@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 
 def generate_data(batch_size, max_num_chars, device, verbose=False):
-    path = pathlib.Path(__file__).parent.absolute().joinpath("kernel_pcfg.json")
+    path = pathlib.Path(__file__).parent.absolute().joinpath("kernel_pcfg_coarse_ordered.json")
     pcfg = pcfg_util.read_pcfg(path, device)
 
     x = torch.zeros((batch_size, max_num_chars), device=device).long()

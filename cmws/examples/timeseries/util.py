@@ -15,17 +15,17 @@ import cmws.examples.timeseries.expression_prior_pretraining
 
 include_scale = False
 if include_scale:
-    base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5"}
-    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5"}
-    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "1":6, "2":7, "3":8, "4":9, "5":10}
+    base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
+    char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "1":6, "2":7, "3":8, "4":9, "5":10, "a":11, "b":12, "c":13, "d":14, "e":15}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
     gp_params_dim = 8
 else:
-    base_kernel_chars = {"W", "R", "L", "C", "1", "2", "3", "4", "5"}
-    char_to_long_char = {"W": "WN", "R": "SE", "L": "Lin", "C": "const", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5"}
-    char_to_num = {"+":0, "*":1, "W":2, "R":3, "L":4, "C":5, "1":6, "2":7, "3":8, "4":9, "5":10}
+    base_kernel_chars = {"W", "R", "L", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
+    char_to_long_char = {"W": "WN", "R": "SE", "L": "Lin", "C": "const", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5"}
+    char_to_num = {"+":0, "*":1, "W":2, "R":3, "L":4, "C":5, "1":6, "2":7, "3":8, "4":9, "5":10, "a":11, "b":12, "c":13, "d":14, "e":15}
     num_to_char = dict([(v, k) for k, v in char_to_num.items()])
-    gp_params_dim = 13
+    gp_params_dim = 18
 
 vocabulary_size = len(char_to_num)
 epsilon = 1e-4
@@ -94,7 +94,7 @@ def get_long_expression_with_params(expression, params):
                 param = [param]
 
             params_idx += 1
-            if char in ["W", "R", "E", "L", "C", "1", "2", "3", "4", "5"]:
+            if char in ["W", "R", "E", "L", "C", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"]:
                 long_expression += "{}({})".format(
                     char_to_long_char[char],
                     ", ".join(f"{p:.2f}" for p in param) 
@@ -290,12 +290,33 @@ class Kernel(nn.Module):
                 lengthscale_sq = F.softplus(lengthscale_param) * period
                 self.params.append([period.item(), lengthscale_sq.item()])
                 return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
+            elif char in ["a", "b", "c", "d", "e"]:
+                if char=="a":
+                    period_limits = (1/32, 1/16)
+                    period_param = raw_param[11]
+                elif char=="b":
+                    period_limits = (1/16, 1/8)
+                    period_param = raw_param[12]
+                elif char=="c":
+                    period_limits = (1/8, 1/4)
+                    period_param = raw_param[13]
+                elif char=="d":
+                    period_limits = (1/4, 1/2)
+                    period_param = raw_param[14]
+                elif char=="e":
+                    period_limits = (1/2, 1)
+                    period_param = raw_param[15]
+                # period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
+                # period = torch.sigmoid(raw_param[1] - 1)
+                period = period_limits[0] + torch.sigmoid(period_param)*(period_limits[1]-period_limits[0])
+                self.params.append([period.item()])
+                return {"op": "Cosine", "period": period}
             elif char == "L":
-                offset = raw_param[11] + 1
+                offset = raw_param[16] + 0.5
                 self.params.append(offset.item())
                 return {"op": "Linear",  "offset": offset}  
             elif char == "C":
-                value = F.softplus(raw_param[12]) * 0.5
+                value = F.softplus(raw_param[17])
                 self.params.append(value.item())
                 return {"op": "Constant", "value": value}
 
@@ -342,9 +363,14 @@ class Kernel(nn.Module):
             s2 = kernel.get("scale_sq", 1)
             result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp() * s2
             # print(kernel['op'], "t", t, "l2", l2, "s2", s2)
+        elif kernel["op"] == "Cosine":
+            t = kernel["period"]
+            s2 = kernel.get("scale_sq", 1)
+            result = (2 * math.pi * (x_1 - x_2).abs() / t).cos() * s2
+            # print(kernel['op'], "t", t, "l2", l2, "s2", s2)
         elif kernel["op"] == "Constant":
             c = kernel["value"]
-            result = torch.full((x_1-x_2).shape, c, device=x_1.device)
+            result = torch.full((x_1-x_2).shape, c.item(), device=x_1.device)
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
 
@@ -364,18 +390,18 @@ def init(run_args, device, fast=False):
     if run_args.model_type == "timeseries":
         # Generative model
         generative_model = timeseries.GenerativeModel(
-            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
+            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim
         ).to(device)
 
         # Guide
         guide = timeseries.Guide(
-            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
+            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.guide_lstm_hidden_dim
         ).to(device)
 
         if not fast:
             # Pretrain the prior
             cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-                generative_model, guide, batch_size=10, num_iterations=2000
+                generative_model, guide, batch_size=10, num_iterations=4000
             )
 
         # Memory

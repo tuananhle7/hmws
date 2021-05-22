@@ -8,7 +8,7 @@ import torch
 import cmws
 import cmws.examples.timeseries.data as timeseries_data
 import cmws.losses
-
+import numpy as np
 
 def get_elbo_single(discrete_latent, obs, generative_model, guide):
     """E_q(z_c | z_d, x)[log p(z_d, z_c, x) - log q(z_c | z_d, x)]
@@ -40,7 +40,7 @@ def get_elbo_single(discrete_latent, obs, generative_model, guide):
 
 
 @torch.enable_grad()
-def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
+def svi_single(num_particles, num_iterations, obs, discrete_latent, generative_model, guide, verbose=False):
     """
     Args
         num_iterations (int)
@@ -66,24 +66,58 @@ def svi_single(num_iterations, obs, discrete_latent, generative_model, guide):
             guide_copy.gp_params_extractor.parameters(),
             guide_copy.obs_embedder.parameters(),
             guide_copy.expression_embedder.parameters(),
-        )
+        ),
+        lr=0.05
     )
 
     # Optimization loop
-    for iteration in range(num_iterations):
+    l = []
+    discrete_latent_repeat = (discrete_latent[0].repeat(num_particles, 1), discrete_latent[1].repeat(num_particles, 1))
+    obs_repeat = obs.repeat(num_particles, 1)
+
+    iteration = 0
+    while True:
+        print(".", end="", flush=True)
         optimizer.zero_grad()
-        loss = -get_elbo_single(discrete_latent, obs, generative_model, guide_copy)
+        # import pdb; pdb.set_trace()
+        #loss = -get_elbo_single(discrete_latent, obs, generative_model, guide_copy)
+        # loss = -get_elbo_single(discrete_latent_repeat, obs_repeat, generative_model, guide_copy).mean()
+
+
+
+        continuous_latent = guide.rsample_continuous(obs_repeat, discrete_latent_repeat)
+        latent = discrete_latent_repeat[0], discrete_latent_repeat[1], continuous_latent
+        generative_model_log_prob = generative_model.log_prob(latent, obs_repeat)
+        guide_log_prob = guide.log_prob(obs_repeat, latent)
+        losses = generative_model_log_prob - guide_log_prob
+        loss = losses.logsumexp(0) # IAWE 
         loss.backward()
         optimizer.step()
+        l.append(loss.item()) 
+        # if iteration % 10 == 0:
+            # print("{:.0f}".format(np.mean(l[-10:])), end="")
+        iteration += 1
+        if num_iterations is None:
+            if iteration > 100 and np.mean(l[-100:-50]) < np.mean(l[-50:]):
+                break
+            if iteration > 500:
+                break
+        else:
+            if iteration > num_iterations:
+                break
+        
 
     # Sample
-    continuous_latent = guide_copy.sample_continuous(obs, discrete_latent)
-
+    continuous_latent = guide_copy.sample_continuous(obs_repeat, discrete_latent_repeat)
     # Log prob
-    log_prob = guide_copy.log_prob_continuous(obs, discrete_latent, continuous_latent)
+    log_prob = guide_copy.log_prob_continuous(obs_repeat, discrete_latent_repeat, continuous_latent)
 
     return continuous_latent.detach(), log_prob.detach()
 
+def svi_single_par(args):
+    element_id = args[0]
+    print(f"[{element_id}]", end="", flush=True)
+    return svi_single(*args[1:])
 
 def svi(num_iterations, obs, discrete_latent, generative_model, guide):
     """
@@ -113,18 +147,40 @@ def svi(num_iterations, obs, discrete_latent, generative_model, guide):
 
     # Compute in a loop
     continuous_latent, log_prob = [], []
+    # for element_id in range(num_elements):
+    #     obs_e = obs_flattened[element_id]
+    #     discrete_latent_e = (raw_expression_flattened[element_id], eos_flattened[element_id])
+    #     continuous_latent_e, log_prob_e = svi_single(
+    #         num_iterations, obs_e, discrete_latent_e, generative_model, guide
+    #     )
+    #     continuous_latent.append(continuous_latent_e)
+    #     log_prob.append(log_prob_e)
+
+    num_particles = 20
+    svi_single_args = []
     for element_id in range(num_elements):
         obs_e = obs_flattened[element_id]
         discrete_latent_e = (raw_expression_flattened[element_id], eos_flattened[element_id])
-        continuous_latent_e, log_prob_e = svi_single(
-            num_iterations, obs_e, discrete_latent_e, generative_model, guide
-        )
+        svi_single_args.append((
+            element_id, num_particles, num_iterations, obs_e, discrete_latent_e, generative_model, guide
+        ))
+
+    import torch.multiprocessing as mp
+    mp.set_start_method('spawn')
+    pool = mp.Pool(8)
+    print(f"Running SVI individually on {num_elements} elements")
+    svi_single_outputs = pool.map(svi_single_par, svi_single_args)
+    print()
+    print("Complete.")
+
+    for element_id in range(num_elements):
+        continuous_latent_e, log_prob_e = svi_single_outputs[element_id]
         continuous_latent.append(continuous_latent_e)
-        log_prob.append(log_prob_e)
+        log_prob.append(log_prob_e) 
 
     return (
-        torch.stack(continuous_latent).view([*shape, generative_model.max_num_chars, -1]),
-        torch.stack(log_prob).view(shape),
+        torch.stack(continuous_latent).view([*shape, num_particles, generative_model.max_num_chars, -1]),
+        torch.stack(log_prob).view([*shape, num_particles]),
     )
 
 
@@ -220,20 +276,30 @@ def svi_memory(num_svi_iterations, obs, obs_id, generative_model, guide, memory)
     )
 
     # Combine latents
-    latent = discrete_latent[0], discrete_latent[1], continuous_latent
-
+    # latent = discrete_latent[0], discrete_latent[1], continuous_latent
+    latent_expand = (
+        discrete_latent[0][:, :, None, :].repeat(1, 1, 20, 1),
+        discrete_latent[1][:, :, None, :].repeat(1, 1, 20, 1),
+        continuous_latent 
+    )
     # Score p
     # [memory_size, batch_size]
-    generative_model_log_prob = generative_model.log_prob(latent, obs)
+    # generative_model_log_prob = generative_model.log_prob(latent, obs)
+    generative_model_log_prob = generative_model.log_prob(latent_expand, obs[:, None].repeat(1, 20, 1))
 
     # Score q
     # [memory_size, batch_size]
-    guide_log_prob = -math.log(memory_size) + continuous_latent_log_prob
+    # guide_log_prob = -math.log(memory_size) + continuous_latent_log_prob
+    guide_log_prob = -math.log(memory_size) + continuous_latent_log_prob - math.log(20)
+
 
     # Compute weight
     log_weight = generative_model_log_prob - guide_log_prob
 
-    return latent, log_weight
+    continuous_latent_best = continuous_latent.gather(dim=2, index=log_weight.argmax(-1, keepdim=True)[..., None, None].repeat(1, 1, 1, *continuous_latent.shape[3:])).squeeze(2)
+    latent = discrete_latent[0], discrete_latent[1], continuous_latent_best
+
+    return latent, log_weight.logsumexp(2)
 
 
 def importance_sample_memory(

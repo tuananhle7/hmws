@@ -35,7 +35,7 @@ def get_args_parser():
     parser.add_argument(
         "--algorithm",
         default="rws",
-        choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3", "cmws_4"],
+        choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3", "cmws_4", "cmws_5"],
         help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
@@ -51,7 +51,8 @@ def get_args_parser():
 
     # Model
     parser.add_argument("--max-num-chars", default=10, type=int, help=" ")
-    parser.add_argument("--lstm-hidden-dim", default=128, type=int, help=" ")
+    parser.add_argument("--generative-model-lstm-hidden-dim", default=128, type=int, help=" ")
+    parser.add_argument("--guide-lstm-hidden-dim", default=128, type=int, help=" ")
     parser.add_argument(
         "--model-type", default="timeseries", choices=["timeseries",], help=" ",
     )
