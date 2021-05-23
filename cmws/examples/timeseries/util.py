@@ -412,7 +412,8 @@ def init(run_args, device, fast=False):
 
         # Generative model
         generative_model = timeseries.GenerativeModel(
-            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim, learn_eps=run_args.learn_eps
+            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim,
+	    learn_eps=getattr(run_args, 'learn_eps', False)
         ).to(device)
 
         # Guide
@@ -443,16 +444,45 @@ def init(run_args, device, fast=False):
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
-    continuous_latent_parameters = list(guide.gp_params_extractor.parameters())
-    other_parameters = [
+    
+    if hasattr(run_args, "lr_guide_continuous"): 
+        guide_continuous_params = [*guide.gp_params_lstm.parameters(), *guide.gp_params_extractor.parameters()]
+        guide_discrete_params = [
+            *guide.obs_embedder.parameters(),
+            *guide.expression_embedder.parameters(),
+            *guide.expression_lstm.parameters(),
+            *guide.expression_extractor.parameters(),
+        ]
+    
+        prior_continuous_params = [*generative_model.gp_params_lstm.parameters(), *generative_model.gp_params_extractor.parameters()]
+        prior_discrete_params = [*generative_model.expression_lstm.parameters(), *generative_model.expression_extractor.parameters()]
+        likelihood_params = [generative_model.log_eps] if generative_model.learn_eps else []
+    
+        assert len(set(guide.parameters()) - set([*guide_continuous_params, *guide_discrete_params])) == 0
+        assert len(set(generative_model.parameters()) - set([*prior_continuous_params, *prior_discrete_params, *likelihood_params])) == 0
+
+        optimizer = torch.optim.Adam([
+            {'params': guide_continuous_params, 'lr':run_args.lr_guide_continuous},
+            {'params': guide_discrete_params, 'lr':run_args.lr_guide_discrete},
+            {'params': prior_continuous_params, 'lr':run_args.lr_prior_continuous},
+            {'params': prior_discrete_params, 'lr':run_args.lr_prior_discrete},
+            {'params': likelihood_params, 'lr':run_args.lr_likelihood},
+        ], lr=run_args.lr)
+
+    elif hasattr(run_args, "lr_continuous_latents"):
+        #LEGACY CODE
+        continuous_latent_parameters = list(guide.gp_params_extractor.parameters())
+        other_parameters = [
             *generative_model.parameters(),
             *(set(guide.parameters()) - set(continuous_latent_parameters))
         ]
 
-    optimizer = torch.optim.Adam([
-        {'params': continuous_latent_parameters, 'lr':run_args.lr_continuous_latents},
-        {'params': other_parameters},
-    ], lr=run_args.lr)
+        optimizer = torch.optim.Adam([
+            {'params': continuous_latent_parameters, 'lr':run_args.lr_continuous_latents},
+            {'params': other_parameters},
+        ], lr=run_args.lr)
+    else:
+        raise NotImplementedError()
 
     # Stats
     stats = Stats([], [], [], [])

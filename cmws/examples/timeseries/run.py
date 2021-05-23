@@ -65,8 +65,13 @@ def get_args_parser():
     parser.add_argument("--num-sleep-pretraining-iterations", default=0, type=int, help=" ")
     parser.add_argument("--sleep-pretraining-batch-size", default=0, type=int, help=" ")
     parser.add_argument("--lr", default=1e-3, type=float, help=" ")
-    parser.add_argument("--lr-continuous-latents", default=None, type=float, help=" ")
     parser.add_argument("--lr-sleep-pretraining", default=None, type=float, help=" ")
+    parser.add_argument("--lr-guide-continuous", default=None, type=float, help=" ")
+    parser.add_argument("--lr-guide-discrete", default=None, type=float, help=" ")
+    parser.add_argument("--lr-prior-continuous", default=None, type=float, help=" ")
+    parser.add_argument("--lr-prior-discrete", default=None, type=float, help=" ")
+    parser.add_argument("--lr-likelihood", default=None, type=float, help=" ")
+
     parser.add_argument(
         "--insomnia",
         default=1.0,
