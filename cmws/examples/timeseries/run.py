@@ -51,6 +51,7 @@ def get_args_parser():
     parser.add_argument("--synthetic-data", action="store_true", help=" ")
 
     # Model
+    parser.add_argument("--learn-eps", action="store_true", help=" ")
     parser.add_argument("--max-num-chars", default=10, type=int, help=" ")
     parser.add_argument("--generative-model-lstm-hidden-dim", default=128, type=int, help=" ")
     parser.add_argument("--guide-lstm-hidden-dim", default=128, type=int, help=" ")

@@ -412,7 +412,7 @@ def init(run_args, device, fast=False):
 
         # Generative model
         generative_model = timeseries.GenerativeModel(
-            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim
+            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim, learn_eps=run_args.learn_eps
         ).to(device)
 
         # Guide

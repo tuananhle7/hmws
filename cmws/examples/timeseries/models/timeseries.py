@@ -12,7 +12,7 @@ class GenerativeModel(nn.Module):
     """
     """
 
-    def __init__(self, max_num_chars, lstm_hidden_dim):
+    def __init__(self, max_num_chars, lstm_hidden_dim, learn_eps=False):
         super().__init__()
         self.max_num_chars = max_num_chars
         self.lstm_hidden_dim = lstm_hidden_dim
@@ -32,6 +32,10 @@ class GenerativeModel(nn.Module):
         )
         self.gp_params_extractor.weight.data.fill_(0)
         self.gp_params_extractor.bias.data.fill_(0)
+
+        self.learn_eps = learn_eps
+        if self.learn_eps:
+            self.log_eps = nn.Parameter(torch.Tensor([-2]))
 
     @property
     def device(self):
@@ -472,6 +476,10 @@ class GenerativeModel(nn.Module):
         covariance_matrix = torch.stack(covariance_matrix).view(
             *[*shape, timeseries_data.num_timesteps, timeseries_data.num_timesteps]
         )
+
+        if self.learn_eps:
+            covariance_matrix = covariance_matrix + \
+                self.log_eps.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
 
         # Create mean
         loc = torch.zeros(*[*shape, timeseries_data.num_timesteps], device=self.device)
