@@ -444,7 +444,6 @@ def init(run_args, device, fast=False):
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
-    
     if hasattr(run_args, "lr_guide_continuous"): 
         guide_continuous_params = [*guide.gp_params_lstm.parameters(), *guide.gp_params_extractor.parameters()]
         guide_discrete_params = [
