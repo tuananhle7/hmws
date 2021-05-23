@@ -75,7 +75,7 @@ def get_parser():
 
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
     parser.add_argument("--batch-size", type=int, default=100, help=" ")
-    parser.add_argument('--cpu', action="store_tru")
+    parser.add_argument('--cpu', action="store_true")
     return parser
 
 
