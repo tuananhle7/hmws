@@ -5,8 +5,8 @@ for num_particles in 15; do
         for num_proposals_mws in 10; do
            for lr_continuous_latents in 0.01; do
                 for include_symbols in "WRCPp" "WRCP12345" "WRCP12345Ll" "WRCP12345L!@#$%"; do
-
-			experiment_name=expt3_particles${num_particles}_memory${memory_size}_proposals${num_proposals_mws}_lrc${lr_continuous_latents}_symbols${include_symbols}
+		    for learn_eps in "--learn-eps"; do
+			experiment_name=expt3.1_particles${num_particles}_memory${memory_size}_proposals${num_proposals_mws}_lrc${lr_continuous_latents}_symbols${include_symbols}$learn_eps
 			cmd="sbatch $sbatch_args --output=logs/cmws_4_$experiment_name.out ./run.sh $experiment_name
 			    --continue-training
 			    --algorithm=cmws_4
@@ -21,7 +21,8 @@ for num_particles in 15; do
 			    --lr-continuous-latents=$lr_continuous_latents
 			    --lr-sleep-pretraining=0.01
 			    --num-sleep-pretraining-iterations=1000
-			    --include-symbols=$include_symbols"
+			    --include-symbols=$include_symbols
+			    $learn_eps"
 			echo $cmd
 			eval $cmd
 
@@ -38,9 +39,11 @@ for num_particles in 15; do
 			    --lr-continuous-latents=$lr_continuous_latents
 			    --lr-sleep-pretraining=0.01
 			    --num-sleep-pretraining-iterations=1000
-			    --include-symbols=$include_symbols"
+			    --include-symbols=$include_symbols
+			    $learn_eps"
 			echo $cmd
 			eval $cmd
+		    done
 		done
 	    done
         done
