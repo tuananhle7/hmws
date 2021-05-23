@@ -568,10 +568,10 @@ if __name__ == "__main__":
                         num_iterationss_prev = num_iterationss
                 else:
                     n_wait += 1
-                    if n_wait >= 60:
-                        util.logging.info("Giving up...")
-                    else:
-                        util.logging.info("Didn't plot anything ... waiting 30 seconds")
+                    #if n_wait >= 180:
+                    #    util.logging.info("Giving up...")
+                    #else:
+                    util.logging.info("Didn't plot anything ... waiting 30 seconds")
                     time.sleep(30)
         else:
             main(args)
