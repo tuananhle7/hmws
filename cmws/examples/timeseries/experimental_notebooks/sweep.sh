@@ -1,42 +1,56 @@
-sbatch_args="--gres=gpu:1 --partition=tenenbaum --time=9:00:00 --mem=12G -c2"
+sbatch_args="--gres=gpu:1 --partition=tenenbaum --time=9:00:00 --mem=16G -c2"
 
 for num_particles in 15; do
     for memory_size in 10; do
         for num_proposals_mws in 10; do
-           for lr_continuous_latents in 0.01; do
+           lr_guide_continuous=0.01
+           lr_guide_discrete=0.01
+           lr_prior_continuous=0.0
+           lr_prior_discrete=0.0
+           lr_likelihood=0.01
+           #for lr_continuous_latents in 0.01; do
                 for include_symbols in "WRCPp" "WRCP12345" "WRCP12345Ll" "WRCP12345L!@#$%"; do
-		    for learn_eps in "--learn-eps"; do
-			experiment_name=expt3.1_particles${num_particles}_memory${memory_size}_proposals${num_proposals_mws}_lrc${lr_continuous_latents}_symbols${include_symbols}$learn_eps
-			cmd="sbatch $sbatch_args --output=logs/cmws_4_$experiment_name.out ./run.sh $experiment_name
+		    for learn_eps in "--learn-eps" ""; do
+			experiment_name=expt4_particles${num_particles}_memory${memory_size}_proposals${num_proposals_mws}_symbols${include_symbols}$learn_eps
+                        algorithm=cmws_4
+			cmd="sbatch $sbatch_args --output=logs/cmws_4_$experiment_name.out ./run.sh $experiment_name $algorithm
 			    --continue-training
-			    --algorithm=cmws_4
 			    --num-particles=$num_particles
 			    --full-training-data
 			    --generative-model-lstm-hidden-dim=10
 			    --guide-lstm-hidden-dim=10
 			    --memory-size=$memory_size
 			    --num-proposals-mws=$num_proposals_mws
-			    --max-num-chars=7
+			    --max-num-chars=9
 			    --lr=0.0
-			    --lr-continuous-latents=$lr_continuous_latents
+                            --lr-guide-continuous=$lr_guide_continuous
+                            --lr-guide-discrete=$lr_guide_discrete
+                            --lr-prior-continuous=$lr_prior_continuous
+                            --lr-prior-discrete=$lr_prior_discrete
+                            --lr-likelihood=$lr_likelihood
 			    --lr-sleep-pretraining=0.01
 			    --num-sleep-pretraining-iterations=1000
 			    --include-symbols=$include_symbols
+
 			    $learn_eps"
 			echo $cmd
 			eval $cmd
 
 			total_num_particles=`expr $num_particles \* \( $memory_size + $num_proposals_mws \)`
-			cmd="sbatch $sbatch_args --output=logs/rws_$experiment_name.out ./run.sh $experiment_name
+                        algorithm=rws
+			cmd="sbatch $sbatch_args --output=logs/rws_$experiment_name.out ./run.sh $experiment_name $algorithm
 			    --continue-training
-			    --algorithm=rws
 			    --num-particles=$total_num_particles
 			    --full-training-data
 			    --generative-model-lstm-hidden-dim=10
 			    --guide-lstm-hidden-dim=10
-			    --max-num-chars=7
+			    --max-num-chars=9
 			    --lr=0.0
-			    --lr-continuous-latents=$lr_continuous_latents
+                            --lr-guide-continuous=$lr_guide_continuous
+                            --lr-guide-discrete=$lr_guide_discrete
+                            --lr-prior-continuous=$lr_prior_continuous
+                            --lr-prior-discrete=$lr_prior_discrete
+                            --lr-likelihood=$lr_likelihood
 			    --lr-sleep-pretraining=0.01
 			    --num-sleep-pretraining-iterations=1000
 			    --include-symbols=$include_symbols
@@ -45,7 +59,7 @@ for num_particles in 15; do
 			eval $cmd
 		    done
 		done
-	    done
+	    #done
         done
     done
 done
