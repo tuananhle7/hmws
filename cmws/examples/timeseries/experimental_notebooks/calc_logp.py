@@ -16,7 +16,7 @@ import cmws.examples.timeseries.inference
 import pathlib
 
 def main(args):
-    device = 'cpu' if args.cpu else util.get_device()
+    device = torch.device('cpu') if args.cpu else util.get_device()
 
     # Model
     model, optimizer, stats, run_args = timeseries_util.load_checkpoint(

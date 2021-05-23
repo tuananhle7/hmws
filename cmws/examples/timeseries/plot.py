@@ -8,7 +8,7 @@ import seaborn as sns
 import textwrap
 import torch
 import numpy as np
-from cmws import util
+from cmws import util, losses
 from cmws.examples.timeseries import data, run
 from cmws.examples.timeseries import util as timeseries_util
 from cmws.examples.timeseries import lstm_util
@@ -399,7 +399,7 @@ def plot_comparison(path, checkpoint_paths):
 
 def main(args):
     # Cuda
-    device = util.get_device()
+    device = torch.device('cpu') if args.cpu else util.get_device()
 
     # Checkpoint paths
     if args.checkpoint_path is None:
@@ -520,6 +520,8 @@ def main(args):
                 #         guide,
                 #         obs[mode],
                 #     )
+            filename = f"{save_dir}/logp_{num_iterations}.txt"
+            calc_log_p(filename, generative_model, guide, device)
 
             plotted_something = True
         else:
@@ -532,6 +534,60 @@ def main(args):
     return plotted_something, num_iterationss
 
 
+def calc_log_p(filename, generative_model, guide, device):
+    # Load Data
+    batch_size = 5
+    train_data_iterator = cmws.examples.timeseries.data.get_timeseries_data_loader(
+            device,
+            batch_size,
+            test=False,
+            full_data=True,
+            synthetic=False,
+        )
+    test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+        device, batch_size, test=True, full_data=True, synthetic=False
+    )
+
+    # Calc log p
+    out = ""
+    def myprint(s):
+        nonlocal out
+        out = out + s
+        print(s)
+
+    for test_num_particles in [10, 100, 500]:
+        if hasattr(generative_model, 'log_eps'):
+            myprint(f"eps = {generative_model.log_eps.exp()}\n")
+        myprint(f"log_p with {test_num_particles} particles: ")
+
+        log_p, kl = [], []
+        for test_obs, test_obs_id in test_data_loader:
+            print(".", end="", flush=True)
+            log_p_, kl_ = losses.get_log_p_and_kl(
+                generative_model, guide, test_obs, test_num_particles
+            )
+            log_p.append(log_p_)
+            kl.append(kl_)
+        log_p = torch.cat(log_p)
+        kl = torch.cat(kl)
+        myprint(f" test= {log_p.sum().item()} ")
+
+        log_p, kl = [], []
+        for train_obs, train_obs_id in train_data_iterator:
+            print(".", end="", flush=True)
+            log_p_, kl_ = losses.get_log_p_and_kl(
+                generative_model, guide, train_obs, test_num_particles
+            )
+            log_p.append(log_p_)
+            kl.append(kl_)
+        log_p = torch.cat(log_p)
+        kl = torch.cat(kl)
+        myprint(f" train={log_p.sum().item()}\n")
+
+    with open(filename, "r") as f:
+        f.write(out)
+
+
 def get_parser():
     import argparse
 
@@ -541,6 +597,7 @@ def get_parser():
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--long", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
+    parser.add_argument('--cpu', action="store_true")
 
     return parser
 
@@ -566,13 +623,15 @@ if __name__ == "__main__":
                         break
                     else:
                         num_iterationss_prev = num_iterationss
+                        print("Waiting 10 minutes before plotting again")
+                        time.sleep(600)
                 else:
                     n_wait += 1
-                    #if n_wait >= 180:
-                    #    util.logging.info("Giving up...")
-                    #else:
-                    util.logging.info("Didn't plot anything ... waiting 30 seconds")
-                    time.sleep(30)
+                    if n_wait >= 120:
+                       util.logging.info("Giving up...")
+                    else:
+                        util.logging.info("Didn't plot anything ... waiting 30 seconds")
+                        time.sleep(30)
         else:
             main(args)
 

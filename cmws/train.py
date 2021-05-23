@@ -163,6 +163,9 @@ def train(model, optimizer, stats, args):
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
             device, args.batch_size, test=True, synthetic=args.synthetic_data
         )
+        train_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+            device, args.batch_size, test=False, synthetic=args.synthetic_data
+        )
         train_timeseries_dataset = cmws.examples.timeseries.data.TimeseriesDataset(
             device, test=False, full_data=args.full_training_data
         )
@@ -335,9 +338,13 @@ def train(model, optimizer, stats, args):
                     in str(type(generative_model))
                 ):
                     log_p, kl = [], []
-                    for test_obs, test_obs_id in test_data_loader:
+                    # for test_obs, test_obs_id in test_data_loader:
+                    #     log_p_, kl_ = losses.get_log_p_and_kl(
+                    #         generative_model, guide, test_obs, args.test_num_particles
+                    #     )
+                    for train_obs, train_obs_id in train_data_loader:
                         log_p_, kl_ = losses.get_log_p_and_kl(
-                            generative_model, guide, test_obs, args.test_num_particles
+                            generative_model, guide, train_obs, args.test_num_particles
                         )
                         log_p.append(log_p_)
                         kl.append(kl_)

@@ -81,7 +81,7 @@ def get_args_parser():
     )
     parser.add_argument("--log-interval", default=1, type=int, help=" ")
     parser.add_argument("--save-interval", default=10, type=int, help=" ")
-    parser.add_argument("--test-interval", default=100, type=int, help=" ")
+    parser.add_argument("--test-interval", default=250, type=int, help=" ")
     parser.add_argument("--checkpoint-interval", default=1000, type=int, help=" ")
 
     parser.add_argument("--fast", action="store_true", help=" ")
