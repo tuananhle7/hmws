@@ -28,7 +28,7 @@ def main(args):
 
 
 def get_config_name(args):
-    return f"{args.algorithm}_{args.num_grid_rows}_{args.seed}"
+    return f"{args.algorithm}_{args.num_grid_rows}_{args.shrink_factor}_{args.seed}"
 
 
 def get_args_parser():
@@ -49,6 +49,8 @@ def get_args_parser():
         "--mode", default="cube", choices=["block", "cube"],
         help="which primitives populate scene",
     )
+    parser.add_argument("--shrink-factor", default=0.01, type=float, help=" ")
+
 
     # Model
     parser.add_argument("--num-primitives", default=5, type=int, help=" ")

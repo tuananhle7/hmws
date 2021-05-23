@@ -16,6 +16,7 @@ def generate_from_true_generative_model_single(
     im_size=32,
     remove_color=False,
     mode="cube",
+    shrink_factor=0.01
 ):
     """Generate a synthetic observation
     Args
@@ -23,7 +24,7 @@ def generate_from_true_generative_model_single(
 
     Returns [3, im_size, im_size]
     """
-    assert num_primitives <= 3
+    #assert num_primitives <= 3
 
     if mode == "cube":
         if remove_color:
@@ -45,7 +46,7 @@ def generate_from_true_generative_model_single(
                     torch.tensor(primitive_color, device=device),
                     torch.tensor(0.5, device=device),
                 ),
-            ][:num_primitives]
+            ]
         else:
             # Define params
             primitives = [
@@ -64,7 +65,7 @@ def generate_from_true_generative_model_single(
                     torch.tensor([0.0, 0.0, 1.0], device=device),
                     torch.tensor(0.5, device=device),
                 ),
-            ][:num_primitives]
+            ]
     elif mode == "block":
         if remove_color:
             # all primitives = same color
@@ -100,7 +101,7 @@ def generate_from_true_generative_model_single(
                     torch.tensor(primitive_color, device=device),
                     torch.tensor([0.3, 0.3, 0.5], device=device),
                 ),
-            ][:num_primitives]
+            ]
         else:
             # Define params
             primitives = [
@@ -134,8 +135,9 @@ def generate_from_true_generative_model_single(
                     torch.tensor([1.0, 0.0, 0.0], device=device),
                     torch.tensor([0.3, 0.3, 0.5], device=device),
                 ),
-            ][:num_primitives]
-    # num_primitives = len(primitives)
+            ]
+
+    num_primitives = len(primitives)
 
     # Determine which cells have stacks
     cells = list(itertools.product(range(num_grid_rows), range(num_grid_cols)))
@@ -172,7 +174,8 @@ def generate_from_true_generative_model_single(
 
     # Render
     img = render.render(
-        primitives, num_blocks, stacking_program, raw_locations, im_size, remove_color=remove_color, mode=mode
+        primitives, num_blocks, stacking_program, raw_locations, im_size, remove_color=remove_color, mode=mode,
+        shrink_factor=shrink_factor
     )
     assert len(img.shape) == 3
 
@@ -187,7 +190,8 @@ def generate_from_true_generative_model(
     device,
     im_size=128,
     remove_color=False,
-    mode="cube"
+    mode="cube",
+    shrink_factor=0.01
 ):
     """Generate a batch of synthetic observations
 
@@ -202,7 +206,8 @@ def generate_from_true_generative_model(
                 num_primitives,
                 im_size=im_size,
                 remove_color=remove_color,
-                mode=mode
+                mode=mode,
+                shrink_factor=shrink_factor
             )
             for _ in range(batch_size)
         ]
@@ -210,13 +215,13 @@ def generate_from_true_generative_model(
 
 
 @torch.no_grad()
-def generate_obs(num_obs, device, seed=None, remove_color=False, mode="cube"):
+def generate_obs(num_obs, device, seed=None, remove_color=False, mode="cube", shrink_factor=0.01):
     if seed is not None:
         # Fix seed
         util.set_seed(seed)
 
     obs = generate_from_true_generative_model(
-        num_obs, num_primitives=3, device=device, remove_color=remove_color, mode=mode
+        num_obs, num_primitives=3, device=device, remove_color=remove_color, mode=mode, shrink_factor=shrink_factor
     )
 
     return obs
@@ -250,7 +255,8 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         force_regenerate=False,
         seed=1,
         remove_color=False,
-        mode="cube"
+        mode="cube",
+        shrink_factor=0.01
     ):
         self.device = device
         self.num_grid_rows = num_grid_rows
@@ -260,6 +266,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         self.num_test_data = 100
         self.remove_color = remove_color
         self.mode=mode
+        self.shrink_factor=shrink_factor
 
         print("color status: ", remove_color)
 
@@ -274,7 +281,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
             .joinpath(
                 "data",
                 f"{self.num_grid_rows}_{self.num_grid_cols}",
-                mode,
+                f"{mode}_{shrink_factor}",
                 "colorless" if self.remove_color else "",
                 "test.pt" if self.test else "train.pt",
             )
@@ -294,10 +301,11 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
                 self.num_data,
                 num_grid_rows=num_grid_rows,
                 num_grid_cols=num_grid_cols,
-                num_primitives=3,
+                num_primitives=3 if (mode == "cube") else 6,
                 device=device,
                 remove_color=remove_color,
-                mode=mode
+                mode=mode,
+                shrink_factor=shrink_factor
             )
             self.obs_id = torch.arange(self.num_data, device=device)
 
@@ -320,7 +328,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
 
 def get_scene_understanding_data_loader(
     device, num_grid_rows, num_grid_cols, batch_size, test=False, remove_color=False,
-        mode="cube"
+        mode="cube", shrink_factor=0.01
 ):
     if test:
         shuffle = False
@@ -328,7 +336,8 @@ def get_scene_understanding_data_loader(
         shuffle = True
     return torch.utils.data.DataLoader(
         SceneUnderstandingDataset(
-            device, num_grid_rows, num_grid_cols, test=test, remove_color=remove_color, mode=mode
+            device, num_grid_rows, num_grid_cols, test=test, remove_color=remove_color, mode=mode,
+            shrink_factor=shrink_factor
         ),
         batch_size=batch_size,
         shuffle=shuffle,
@@ -344,12 +353,12 @@ def plot_data():
 
         # Train
         timeseries_dataset["train"] = SceneUnderstandingDataset(
-            device, num_grid_rows, num_grid_cols, remove_color=remove_color, mode=mode
+            device, num_grid_rows, num_grid_cols
         )
 
         # Test
         timeseries_dataset["test"] = SceneUnderstandingDataset(
-            device, num_grid_rows, num_grid_cols, test=True, remove_color=remove_color, mode=mode
+            device, num_grid_rows, num_grid_cols, test=True
         )
 
         for mode in ["test", "train"]:

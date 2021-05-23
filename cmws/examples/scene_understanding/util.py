@@ -21,7 +21,8 @@ def init(run_args, device):
             num_primitives=run_args.num_primitives,
             max_num_blocks=run_args.max_num_blocks,
             remove_color=(run_args.remove_color == 1), # map from int to bool
-            mode=run_args.mode
+            mode=run_args.mode,
+            shrink_factor=run_args.shrink_factor
         ).to(device)
 
         # Guide
@@ -36,7 +37,7 @@ def init(run_args, device):
         if "mws" in run_args.algorithm:
             memory = cmws.memory.Memory(
                 len(data.SceneUnderstandingDataset(device, test=False,remove_color=(run_args.remove_color == 1),
-                                                   mode=run_args.mode)),
+                                                   mode=run_args.mode,shrink_factor=run_args.shrink_factor)),
                 run_args.memory_size,
                 generative_model,
             ).to(device)
@@ -82,6 +83,12 @@ def load_checkpoint(path, device, num_tries=3):
             logging.info(f"Waiting for {wait_time} seconds")
             time.sleep(wait_time)
     run_args = checkpoint["run_args"]
+
+    try:
+        mode = run_args.mode
+    except:
+        run_args.mode = "cube"  # hack to handle being modes run before primitive changes
+
     model, optimizer, stats = init(run_args, device)
 
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]

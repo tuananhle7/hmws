@@ -171,7 +171,8 @@ def train(model, optimizer, stats, args):
                 args.batch_size,
                 test=False,
                 remove_color=(args.remove_color == 1),
-                mode=args.mode
+                mode=args.mode,
+                shrink_factor=args.shrink_factor
             )
         )
         test_data_loader = cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
@@ -181,7 +182,8 @@ def train(model, optimizer, stats, args):
             args.batch_size,
             test=True,
             remove_color=(args.remove_color == 1),
-            mode=args.mode
+            mode=args.mode,
+            shrink_factor=args.shrink_factor
         )
     else:
         # Generate test data
