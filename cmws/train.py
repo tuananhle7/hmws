@@ -48,11 +48,11 @@ def train(model, optimizer, stats, args):
     # Sleep pretraining
     if "sleep_pretraining_batch_size" in args:
         if args.sleep_pretraining_batch_size == 0:
-            sleep_pretraining_batch_size = args.num_particles * args.batch_size
+            sleep_pretraining_batch_size = 10 * args.batch_size #args.num_particles * args.batch_size
         else:
             sleep_pretraining_batch_size = args.sleep_pretraining_batch_size
     else:
-        sleep_pretraining_batch_size = args.num_particles * args.batch_size
+        sleep_pretraining_batch_size = 10 * args.batch_size #args.num_particles * args.batch_size
 
     sleep_pretraining_optimizer = torch.optim.Adam(
         [*generative_model.parameters(), *guide.parameters()],
