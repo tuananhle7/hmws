@@ -28,7 +28,7 @@ def init_symbols(include_symbols):
         base_kernel_chars = {x for x in base_kernel_chars if x in include_symbols}
         char_to_long_char = {"W": "WN", "R": "SE", "C": "const", "p":"Per", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "x":"Cos", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "l":"Lin", "!":"Lin1", "@":"Lin2", "#":"Lin3", "$":"Lin4", "%":"Lin5"}
         char_to_long_char = {k:v for k,v in char_to_long_char.items() if k in include_symbols}
-        char_to_num = {k:i for i,k in enumerate(["+", "*", *base_kernel_chars])}
+        char_to_num = {k:i for i,k in enumerate(["+", "*", *sorted(base_kernel_chars)])}
         num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 
         num_params = {"W":0, "R":1, "C":1, **{k:2 for k in "p12345"}, **{k:1 for k in "xabcdef"}, **{k:1 for k in "l!@#$%"}}

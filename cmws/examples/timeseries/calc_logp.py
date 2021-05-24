@@ -22,6 +22,7 @@ def main(args):
     model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
                     args.checkpoint_path, device=device
                 )
+
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
 
     # Load Data
@@ -44,6 +45,7 @@ def main(args):
 
         log_p, kl = [], []
         for test_obs, test_obs_id in test_data_loader:
+            print(test_obs_id[0])
             print(".", end="", flush=True)
             log_p_, kl_ = losses.get_log_p_and_kl(
                 generative_model, guide, test_obs, test_num_particles
@@ -52,7 +54,7 @@ def main(args):
             kl.append(kl_)
         log_p = torch.cat(log_p)
         kl = torch.cat(kl)
-        print(f" test log p = {log_p.sum().item()}")
+        print(f" test log p = {log_p.mean().item()}")
 
         log_p, kl = [], []
         for train_obs, train_obs_id in train_data_iterator:
@@ -64,7 +66,7 @@ def main(args):
             kl.append(kl_)
         log_p = torch.cat(log_p)
         kl = torch.cat(kl)
-        print(f" train log p = {log_p.sum().item()}")
+        print(f" train log p = {log_p.mean().item()}")
 
         print()
 
@@ -84,4 +86,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with torch.no_grad():
+        # for i in range(10):
+        util.set_seed(0)
         main(args)

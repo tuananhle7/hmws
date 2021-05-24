@@ -570,7 +570,7 @@ def calc_log_p(filename, generative_model, guide, device):
             kl.append(kl_)
         log_p = torch.cat(log_p)
         kl = torch.cat(kl)
-        myprint(f" test= {log_p.sum().item()} ")
+        myprint(f" test= {log_p.mean().item()} ")
 
         log_p, kl = [], []
         for train_obs, train_obs_id in train_data_iterator:
@@ -582,7 +582,7 @@ def calc_log_p(filename, generative_model, guide, device):
             kl.append(kl_)
         log_p = torch.cat(log_p)
         kl = torch.cat(kl)
-        myprint(f" train={log_p.sum().item()}\n")
+        myprint(f" train={log_p.mean().item()}\n")
 
     with open(filename, "w") as f:
         f.write(out)
