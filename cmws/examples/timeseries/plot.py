@@ -536,7 +536,7 @@ def main(args):
 
 def calc_log_p(filename, generative_model, guide, device):
     # Load Data
-    batch_size = 5
+    batch_size = 50
     train_data_iterator = cmws.examples.timeseries.data.get_timeseries_data_loader(
             device,
             batch_size,
@@ -584,7 +584,7 @@ def calc_log_p(filename, generative_model, guide, device):
         kl = torch.cat(kl)
         myprint(f" train={log_p.sum().item()}\n")
 
-    with open(filename, "r") as f:
+    with open(filename, "w") as f:
         f.write(out)
 
 
