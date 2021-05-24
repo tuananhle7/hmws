@@ -234,7 +234,7 @@ def get_block_mesh(position, size):
         - 0.5
     )
     translation = position.clone()
-    translation[-1] += size[1] / 2 # adjust based on length (z-dir) (?)
+    #translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
     vertices = centered_vertices * size + translation[None]
 
     # hardcoded face indices
@@ -578,7 +578,7 @@ def convert_raw_locations(
 
     min_x = cell_x_min
     max_x = cell_x_max
-    shrink_factor = 0.01#0.4
+    shrink_factor = shrink_factor#0.4
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
@@ -586,7 +586,7 @@ def convert_raw_locations(
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[1]
+            y_size = size[1] * 0.9#size[1]
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
