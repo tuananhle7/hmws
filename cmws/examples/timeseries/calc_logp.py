@@ -37,7 +37,7 @@ def main(args):
     )
 
     # Calc log p
-    for test_num_particles in [10, 100]:
+    for test_num_particles in [10, 100, 200, 500]:
         if hasattr(generative_model, 'log_eps'):
             print(f"eps = {generative_model.log_eps.exp()}")
         print(f"With {test_num_particles} particles...")

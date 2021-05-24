@@ -521,7 +521,7 @@ def main(args):
                 #         obs[mode],
                 #     )
             filename = f"{save_dir}/logp_{num_iterations}.txt"
-            calc_log_p(filename, generative_model, guide, device)
+            # calc_log_p(filename, generative_model, guide, device)
 
             plotted_something = True
         else:
@@ -555,7 +555,7 @@ def calc_log_p(filename, generative_model, guide, device):
         out = out + s
         print(s)
 
-    for test_num_particles in [10, 100, 500]:
+    for test_num_particles in [10, 100]:
         if hasattr(generative_model, 'log_eps'):
             myprint(f"eps = {generative_model.log_eps.exp()}\n")
         myprint(f"log_p with {test_num_particles} particles: ")
