@@ -455,7 +455,7 @@ def init(run_args, device, fast=False):
     
         prior_continuous_params = [*generative_model.gp_params_lstm.parameters(), *generative_model.gp_params_extractor.parameters()]
         prior_discrete_params = [*generative_model.expression_lstm.parameters(), *generative_model.expression_extractor.parameters()]
-        likelihood_params = [generative_model.log_eps] if generative_model.learn_eps else []
+        likelihood_params = [generative_model.log_eps_sq] if generative_model.learn_eps else []
     
         assert len(set(guide.parameters()) - set([*guide_continuous_params, *guide_discrete_params])) == 0
         assert len(set(generative_model.parameters()) - set([*prior_continuous_params, *prior_discrete_params, *likelihood_params])) == 0

@@ -35,7 +35,7 @@ class GenerativeModel(nn.Module):
 
         self.learn_eps = learn_eps
         if self.learn_eps:
-            self.log_eps = nn.Parameter(torch.Tensor([-2]))
+            self.log_eps_sq = nn.Parameter(torch.Tensor([-2]))
 
     @property
     def device(self):
@@ -309,6 +309,10 @@ class GenerativeModel(nn.Module):
             num_samples, num_elements, timeseries_data.num_timesteps, timeseries_data.num_timesteps
         )
 
+        if self.learn_eps:
+            covariance_matrix = covariance_matrix + \
+                self.log_eps_sq.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
+
         # -- Expand obs
         obs_expanded = obs_flattened[None].expand(num_samples, num_elements, -1)
 
@@ -479,7 +483,7 @@ class GenerativeModel(nn.Module):
 
         if self.learn_eps:
             covariance_matrix = covariance_matrix + \
-                self.log_eps.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
+                self.log_eps_sq.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
 
         # Create mean
         loc = torch.zeros(*[*shape, timeseries_data.num_timesteps], device=self.device)
@@ -586,6 +590,10 @@ class GenerativeModel(nn.Module):
         covariance_matrix = torch.stack(covariance_matrix).view(
             *[*shape, joint_num_timesteps, joint_num_timesteps]
         )
+
+        if self.learn_eps:
+            covariance_matrix = covariance_matrix + \
+                self.log_eps_sq.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
 
         # Create mean
         loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)

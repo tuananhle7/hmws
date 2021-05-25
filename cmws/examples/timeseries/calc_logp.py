@@ -42,9 +42,9 @@ def main(args):
     # Calc log p
     num_iterations = len(stats.losses)
     myprint(f"At {num_iterations} iterations:\n")
+    if hasattr(generative_model, 'log_eps_sq'):
+        myprint(f"eps = {generative_model.log_eps_sq.exp().sqrt()}\n")
     for test_num_particles in [10, 100, 200, 500]:
-        if hasattr(generative_model, 'log_eps'):
-            myprint(f"eps = {generative_model.log_eps.exp()}\n")
         myprint(f"Logp with {test_num_particles} particles:")
 
         log_p, kl = [], []
@@ -75,6 +75,7 @@ def main(args):
 
     save_dir = util.get_save_dir(run_args.experiment_name, run.get_config_name(run_args))
     filename = f"{save_dir}/logp_{num_iterations}.txt"
+    filename = f"{save_dir}/logp_{run_args.experiment_name}_{run.get_config_name(run_args)}_iter{num_iterations}.txt"
     with open(filename, "w") as f:
         f.write(out)
 
