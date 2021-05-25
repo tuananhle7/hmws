@@ -482,7 +482,7 @@ def main(args):
                 # Plot predictions
                 if memory is not None:
                     if args.long:
-                        num_particles = 200
+                        num_particles = 100
                         filename = f"{save_dir}/predictions/train/memory/{num_iterations}iter_{num_particles}particles.png"
                         if pathlib.Path(filename).is_file():
                             print(f"{filename} already exists. Skipping")
@@ -536,7 +536,7 @@ def main(args):
 
 def calc_log_p(filename, generative_model, guide, device):
     # Load Data
-    batch_size = 20
+    batch_size = 10
     train_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
         device, batch_size, test=False, full_data=True, synthetic=False,
     )
