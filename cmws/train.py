@@ -161,10 +161,10 @@ def train(model, optimizer, stats, args):
             )
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
-            device, args.batch_size, test=True, synthetic=args.synthetic_data
+            device, args.batch_size, test=True, full_data=args.full_training_data, synthetic=args.synthetic_data
         )
         train_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
-            device, args.batch_size, test=False, synthetic=args.synthetic_data
+            device, args.batch_size, test=False, full_data=args.full_training_data, synthetic=args.synthetic_data
         )
         train_timeseries_dataset = cmws.examples.timeseries.data.TimeseriesDataset(
             device, test=False, full_data=args.full_training_data
