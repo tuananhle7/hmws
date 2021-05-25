@@ -216,6 +216,37 @@ def latent_to_str(latent):
 
     return "\n".join(latent_str)
 
+def plot_memory_scene_understanding(path, generative_model, guide, memory, obs, obs_id):
+    # modified from: https://github.com/tuananhle7/continuous_mws/blob/master/cmws/examples/timeseries/plot.py#L87-L102
+    obs = obs.squeeze(1)
+    num_test_obs, num_channels, im_size, _ = obs.shape
+    im_size = 256
+    num_samples = 1
+
+    num_particles = memory.size
+    latent, log_weight = util.importance_sample_memory(
+        num_particles, obs, obs_id, generative_model, guide, memory, im_size
+    )
+
+    num_blocks, stacking_program, raw_locations = latent
+
+    # Sort by log weight
+    # [num_test_obs, num_particles], [num_test_obs, num_particles]
+    _, sorted_indices = torch.sort(log_weight.T, descending=True)
+
+    # Sample predictions
+    # -- Expand obs
+    obs_expanded = obs[None].expand(num_particles, num_test_obs, 3, im_size, im_size)
+
+    # -- Sample predictions
+    obs_predictions = generative_model.sample_obs_predictions(latent, obs_expanded, [num_samples])
+    predictive_dist = generative_model.get_predictive_dist(latent, obs_expanded)
+    predictive_mean = predictive_dist.loc
+    predictive_std = predictive_dist.covariance_matrix.diagonal(dim1=-2, dim2=-1).sqrt()
+    predictive_low = predictive_mean - 2 * predictive_std
+    predictive_high = predictive_mean + 2 * predictive_std
+
+
 
 def plot_reconstructions_scene_understanding(path, generative_model, guide, obs):
     """
@@ -366,7 +397,7 @@ def main(args):
                 remove_color=(run_args.remove_color == 1),
                 mode=run_args.mode
             )
-            obs, _ = train_dataset[:10]
+            obs, obs_id = train_dataset[:10]
 
             # Plot
             if run_args.model_type == "scene_understanding":
