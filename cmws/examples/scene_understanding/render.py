@@ -61,7 +61,7 @@ class Block:
         return self.size.device
 
     def __repr__(self):
-        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist():.1f})"
+        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist()})"
 
 
 class LearnableCube(nn.Module):
@@ -132,7 +132,7 @@ class LearnableBlock(nn.Module):
         self.raw_color.data = util.logit(value)
 
     def __repr__(self):
-        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist():.1f})"
+        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist()})"
 
 
 def get_cube_mesh(position, size):
@@ -234,7 +234,7 @@ def get_block_mesh(position, size):
         - 0.5
     )
     translation = position.clone()
-    translation[-1] += size[1] / 2 # adjust based on length (z-dir) (?)
+    #translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
     vertices = centered_vertices * size + translation[None]
 
     # hardcoded face indices
@@ -425,6 +425,8 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
     # Extract
     device = sizes.device
 
+    print("SIZES: ", sizes.shape)
+
     # Create camera
     R, T = look_at_view_transform(3.7, 0.1, 180, at=((-0.15, 0.0, 0.1),),)
     # R, T = look_at_view_transform(3.5, 0, 0,
@@ -532,7 +534,8 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
 
 
 def convert_raw_locations(
-    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols, mode="cube"
+    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols, mode="cube",
+        shrink_factor=0.01
 ):
     """
     Args
@@ -575,16 +578,15 @@ def convert_raw_locations(
 
     min_x = cell_x_min
     max_x = cell_x_max
-    shrink_factor = 0.01#0.4
+    shrink_factor = shrink_factor#0.4
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
-
         # size hack for primitives
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[-1]
+            y_size = size[1] * 0.9#size[1]
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
@@ -603,7 +605,8 @@ def convert_raw_locations(
     return torch.stack(locations)
 
 
-def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
+def convert_raw_locations_batched(raw_locations, stacking_program, primitives, mode="cube",
+                                  shrink_factor=0.01):
     """
     Args
         raw_locations (tensor [*shape, num_grid_rows, num_grid_cols, max_num_blocks])
@@ -633,7 +636,9 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
                         primitives,
                         (int(col), int(row)),
                         num_grid_rows,
-                        num_grid_cols
+                        num_grid_cols,
+                        mode=mode,
+                        shrink_factor=shrink_factor
                     )
                 )
     return torch.stack(locations_batched).view(*[*shape, num_grid_rows * num_grid_cols * max_num_blocks, 3])
@@ -646,7 +651,7 @@ def convert_raw_sigma(sigma):
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
-    sigma=1e-10, gamma=1e-6, remove_color=False, mode="cube"
+    sigma=1e-10, gamma=1e-6, remove_color=False, mode="cube", shrink_factor=0.01
 ):
     """
     Args
@@ -677,7 +682,7 @@ def render(
     square_color = torch.stack([primitive.color for primitive in primitives])
 
     # Convert [*shape, max_num_blocks, 3]
-    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
+    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives, mode, shrink_factor)
 
     # Flatten
     # num_blocks_flattened = torch.sum(num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols)),axis=1)

@@ -18,7 +18,8 @@ class GenerativeModel(nn.Module):
         obs_scale=1.0,
         obs_dist_type="normal",
         remove_color=False,
-        mode="cube"
+        mode="cube",
+        shrink_factor=0.01
     ):
         super().__init__()
 
@@ -32,6 +33,7 @@ class GenerativeModel(nn.Module):
         self.obs_scale = obs_scale
         self.remove_color = remove_color
         self.mode = mode
+        self.shrink_factor= shrink_factor
         if obs_dist_type == "normal":
             self.obs_dist = torch.distributions.Normal
         elif obs_dist_type == "laplace":
@@ -198,7 +200,8 @@ class GenerativeModel(nn.Module):
             sigma=self.sigma,
             gamma=self.gamma,
             remove_color=self.remove_color,
-            mode=self.mode
+            mode=self.mode,
+            shrink_factor=self.shrink_factor
         )
 
     def log_prob(self, latent, obs):
