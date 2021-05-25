@@ -9,9 +9,8 @@ def get_run_argss():
         for num_grid_rows, num_grid_cols in [[2, 2], [3, 3]]:
 
             if num_grid_rows == 3:
-                num_primitives = 20 # increase primitives
-                #if seed >= 5: continue # only run 5 seeds for 3x3 for now
-            else: num_primitives = 10
+                num_primitives = 15 # increase primitives
+            else: num_primitives = 5
 
             # CMWS
             args = cmws.examples.scene_understanding.run.get_args_parser().parse_args([])
@@ -20,9 +19,9 @@ def get_run_argss():
             args.num_grid_cols = num_grid_cols
             args.seed = seed
             args.num_primitives = num_primitives
-            args.num_particles = 10
-            args.memory_size = 3
-            args.num_proposals_mws = 2
+            args.num_particles = 5
+            args.memory_size = 5
+            args.num_proposals_mws = 5
             args.insomnia = 0.50
             args.algorithm = "cmws_4"
             args.model_type = "scene_understanding"

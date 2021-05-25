@@ -586,7 +586,7 @@ def convert_raw_locations(
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[1] * 0.9#size[1]
+            y_size = size[1] * 0.9
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
