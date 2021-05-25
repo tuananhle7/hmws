@@ -381,7 +381,7 @@ def plot_comparison(path, checkpoint_paths):
     ax = axs[0]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
-    ax.set_ylim(-500, 600)
+    ax.set_ylim(-100, 100)
     ax.set_xlim(0, 1000)
     ax.legend()
 

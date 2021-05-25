@@ -229,6 +229,7 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
                 return torch.distributions.MultivariateNormal(loc, covariance_matrix)
             except RuntimeError as error_2:
                 bad_batch_id = get_bad_batch_id(str(error_2))
+                error_1 = error_2
                 continue
         raise error_1
 

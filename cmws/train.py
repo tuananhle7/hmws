@@ -172,7 +172,6 @@ def train(model, optimizer, stats, args):
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
         type(generative_model)
     ):
-        print("color status: ", args.remove_color, (args.remove_color == 1))
 
         # Use a data loader
         train_data_iterator = util.cycle(
@@ -183,6 +182,8 @@ def train(model, optimizer, stats, args):
                 args.batch_size,
                 test=False,
                 remove_color=(args.remove_color == 1),
+                mode=args.mode,
+                shrink_factor=args.shrink_factor
             )
         )
         test_data_loader = cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
@@ -192,6 +193,8 @@ def train(model, optimizer, stats, args):
             args.batch_size,
             test=True,
             remove_color=(args.remove_color == 1),
+            mode=args.mode,
+            shrink_factor=args.shrink_factor
         )
     else:
         # Generate test data

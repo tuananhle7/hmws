@@ -777,13 +777,10 @@ def get_cmws_4_loss(
     return generative_model_loss + guide_loss
 
 
-
-
 def get_cmws_5_loss(
     generative_model, guide, memory, obs, obs_id, num_particles, num_proposals, insomnia=1.0
 ):
-    """Use reweighted training for q(z_c | z_d, x) but reweigh it individually for each memory element
-
+    """Normalize over particles-and-memory for generative model gradient
     Args:
         generative_model
         guide
@@ -792,7 +789,6 @@ def get_cmws_5_loss(
         obs_id: long tensor of shape [batch_size]
         num_particles (int): number of particles used to marginalize continuous latents
         num_proposals (int): number of proposed elements to be considered as new memory
-
     Returns: [batch_size]
     """
     # Extract
@@ -804,21 +800,21 @@ def get_cmws_5_loss(
 
     # ASSIGN d_{1:(R + M)} = CONCAT(d'_{1:R}, d_{1:M})
     # [memory_size + num_proposals, batch_size, ...]
-    discrete_latent = cmws.memory.concat(memory.select(obs_id), proposed_discrete_latent)
+    discrete_latent_concat = cmws.memory.concat(memory.select(obs_id), proposed_discrete_latent)
 
     # COMPUTE SCORES s_i = log p(d_i, x) for i  {1, ..., (R + M)}
     # -- c ~ q(c | d, x)
     # [num_particles, memory_size + num_proposals, batch_size, ...]
-    _continuous_latent = guide.sample_continuous(obs, discrete_latent, [num_particles])
+    _continuous_latent = guide.sample_continuous(obs, discrete_latent_concat, [num_particles])
 
     # -- log q(c | d)
     # [num_particles, memory_size + num_proposals, batch_size]
-    _log_q_continuous = guide.log_prob_continuous(obs, discrete_latent, _continuous_latent)
+    _log_q_continuous = guide.log_prob_continuous(obs, discrete_latent_concat, _continuous_latent)
 
     # -- log p(d, c, x)
     # [num_particles, memory_size + num_proposals, batch_size]
     _log_p = generative_model.log_prob_discrete_continuous(
-        discrete_latent, _continuous_latent, obs
+        discrete_latent_concat, _continuous_latent, obs
     )
 
     # [memory_size + num_proposals, batch_size]
@@ -829,26 +825,24 @@ def get_cmws_5_loss(
     # ASSIGN d_{1:M} = TOP_K_UNIQUE(d_{1:(R + M)}, s_{1:(R + M)})
     # [memory_size, batch_size, ...], [memory_size, batch_size]
     discrete_latent_selected, _, indices = cmws.memory.get_unique_and_top_k(
-        discrete_latent, log_marginal_joint, memory.size, return_indices=True
+        discrete_latent_concat, log_marginal_joint, memory.size, return_indices=True
     )
 
     # SELECT log q(c | d, x) and log p(d, c, x)
     # [num_particles, memory_size, batch_size]
-    _log_q_continuous_selected = torch.gather(
+    _log_q_continuous = torch.gather(
         _log_q_continuous, 1, indices[None].expand(num_particles, memory.size, batch_size)
     )
     # [num_particles, memory_size, batch_size]
-    _log_p_selected = torch.gather(_log_p, 1, indices[None].expand(num_particles, memory.size, batch_size))
+    _log_p = torch.gather(_log_p, 1, indices[None].expand(num_particles, memory.size, batch_size))
 
     # COMPUTE WEIGHT
     # [num_particles, memory_size, batch_size]
     _log_weight = _log_p - _log_q_continuous
-    _log_weight_selected = _log_p_selected - _log_q_continuous_selected
 
     # COMPUTE log q(d_i | x) for i in {1, ..., M}
     # [memory_size, batch_size]
-    _log_q_discrete = guide.log_prob_discrete(obs, discrete_latent,)
-    # _log_q_discrete_selected = guide.log_prob_discrete(obs, discrete_latent_selected,)
+    _log_q_discrete = guide.log_prob_discrete(obs, discrete_latent_selected,)
 
     # UPDATE MEMORY with d_{1:M}
     memory.update(obs_id, discrete_latent_selected)
@@ -859,10 +853,12 @@ def get_cmws_5_loss(
 
     # COMPUTE losses
     # --Compute generative model loss
-    # [batch_size]
-    generative_model_loss = -(
-        (torch.softmax(_log_weight_selected, dim=0).detach() * _log_p_selected).sum(dim=0).mean(dim=0)
+    # [num_particles, memory_size, batch_size]
+    _log_weight_v = torch.softmax(_log_weight.view(-1, batch_size), dim=0).view(
+        num_particles, memory.size, batch_size
     )
+    # [batch_size]
+    generative_model_loss = -(_log_weight_v.detach() * _log_p).sum(dim=[0, 1])
 
     # --Compute guide loss
     # ----Compute guide wake loss
@@ -876,19 +872,16 @@ def get_cmws_5_loss(
         )
     # ----Compute guide CMWS loss
     if insomnia > 0.0:
-        _log_weight_normalized = torch.softmax(_log_weight.view(-1, batch_size), dim=0).view(
-            num_particles, memory.size + num_proposals, batch_size
+        # [memory_size, batch_size]
+        _log_weight_omega = torch.logsumexp(_log_weight_v, dim=0)
+        # [batch_size]
+        discrete_guide_loss_cmws = -(_log_weight_omega.detach() * _log_q_discrete).sum(dim=0)
+        # [batch_size]
+        continuous_guide_loss_cmws = -(
+            (torch.softmax(_log_weight, dim=0).detach() * _log_q_continuous).sum(dim=0).mean(dim=0)
         )
         # [batch_size]
-        guide_loss_cmws_discrete = -(
-            (_log_weight_normalized.detach() * _log_q_discrete[None]).sum(dim=[0, 1])
-        )
-        guide_loss_cmws_continuous = - (
-            (torch.softmax(_log_weight, dim=0).detach() * _log_q_continuous)
-            .sum(dim=0)
-            .mean(dim=0)
-        )
-        guide_loss_cmws = guide_loss_cmws_discrete + guide_loss_cmws_continuous
+        guide_loss_cmws = discrete_guide_loss_cmws + continuous_guide_loss_cmws
 
     # ----Combine guide sleep and CMWS losses
     if insomnia == 0.0:

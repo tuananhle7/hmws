@@ -65,7 +65,7 @@ def submit_slurm_job(run_args, logs_dir, job_name, no_repeat=False):
         + f"--gres=gpu:1 "
         # + "--constraint=high-capacity "
         # + f"-p tenenbaum "
-        + "--constraint=14GB "
+        + "--constraint=20GB "
         + "-x node093 "
         + f'-J "{job_name}" '
         + f'-o "{logs_dir}/%j.out" '
