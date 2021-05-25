@@ -520,8 +520,8 @@ def main(args):
                 #         guide,
                 #         obs[mode],
                 #     )
-            filename = f"{save_dir}/logp_{num_iterations}.txt"
-            # calc_log_p(filename, generative_model, guide, device)
+            filename = f"{save_dir}/logp_{run_args.experiment_name}_{run.get_config_name(run_args)}_iter{num_iterations}.txt"
+            calc_log_p(filename, generative_model, guide, device)
 
             plotted_something = True
         else:
@@ -536,14 +536,10 @@ def main(args):
 
 def calc_log_p(filename, generative_model, guide, device):
     # Load Data
-    batch_size = 50
-    train_data_iterator = cmws.examples.timeseries.data.get_timeseries_data_loader(
-            device,
-            batch_size,
-            test=False,
-            full_data=True,
-            synthetic=False,
-        )
+    batch_size = 20
+    train_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+        device, batch_size, test=False, full_data=True, synthetic=False,
+    )
     test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
         device, batch_size, test=True, full_data=True, synthetic=False
     )
@@ -555,9 +551,9 @@ def calc_log_p(filename, generative_model, guide, device):
         out = out + s
         print(s)
 
+    if hasattr(generative_model, 'log_eps_sq'):
+        myprint(f"eps = {generative_model.log_eps_sq.exp().sqrt()}\n")
     for test_num_particles in [10, 100]:
-        if hasattr(generative_model, 'log_eps'):
-            myprint(f"eps = {generative_model.log_eps.exp()}\n")
         myprint(f"log_p with {test_num_particles} particles: ")
 
         log_p, kl = [], []
@@ -573,7 +569,7 @@ def calc_log_p(filename, generative_model, guide, device):
         myprint(f" test= {log_p.mean().item()} ")
 
         log_p, kl = [], []
-        for train_obs, train_obs_id in train_data_iterator:
+        for train_obs, train_obs_id in train_data_loader:
             print(".", end="", flush=True)
             log_p_, kl_ = losses.get_log_p_and_kl(
                 generative_model, guide, train_obs, test_num_particles

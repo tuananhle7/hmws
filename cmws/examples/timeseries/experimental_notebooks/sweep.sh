@@ -6,12 +6,13 @@ for num_particles in 15; do
         for num_proposals_mws in 10; do
            lr_guide_continuous=0.01
            lr_guide_discrete=0.01
-           lr_prior_continuous=0.0
+	   for lr_prior_continuous in 0.0 0.01; do
+           #lr_prior_continuous=0.0
            lr_prior_discrete=0.0
            lr_likelihood=0.01
-            for include_symbols in "WRCPp" "WRCP12345" "WRCP12345Ll" "WRCP12345L!@#$%"; do
+            for include_symbols in  "WRCP12345Ll" "WRCP12345L!@#$%" "WRCP12345LlXabcde" "WRCP12345L!@#$%Xabcde"; do
                 for learn_eps in "--learn-eps" ""; do
-                experiment_name=expt4.2_particles${num_particles}_memory${memory_size}_proposals${num_proposals_mws}_symbols${include_symbols}$learn_eps
+                experiment_name=expt5_particles${num_particles}_memory${memory_size}_proposals${num_proposals_mws}_symbols${include_symbols}$learn_eps
                 algorithm=cmws_4
                 cmd="sbatch $sbatch_args --output=logs/cmws_4_$experiment_name.out ./run.sh $experiment_name $algorithm
                     --continue-training
@@ -62,6 +63,7 @@ for num_particles in 15; do
                 echo $cmd
                 eval $cmd
             done
+          done
         done
     done
 done
