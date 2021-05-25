@@ -50,6 +50,19 @@ class Cube:
     def __repr__(self):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"
 
+class Block:
+    def __init__(self, name, color, size):
+        self.name = name
+        self.color = color
+        self.size = size # [width, length, height]
+
+    @property
+    def device(self):
+        return self.size.device
+
+    def __repr__(self):
+        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist()})"
+
 
 class LearnableCube(nn.Module):
     def __init__(self, name=None, learn_color=True):
@@ -86,6 +99,41 @@ class LearnableCube(nn.Module):
     def __repr__(self):
         return f"{self.name}(color={self.color.tolist()}, size={self.size.item():.1f})"
 
+class LearnableBlock(nn.Module):
+    def __init__(self, name=None, learn_color=True):
+        super().__init__()
+        if name is None:
+            self.name = "LearnableBlock"
+        else:
+            self.name = name
+        self.raw_color = nn.Parameter(torch.randn((3,)),requires_grad=learn_color) # if False, don't learn color
+        self.raw_size = nn.Parameter(torch.randn((3,))) #[width, length, height]
+        self.min_size = 0.2 # for each dimension
+        self.max_size = 1.0
+
+    @property
+    def device(self):
+        return self.raw_size.device
+
+    @property
+    def size(self):
+        return self.raw_size.sigmoid() * (self.max_size - self.min_size) + self.min_size
+
+    @size.setter
+    def size(self, value):
+        self.raw_size.data = util.logit((value - self.min_size) / (self.max_size - self.min_size))
+
+    @property
+    def color(self):
+        return self.raw_color.sigmoid()
+
+    @color.setter
+    def color(self, value):
+        self.raw_color.data = util.logit(value)
+
+    def __repr__(self):
+        return f"{self.name}(color={self.color.tolist()}, size={self.size.tolist()})"
+
 
 def get_cube_mesh(position, size):
     """Computes a cube mesh
@@ -113,6 +161,80 @@ def get_cube_mesh(position, size):
     )
     translation = position.clone()
     translation[-1] += size / 2
+    vertices = centered_vertices * size + translation[None]
+
+    # hardcoded face indices
+    faces = torch.tensor(
+        [
+            1,
+            3,
+            0,
+            4,
+            1,
+            0,
+            0,
+            3,
+            2,
+            2,
+            4,
+            0,
+            1,
+            7,
+            3,
+            5,
+            1,
+            4,
+            5,
+            7,
+            1,
+            3,
+            7,
+            2,
+            6,
+            4,
+            2,
+            2,
+            7,
+            6,
+            6,
+            5,
+            4,
+            7,
+            5,
+            6,
+        ],
+        dtype=torch.int32,
+        device=device,
+    ).view(-1, 3)
+
+    return vertices, faces
+
+def get_block_mesh(position, size):
+    """Computes a rectangular block mesh
+    Adapted from https://github.com/mikedh/trimesh/blob/master/trimesh/creation.py#L566
+
+    Args
+        position [3]
+        size [3] # [width (x), length (z), height (y)]
+
+    Returns
+        vertices [num_vertices, 3]
+        faces [num_faces, 3]
+    """
+    # Extract
+    device = position.device
+
+    # vertices of the cube
+    centered_vertices = (
+        torch.tensor(
+            [0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+            dtype=torch.float,
+            device=device,
+        ).view(-1, 3)
+        - 0.5
+    )
+    translation = position.clone()
+    #translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
     vertices = centered_vertices * size + translation[None]
 
     # hardcoded face indices
@@ -265,7 +387,7 @@ def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, devic
     return verts, faces
 
 
-def render_cube(size, color, position, im_size=32, remove_color=False):
+def render_block(size, color, position, im_size=32, remove_color=False,mode="cube"):
     """Renders a cube given cube specs
 
     Args
@@ -273,20 +395,24 @@ def render_cube(size, color, position, im_size=32, remove_color=False):
         color [3]
         position [3]
         im_size (int)
+        remove_color (= True -- all blocks are same color)
+        mode = type of primitive (e.g., cube, block, etc)
 
     Returns rgb image [im_size, im_size, 3]
     """
     num_cubes = torch.IntTensor([1])
-    imgs = render_cubes(num_cubes[None], size[None,None,None], color[None,None,None], position[None,None,None], im_size, remove_color=remove_color)
+    imgs = render_blocks(num_cubes[None], size[None,None,None], color[None,None,None], position[None,None,None], im_size,
+                         remove_color=remove_color,mode=mode)
     return imgs[0]
 
 
-def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6, remove_color=False):
-    """Renders cubes given cube specs
+def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6, remove_color=False,
+                 mode="cube"):
+    """Renders blocks given cube specs
 
     Args
         num_cubes [batch_size, num_cells]
-        sizes [batch_size, num_cells, max_num_cubes]
+        sizes [batch_size, num_cells, max_num_cubes] (if mode == block, extra dim of size 3)
         colors [batch_size, num_cells, max_num_cubes, 3]
         positions [batch_size, num_cells, max_num_cubes, 3]
         im_size (int)
@@ -298,6 +424,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 
     # Extract
     device = sizes.device
+
+    print("SIZES: ", sizes.shape)
 
     # Create camera
     R, T = look_at_view_transform(3.7, 0.1, 180, at=((-0.15, 0.0, 0.1),),)
@@ -353,15 +481,16 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
             if n_cubes == 0: continue # empty cell
             for i, (position, size,color) in enumerate(zip(positions[batch_idx, cell_idx, :n_cubes, :], sizes[batch_idx, cell_idx, :n_cubes],
                                                            colors[batch_idx, cell_idx, :n_cubes, :])):
-                cube_vertices, cube_faces = get_cube_mesh(position, size)
+                if mode == "cube": primitive_vertices, primitive_faces = get_cube_mesh(position, size)
+                else: primitive_vertices, primitive_faces = get_block_mesh(position, size)
                 # For now, apply same color to each mesh vertex (v \in V)
-                if remove_color: texture = torch.ones_like(cube_vertices) * torch.tensor([0,0,0.8]).to(device) # soft blue
-                else: texture = torch.ones_like(cube_vertices) * color# [V, 3]
+                if remove_color: texture = torch.ones_like(primitive_vertices) * torch.tensor([0,0,0.8]).to(device) # soft blue
+                else: texture = torch.ones_like(primitive_vertices) * color# [V, 3]
                 # Offset faces (account for diff indexing, b/c treating as one mesh)
-                cube_faces = cube_faces + vert_offset
-                vert_offset += cube_vertices.shape[0]
-                vertices.append(cube_vertices)
-                faces.append(cube_faces)
+                primitive_faces = primitive_faces + vert_offset
+                vert_offset += primitive_vertices.shape[0]
+                vertices.append(primitive_vertices)
+                faces.append(primitive_faces)
                 textures.append(texture)
 
         # Concatenate data into single mesh
@@ -405,7 +534,8 @@ def render_cubes(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, g
 
 
 def convert_raw_locations(
-    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols
+    raw_locations, stacking_program, primitives, cell_idx, num_rows, num_cols, mode="cube",
+        shrink_factor=0.01
 ):
     """
     Args
@@ -448,13 +578,20 @@ def convert_raw_locations(
 
     min_x = cell_x_min
     max_x = cell_x_max
-    shrink_factor = 0.4
+    shrink_factor = shrink_factor#0.4
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
-        size = primitives[primitive_id].size
+        # size hack for primitives
+        if mode == "block":
+            size = primitives[primitive_id].size # [width (x), length (z), height (y)]
+            x_size = size[0]
+            y_size = size[1] * 0.9
+        else:
+            x_size = primitives[primitive_id].size # same scalar
+            y_size = primitives[primitive_id].size
 
-        min_x = min_x - size
+        min_x = min_x - x_size
 
         new_min = min_x + (1 - shrink_factor) * (max_x - min_x) / 2
         new_max = max_x - (1 - shrink_factor) * (max_x - min_x) / 2
@@ -462,13 +599,14 @@ def convert_raw_locations(
 
         locations.append(torch.stack([x, y, z]))
 
-        y = y + size
+        y = y + y_size
         min_x = x
-        max_x = min_x + size
+        max_x = min_x + x_size
     return torch.stack(locations)
 
 
-def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
+def convert_raw_locations_batched(raw_locations, stacking_program, primitives, mode="cube",
+                                  shrink_factor=0.01):
     """
     Args
         raw_locations (tensor [*shape, num_grid_rows, num_grid_cols, max_num_blocks])
@@ -498,7 +636,9 @@ def convert_raw_locations_batched(raw_locations, stacking_program, primitives):
                         primitives,
                         (int(col), int(row)),
                         num_grid_rows,
-                        num_grid_cols
+                        num_grid_cols,
+                        mode=mode,
+                        shrink_factor=shrink_factor
                     )
                 )
     return torch.stack(locations_batched).view(*[*shape, num_grid_rows * num_grid_cols * max_num_blocks, 3])
@@ -511,7 +651,7 @@ def convert_raw_sigma(sigma):
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
-    sigma=1e-10, gamma=1e-6, remove_color=False
+    sigma=1e-10, gamma=1e-6, remove_color=False, mode="cube", shrink_factor=0.01
 ):
     """
     Args
@@ -542,7 +682,7 @@ def render(
     square_color = torch.stack([primitive.color for primitive in primitives])
 
     # Convert [*shape, max_num_blocks, 3]
-    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives)
+    locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives, mode, shrink_factor)
 
     # Flatten
     # num_blocks_flattened = torch.sum(num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols)),axis=1)
@@ -551,8 +691,8 @@ def render(
     stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols, max_num_blocks))
     locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols, max_num_blocks, 3))
 
-    imgs = render_cubes(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
-                        sigma,gamma, remove_color=remove_color)
+    imgs = render_blocks(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
+                        sigma,gamma, remove_color=remove_color, mode=mode)
     imgs = imgs.permute(0, 3, 1, 2)
 
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])

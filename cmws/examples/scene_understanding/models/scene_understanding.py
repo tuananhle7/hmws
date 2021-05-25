@@ -17,7 +17,9 @@ class GenerativeModel(nn.Module):
         im_size=128,
         obs_scale=1.0,
         obs_dist_type="normal",
-        remove_color=False
+        remove_color=False,
+        mode="cube",
+        shrink_factor=0.01
     ):
         super().__init__()
 
@@ -30,15 +32,22 @@ class GenerativeModel(nn.Module):
         self.im_size = im_size
         self.obs_scale = obs_scale
         self.remove_color = remove_color
+        self.mode = mode
+        self.shrink_factor= shrink_factor
         if obs_dist_type == "normal":
             self.obs_dist = torch.distributions.Normal
         elif obs_dist_type == "laplace":
             self.obs_dist = torch.distributions.Laplace
 
         # Primitive parameters (parameters of symbols)
-        self.primitives = nn.ModuleList(
-            [render.LearnableCube(f"{i}", learn_color=not remove_color) for i in range(self.num_primitives)]
-        )
+        if self.mode == "cube":
+            self.primitives = nn.ModuleList(
+                [render.LearnableCube(f"{i}", learn_color=not remove_color) for i in range(self.num_primitives)]
+            )
+        else: # for now, just "block" alternative
+            self.primitives = nn.ModuleList(
+                [render.LearnableBlock(f"{i}", learn_color=not remove_color) for i in range(self.num_primitives)]
+            )
 
         # Rendering parameters
         self.sigma = nn.Parameter(torch.randn(()))
@@ -173,6 +182,8 @@ class GenerativeModel(nn.Module):
         # Extract stuff
         num_blocks, stacking_program, raw_locations = latent
 
+        print("raw locations OBS: ", raw_locations.shape)
+
         # Add blocks
         num_blocks_clone = num_blocks.clone().detach()
         zero_blocks = num_blocks_clone.sum([-1, -2]) == 0
@@ -188,7 +199,9 @@ class GenerativeModel(nn.Module):
             im_size=self.im_size,
             sigma=self.sigma,
             gamma=self.gamma,
-            remove_color=self.remove_color
+            remove_color=self.remove_color,
+            mode=self.mode,
+            shrink_factor=self.shrink_factor
         )
 
     def log_prob(self, latent, obs):

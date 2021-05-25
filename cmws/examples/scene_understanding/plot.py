@@ -48,6 +48,157 @@ def plot_stats(path, stats):
 
     util.save_fig(fig, path)
 
+# from: https://github.com/tuananhle7/continuous_mws/blob/master/cmws/examples/timeseries/plot.py#L244
+def plot_with_error_bars(ax, x, data, **plot_kwargs):
+    mid = np.nanmedian(data, axis=0)
+    low = np.nanpercentile(data, 25, axis=0)
+    high = np.nanpercentile(data, 75, axis=0)
+
+    num_not_nan = np.count_nonzero(~np.isnan(mid))
+
+    if num_not_nan > 0:
+        lines = ax.plot(x[:num_not_nan], mid[:num_not_nan], **plot_kwargs)
+        ax.fill_between(
+            x[:num_not_nan],
+            low[:num_not_nan],
+            high[:num_not_nan],
+            alpha=0.2,
+            color=lines[0].get_color(),
+        )
+
+def get_analysis_plots(experiment_name, grid_sizes=[2, 3], cmws_version="cmws_2"):
+    save_dir = f"../save/{experiment_name}"
+    checkpoint_paths = []
+    for config_name in sorted(os.listdir(save_dir)):
+        checkpoint_paths.append(util.get_checkpoint_path(experiment_name, config_name, -1))
+
+    for grid_size in grid_sizes:  # grid size
+        fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+
+        colors = {cmws_version: "C0", "rws": "C1"}
+        added_label = {k: False for k in colors.keys()}  # keep track of whether we've used alg as label
+        for checkpoint_path in checkpoint_paths:
+            checkpoint_path = f"../{checkpoint_path}"
+
+            # Fix seed
+            util.set_seed(1)
+
+            if os.path.exists(checkpoint_path):
+                # Load checkpoint
+                try:
+                    model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
+                        checkpoint_path, device="cpu"
+                    )
+                except:
+                    continue
+
+                if run_args.num_grid_cols != grid_size: continue
+
+                generative_model, guide = model["generative_model"], model["guide"]
+                num_iterations = len(stats.losses)
+
+                if not added_label[run_args.algorithm]:
+                    label = run_args.algorithm
+                    added_label[run_args.algorithm] = True
+                else:
+                    label = None
+                color = colors[run_args.algorithm]
+                plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
+
+                # Logp
+                ax = axs[0]
+                ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps], **plot_kwargs)
+
+                # KL
+                ax = axs[1]
+                ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
+        ax = axs[0]
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Log p")
+
+        ax = axs[1]
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("KL")
+        ax.legend()
+        for ax in axs:
+            sns.despine(ax=ax, trim=True)
+        util.save_fig(fig, f"{save_dir}/losses_{grid_size}.png", dpi=200)
+
+    for grid_size in grid_sizes:  # grid size
+        # Load
+        x = []
+        log_ps = {cmws_version: [], "cmws": [], "rws": []}
+        kls = {cmws_version: [], "cmws": [], "rws": []}
+        colors = {cmws_version: "C0", "rws": "C1"}
+        for checkpoint_path in checkpoint_paths:
+            checkpoint_path = f"../{checkpoint_path}"
+            if os.path.exists(checkpoint_path):
+                # Load checkpoint
+                try:
+                    model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
+                        checkpoint_path, device="cpu"
+                    )
+                except:
+                    continue
+                if run_args.num_grid_cols != grid_size: continue
+                x_new = [x[0] for x in stats.log_ps]
+                if len(x_new) > len(x):
+                    x = x_new
+                log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
+                kls[run_args.algorithm].append([x[1] for x in stats.kls])
+        # Make numpy arrays
+        max_len = len(x)
+        if grid_size == 2:
+            num_seeds = 5  # 10
+        else:
+            num_seeds = 5
+        algorithms = [cmws_version, "rws"]
+        log_ps_np = dict(
+            [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
+        )
+        kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
+        for algorithm in algorithms:
+            for seed in range(num_seeds):
+                try:
+                    log_p = log_ps[algorithm][seed]
+                    kl = kls[algorithm][seed]
+                except Exception:
+                    log_p = []
+                    kl = []
+                log_ps_np[algorithm][seed][: len(log_p)] = log_p
+                kls_np[algorithm][seed][: len(kl)] = kl
+
+        # Plot
+        fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+        for algorithm in algorithms:
+            label = algorithm
+            linestyle = "solid"
+            color = colors[algorithm]
+            plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
+
+            # Logp
+            log_p = log_ps_np[algorithm]
+            ax = axs[0]
+            plot_with_error_bars(ax, x, log_p, **plot_kwargs)
+
+            # KL
+            kl = kls_np[algorithm]
+            ax = axs[1]
+            plot_with_error_bars(ax, x, kl, **plot_kwargs)
+
+        ax = axs[0]
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Log p")
+        ax.legend()
+
+        ax = axs[1]
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("KL")
+        ax.legend()
+        for ax in axs:
+            sns.despine(ax=ax, trim=True)
+        util.save_fig(fig, f"{save_dir}/losses_{grid_size}_overlay.png", dpi=200)
+
 
 def latent_to_str(latent):
     num_blocks, stacking_program, raw_locations = latent
@@ -64,6 +215,37 @@ def latent_to_str(latent):
         latent_str.append("|".join(tmp))
 
     return "\n".join(latent_str)
+
+def plot_memory_scene_understanding(path, generative_model, guide, memory, obs, obs_id):
+    # modified from: https://github.com/tuananhle7/continuous_mws/blob/master/cmws/examples/timeseries/plot.py#L87-L102
+    obs = obs.squeeze(1)
+    num_test_obs, num_channels, im_size, _ = obs.shape
+    im_size = 256
+    num_samples = 1
+
+    num_particles = memory.size
+    latent, log_weight = util.importance_sample_memory(
+        num_particles, obs, obs_id, generative_model, guide, memory, im_size
+    )
+
+    num_blocks, stacking_program, raw_locations = latent
+
+    # Sort by log weight
+    # [num_test_obs, num_particles], [num_test_obs, num_particles]
+    _, sorted_indices = torch.sort(log_weight.T, descending=True)
+
+    # Sample predictions
+    # -- Expand obs
+    obs_expanded = obs[None].expand(num_particles, num_test_obs, 3, im_size, im_size)
+
+    # -- Sample predictions
+    obs_predictions = generative_model.sample_obs_predictions(latent, obs_expanded, [num_samples])
+    predictive_dist = generative_model.get_predictive_dist(latent, obs_expanded)
+    predictive_mean = predictive_dist.loc
+    predictive_std = predictive_dist.covariance_matrix.diagonal(dim1=-2, dim2=-1).sqrt()
+    predictive_low = predictive_mean - 2 * predictive_std
+    predictive_high = predictive_mean + 2 * predictive_std
+
 
 
 def plot_reconstructions_scene_understanding(path, generative_model, guide, obs):
@@ -133,7 +315,7 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     util.save_fig(fig, path, dpi=300)
 
 
-def plot_primitives_scene_understanding(path, generative_model, remove_color=False):
+def plot_primitives_scene_understanding(path, generative_model, remove_color=False, mode="cube"):
     device = generative_model.device
     im_size = generative_model.im_size
     hi_res_im_size = 256
@@ -152,19 +334,21 @@ def plot_primitives_scene_understanding(path, generative_model, remove_color=Fal
 
     for i in range(generative_model.num_primitives):
         util.logging.info(f"Primitive {i} = {generative_model.primitives[i]}")
-        obs = render.render_cube(
+        obs = render.render_block(
             generative_model.primitives[i].size,
             generative_model.primitives[i].color,
             location,
             im_size=im_size,
-            remove_color=remove_color
+            remove_color=remove_color,
+            mode=mode
         )
-        obs_high_res = render.render_cube(
+        obs_high_res = render.render_block(
             generative_model.primitives[i].size,
             generative_model.primitives[i].color,
             location,
             im_size=hi_res_im_size,
-            remove_color=remove_color
+            remove_color=remove_color,
+            mode=mode
         )
         axss[0, i].imshow(obs.cpu())
         axss[1, i].imshow(obs_high_res.cpu())
@@ -210,9 +394,10 @@ def main(args):
             # NOTE: Plotting the train dataset only
             train_dataset = data.SceneUnderstandingDataset(
                 device, run_args.num_grid_rows, run_args.num_grid_cols, test=False,
-                remove_color=(run_args.remove_color == 1)
+                remove_color=(run_args.remove_color == 1),
+                mode=run_args.mode
             )
-            obs, _ = train_dataset[:10]
+            obs, obs_id = train_dataset[:10]
 
             # Plot
             if run_args.model_type == "scene_understanding":
@@ -223,7 +408,8 @@ def main(args):
                     obs
                 )
                 plot_primitives_scene_understanding(
-                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (run_args.remove_color == 1)
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (run_args.remove_color == 1),
+                    run_args.mode
                 )
 
         else:
