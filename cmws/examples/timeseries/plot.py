@@ -329,6 +329,7 @@ def plot_comparison(path, checkpoint_paths):
     log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    num_iterations = 1000
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
             # Load checkpoint
@@ -340,6 +341,7 @@ def plot_comparison(path, checkpoint_paths):
                 x = x_new
             log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
             kls[run_args.algorithm].append([x[1] for x in stats.kls])
+            num_iterations = run_args.num_iterations
 
     # Make numpy arrays
     max_len = len(x)
@@ -382,14 +384,14 @@ def plot_comparison(path, checkpoint_paths):
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
     ax.set_ylim(-100, 100)
-    ax.set_xlim(0, run_args.num_iterations)
+    ax.set_xlim(0, num_iterations)
     ax.legend()
 
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
     ax.set_ylim(0, 1000000)
-    ax.set_xlim(0, run_args.num_iterations)
+    ax.set_xlim(0, num_iterations)
     ax.legend()
     for ax in axs:
         # ax.set_xlim(0, 20000)
