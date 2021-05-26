@@ -367,6 +367,8 @@ def train(model, optimizer, stats, args):
                 f"Log p = {stats.log_ps[-1][1]:.0f} | KL = {stats.kls[-1][1]:.0f} | "
                 f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
             )
+            if hasattr(generative_model, 'log_eps_sq'):
+                print(f"eps = {generative_model.log_eps_sq.exp().sqrt()}\n")
         else:
             util.logging.info(
                 f"Iteration {iteration} | Loss = {stats.losses[-1]:.0f}"
