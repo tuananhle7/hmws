@@ -15,7 +15,7 @@ for num_particles in 3; do
 		   experiment_name=expt8_K${num_particles}_M${memory_size}_N${num_proposals_mws}_symbols${include_symbols}_lrc=${lr_prior_continuous}$learn_eps
 		   for seed in 1 2; do
 			algorithm=cmws_5
-			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm
+			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm $seed
 			    --continue-training
 			    --num-particles=$num_particles
 			    --full-training-data
@@ -32,14 +32,13 @@ for num_particles in 3; do
 			    --lr-sleep-pretraining=0.01
 			    --num-sleep-pretraining-iterations=1000
 			    --include-symbols=$include_symbols
-                            --seed=$seed
 			    $learn_eps"
 			echo $cmd
 			eval $cmd
 
 			total_num_particles=`expr $num_particles \* \( $memory_size + $num_proposals_mws \)`
 			algorithm=rws
-			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm
+			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm $seed
 			    --continue-training
 			    --num-particles=$total_num_particles
 			    --full-training-data
@@ -54,7 +53,6 @@ for num_particles in 3; do
 			    --lr-sleep-pretraining=0.01
 			    --num-sleep-pretraining-iterations=1000
 			    --include-symbols=$include_symbols
-			    --seed=$seed
 			    $learn_eps"
 			echo $cmd
 			eval $cmd
