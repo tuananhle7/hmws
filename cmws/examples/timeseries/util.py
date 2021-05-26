@@ -14,8 +14,8 @@ from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
 include_scale = False
-def init_symbols(include_symbols):
-    global base_kernel_chars, char_to_long_char, char_to_num, num_to_char, gp_params_dim, param_idxs, vocabulary_size
+def init_model_util(include_symbols, allow_repeat_factors):
+    global base_kernel_chars, char_to_long_char, char_to_num, num_to_char, gp_params_dim, param_idxs, vocabulary_size, exclusive_ops
     if include_scale:
         raise NotImplementedError()
         base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
@@ -49,7 +49,8 @@ def init_symbols(include_symbols):
 
     vocabulary_size = len(char_to_num)
 
-exclusive_ops = ["Constant", "ExpSinSq", "Cosine"]
+    if not allow_repeat_factors:
+        exclusive_ops = ["Constant", "ExpSinSq", "Cosine"]
 
 def get_raw_expression(expression, device):
     """
@@ -406,7 +407,7 @@ class Kernel(nn.Module):
 def init(run_args, device, fast=False):
     memory = None
     if run_args.model_type == "timeseries":
-        init_symbols(run_args.include_symbols)
+        init_model_util(run_args.include_symbols, getattr(run_args, "allow_repeat_factors", False))
 
         # Generative model
         generative_model = timeseries.GenerativeModel(

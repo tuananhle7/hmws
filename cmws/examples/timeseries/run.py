@@ -58,6 +58,7 @@ def get_args_parser():
     parser.add_argument(
         "--model-type", default="timeseries", choices=["timeseries",], help=" ",
     )
+    parser.add_argument("--allow_repeat_factors", action="store_true", help=" ")
 
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
