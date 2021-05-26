@@ -12,7 +12,7 @@ class GenerativeModel(nn.Module):
     """
     """
 
-    def __init__(self, max_num_chars, lstm_hidden_dim, learn_eps=False):
+    def __init__(self, max_num_chars, lstm_hidden_dim, learn_eps=False, learn_coarse=False):
         super().__init__()
         self.max_num_chars = max_num_chars
         self.lstm_hidden_dim = lstm_hidden_dim
@@ -36,6 +36,16 @@ class GenerativeModel(nn.Module):
         self.learn_eps = learn_eps
         if self.learn_eps:
             self.log_eps_sq = nn.Parameter(torch.Tensor([-6]))
+
+        self.learn_coarse = learn_coarse
+        if self.learn_coarse:
+            self.coarse_params = nn.ParameterDict({
+                "P": nn.Parameter(torch.zeros(11)),
+                "X": nn.Parameter(torch.zeros(11)),
+                "L": nn.Parameter(torch.zeros(11))
+            })
+        else:
+            self.coarse_params = None
 
     @property
     def device(self):
@@ -299,6 +309,7 @@ class GenerativeModel(nn.Module):
                             element_id,
                             : num_base_kernels_flattened[sample_id, element_id],
                         ],
+                        coarse_params=self.coarse_params,
                     )(x_1, x_2)[0]
                 except timeseries_util.ParsingError:
                     covariance_matrix_se = identity_matrix
@@ -472,6 +483,7 @@ class GenerativeModel(nn.Module):
                 covariance_matrix_se = timeseries_util.Kernel(
                     timeseries_util.get_expression(raw_expression_se),
                     raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                    coarse_params=self.coarse_params,
                 )(x_1, x_2)[0]
             except timeseries_util.ParsingError:
                 covariance_matrix_se = identity_matrix * 1e-6
@@ -582,6 +594,7 @@ class GenerativeModel(nn.Module):
                 covariance_matrix_se = timeseries_util.Kernel(
                     timeseries_util.get_expression(raw_expression_se),
                     raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                    coarse_params=self.coarse_params,
                 )(x_1, x_2)[0]
             except timeseries_util.ParsingError:
                 covariance_matrix_se = identity_matrix * 1e-6

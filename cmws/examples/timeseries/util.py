@@ -172,7 +172,7 @@ class Kernel(nn.Module):
             raw_params[i, 7] raw_offset (Linear)
     """
 
-    def __init__(self, expression, raw_params, mean_prior_sd=0.1):
+    def __init__(self, expression, raw_params, mean_prior_sd=0.1, coarse_params=None):
         super().__init__()
         self.expression = expression
         self.index = 0
@@ -183,6 +183,7 @@ class Kernel(nn.Module):
 
         self.value = self.getValue()
         self.mean_prior_sd = mean_prior_sd
+        self.coarse_params = coarse_params
 
     @property
     def device(self):
@@ -300,10 +301,18 @@ class Kernel(nn.Module):
                     period_limits = (1/100, 1)
                 else:
                     coarse_symbols = [x for x in "1234567890" if x in base_kernel_chars]
-                    period_limits = (
-                        100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                        100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
-                    )
+
+                    if self.coarse_params is None:
+                        period_limits = (
+                            100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                            100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                        )
+                    else:
+                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum()-1)/len(coarse_symbols))
+                        lower = coarse_params[coarse_symbols.index(char)]
+                        upper = coarse_params[coarse_symbols.index(char)+1]
+                        period_limits = (lower, upper)
+
                 period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
                 lengthscale_sq = F.softplus(p[1]) * period
                 self.params.append([period.item(), lengthscale_sq.item()])
@@ -313,10 +322,16 @@ class Kernel(nn.Module):
                     period_limits = (1/100, 1)
                 else:
                     coarse_symbols = [x for x in "abcdefghij" if x in base_kernel_chars]
-                    period_limits = (
-                        100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                        100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
-                    )
+                    if self.coarse_params is None:
+                        period_limits = (
+                            100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                            100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                        )
+                    else:
+                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum()-1)/len(coarse_symbols))
+                        lower = coarse_params[coarse_symbols.index(char)]
+                        upper = coarse_params[coarse_symbols.index(char)+1]
+                        period_limits = (lower, upper)
                 period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
                 self.params.append([period.item()])
                 return {"op": "Cosine", "period": period}
@@ -329,10 +344,20 @@ class Kernel(nn.Module):
                     offset_limits = (-0.5, 1.5)
                 else:
                     coarse_symbols = [x for x in "mnopqrstuv" if x in base_kernel_chars]
-                    offset_limits = (
-                        -0.5 + 2*coarse_symbols.index(char)/len(coarse_symbols),
-                        -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
-                    )
+                    if self.coarse_params is None:
+                        offset_limits = (
+                            -0.5 + 2*coarse_symbols.index(char)/len(coarse_symbols),
+                            -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
+                        )
+                    else:
+                        coarse_params = 0.5 + self.coarse_params['L'][0] + 2 * torch.cat(
+                            torch.zeros(1),
+                            (self.coarse_params['L'][1:].exp().cumsum())/len(coarse_symbols)
+                        )
+                        lower = coarse_params[coarse_symbols.index(char)]
+                        upper = coarse_params[coarse_symbols.index(char)+1]
+                        offset_limits = (lower, upper)
+
                 offset = offset_limits[0] + torch.sigmoid(p[0])*(offset_limits[1]-offset_limits[0])
                 self.params.append(offset.item())
                 return {"op": "Linear",  "offset": offset}  
@@ -414,7 +439,8 @@ def init(run_args, device, fast=False):
         # Generative model
         generative_model = timeseries.GenerativeModel(
             max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim,
-	    learn_eps=getattr(run_args, 'learn_eps', False)
+            learn_eps=getattr(run_args, 'learn_eps', False),
+            learn_coarse=getattr(run_args, 'learn_coarse', False)
         ).to(device)
 
         # Guide
@@ -456,7 +482,10 @@ def init(run_args, device, fast=False):
     
         prior_continuous_params = [*generative_model.gp_params_lstm.parameters(), *generative_model.gp_params_extractor.parameters()]
         prior_discrete_params = [*generative_model.expression_lstm.parameters(), *generative_model.expression_extractor.parameters()]
-        likelihood_params = [generative_model.log_eps_sq] if generative_model.learn_eps else []
+        likelihood_params = [
+            *([generative_model.log_eps_sq] if generative_model.learn_eps else []),
+            *(generative_model.coarse_params.values() if generative_model.learn_coarse else [])
+        ]
     
         assert len(set(guide.parameters()) - set([*guide_continuous_params, *guide_discrete_params])) == 0
         assert len(set(generative_model.parameters()) - set([*prior_continuous_params, *prior_discrete_params, *likelihood_params])) == 0
