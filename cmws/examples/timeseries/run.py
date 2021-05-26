@@ -35,7 +35,18 @@ def get_args_parser():
     parser.add_argument(
         "--algorithm",
         default="rws",
-        choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3", "cmws_4", "cmws_5"],
+        choices=[
+            "rws",
+            "elbo",
+            "vimco",
+            "vimco_2",
+            "cmws",
+            "cmws_2",
+            "cmws_3",
+            "cmws_4",
+            "cmws_5",
+            "reinforce",
+        ],
         help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")

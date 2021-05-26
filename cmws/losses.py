@@ -234,6 +234,61 @@ def get_vimco_loss(generative_model, guide, obs, num_particles):
     return loss
 
 
+def get_vimco_2_loss(generative_model, guide, obs, num_particles):
+    """Almost twice faster version of VIMCO loss (measured for batch_size = 24,
+        num_particles = 1000). Inspired by Adam Kosiorek's implementation.
+
+    Args:
+        generative_model
+        guide
+        obs [batch_size, *obs_dims]
+        num_particles: int
+
+    Returns: [batch_size]
+    """
+    # Sample from guide
+    # [num_particles, batch_size, ...]
+    discrete_latent = guide.sample_discrete(obs, (num_particles,))
+    continuous_latent = guide.rsample_continuous(obs, discrete_latent)
+    # TODO: make this general
+    latent = discrete_latent[0], discrete_latent[1], continuous_latent
+
+    # Evaluate log probs
+    # [num_particles, batch_size]
+    guide_log_prob_discrete = guide.log_prob_discrete(obs, discrete_latent)
+    # [num_particles, batch_size]
+    guide_log_prob_continuous = guide.log_prob_continuous(obs, discrete_latent, continuous_latent)
+    # [num_particles, batch_size]
+    guide_log_prob = guide_log_prob_discrete + guide_log_prob_continuous
+    # [num_particles, batch_size]
+    generative_model_log_prob = generative_model.log_prob(latent, obs)
+
+    # Compute log weight
+    # [batch_size, num_particles]
+    log_weight = generative_model_log_prob - guide_log_prob
+
+    # shape [num_particles, batch_size]
+    # log_weight_[b, k] = 1 / (K - 1) \sum_{\ell \neq k} \log w_{b, \ell}
+    log_weight_ = (torch.sum(log_weight, dim=0, keepdim=True) - log_weight) / (num_particles - 1)
+
+    # shape [batch_size, num_particles, num_particles]
+    # temp[b, k, k_] =
+    #     log_weight_[b, k]     if k == k_
+    #     log_weight[b, k]      otherwise
+    temp = log_weight.unsqueeze(-1) + torch.diag_embed(log_weight_ - log_weight)
+
+    # this is the \Upsilon_{-k} term below equation 3
+    # shape [batch_size, num_particles]
+    control_variate = torch.logsumexp(temp, dim=1) - math.log(num_particles)
+
+    log_evidence = torch.logsumexp(log_weight, dim=1) - math.log(num_particles)
+    loss = -log_evidence - torch.sum(
+        (log_evidence.unsqueeze(-1) - control_variate).detach() * guide_log_prob_discrete, dim=1
+    )
+
+    return loss
+
+
 @torch.no_grad()
 def get_log_p_and_kl(generative_model, guide, obs, num_particles):
     """Estimates log marginal likelihood and KL using importance sampling

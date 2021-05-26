@@ -242,6 +242,10 @@ def train(model, optimizer, stats, args):
                 loss = losses.get_vimco_loss(
                     generative_model, guide, obs, args.num_particles
                 ).mean()
+            elif args.algorithm == "vimco_2":
+                loss = losses.get_vimco_2_loss(
+                    generative_model, guide, obs, args.num_particles
+                ).mean()
             elif args.algorithm == "reinforce":
                 loss = losses.get_reinforce_loss(
                     generative_model, guide, obs, args.num_particles
