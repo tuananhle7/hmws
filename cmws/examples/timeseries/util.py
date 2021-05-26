@@ -49,7 +49,9 @@ def init_model_util(include_symbols, allow_repeat_factors):
 
     vocabulary_size = len(char_to_num)
 
-    if not allow_repeat_factors:
+    if allow_repeat_factors:
+        exclusive_ops = []
+    else:
         exclusive_ops = ["Constant", "ExpSinSq", "Cosine"]
 
 def get_raw_expression(expression, device):
