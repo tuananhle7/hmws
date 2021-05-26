@@ -481,7 +481,25 @@ def main(args):
                     )
                 # Plot predictions
                 if memory is not None:
-                    if args.long:
+                    # Short
+                    num_particles = run_args.num_particles
+                    filename = f"{save_dir}/predictions/train/memory/{num_iterations}_{num_particles}particles.png"
+                    if pathlib.Path(filename).is_file():
+                        print(f"{filename} already exists. Skipping")
+                    else:
+                        plot_predictions_timeseries(
+                            filename,
+                            generative_model,
+                            guide,
+                            obs["train"],
+                            memory,
+                            obs_id,
+                            seed=1,
+                            num_particles=num_particles,
+                        )
+
+                    # Long
+                    if num_iterations >= run_args.num_iterations:
                         num_particles = 100
                         filename = f"{save_dir}/predictions/train/memory/{num_iterations}iter_{num_particles}particles.png"
                         if pathlib.Path(filename).is_file():
@@ -497,22 +515,6 @@ def main(args):
                                 seed=1,
                                 num_particles=num_particles
                             )
-                    else:
-                        num_particles = run_args.num_particles
-                        filename = f"{save_dir}/predictions/train/memory/{num_iterations}_{num_particles}particles.png"
-                        if pathlib.Path(filename).is_file():
-                            print(f"{filename} already exists. Skipping")
-                        else:
-                            plot_predictions_timeseries(
-                                filename,
-                                generative_model,
-                                guide,
-                                obs["train"],
-                                memory,
-                                obs_id,
-                                seed=1,
-                                num_particles=num_particles,
-                            )
                 # for mode in ["train", "test"]:
                 #     plot_predictions_timeseries(
                 #         f"{save_dir}/predictions/{mode}/guide/{num_iterations}.png",
@@ -520,8 +522,9 @@ def main(args):
                 #         guide,
                 #         obs[mode],
                 #     )
-            filename = f"{save_dir}/logp_{run_args.experiment_name}_{run.get_config_name(run_args)}_iter{num_iterations}.txt"
-            calc_log_p(filename, generative_model, guide, device)
+            if num_iterations >= run_args.num_iterations:
+                filename = f"{save_dir}/logp_{run_args.experiment_name}_{run.get_config_name(run_args)}_iter{num_iterations}.txt"
+                calc_log_p(filename, generative_model, guide, device)
 
             plotted_something = True
         else:
@@ -611,10 +614,10 @@ if __name__ == "__main__":
                 if plotted_something:
                     if num_iterationss == num_iterationss_prev:
                         print("Finished plotting.")
-                        if not args.long:
-                            print("Running once more with --long")
-                            args.long = True
-                            main(args)
+                        # if not args.long:
+                        # print("Running once more with --long")
+                        # args.long = True
+                        #main(args)
                         print("Exiting")
                         break
                     else:
