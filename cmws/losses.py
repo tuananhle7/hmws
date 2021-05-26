@@ -164,22 +164,21 @@ def get_reinforce_loss(generative_model, guide, obs, num_particles):
     # TODO: make this general
     latent = discrete_latent[0], discrete_latent[1], continuous_latent
 
-    # Expand obs to [num_particles, batch_size, *obs_dims]
-    batch_size = obs.shape[0]
-    obs_dims = obs.shape[1:]
-    obs_expanded = obs[None].expand(*[num_particles, batch_size, *obs_dims])
-
     # Evaluate log probs
     # [num_particles, batch_size]
-    guide_log_prob = guide.log_prob(obs_expanded, latent)
+    guide_log_prob_discrete = guide.log_prob_discrete(obs, discrete_latent)
     # [num_particles, batch_size]
-    generative_model_log_prob = generative_model.log_prob(latent, obs_expanded)
+    guide_log_prob_continuous = guide.log_prob_continuous(obs, discrete_latent, continuous_latent)
+    # [num_particles, batch_size]
+    guide_log_prob = guide_log_prob_discrete + guide_log_prob_continuous
+    # [num_particles, batch_size]
+    generative_model_log_prob = generative_model.log_prob(latent, obs)
 
     # Compute log weight
     # [batch_size, num_particles]
     log_weight = generative_model_log_prob - guide_log_prob
 
-    return -(log_weight.detach() * guide_log_prob + log_weight).mean(dim=1)
+    return -(log_weight.detach() * guide_log_prob_discrete + log_weight).mean(dim=1)
 
 
 def get_vimco_loss(generative_model, guide, obs, num_particles):
