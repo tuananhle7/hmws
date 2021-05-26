@@ -24,14 +24,23 @@ def init_symbols(include_symbols):
         num_to_char = dict([(v, k) for k, v in char_to_num.items()])
         gp_params_dim = 8
     else:
-        base_kernel_chars = {"W", "R", "C", "p", "1", "2", "3", "4", "5", "x", "a", "b", "c", "d", "e", "l", "!", "@", "#", "$", "%"}
+        base_kernel_chars = {"W", "R", "C",
+                             "_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", #Periodic
+                             "x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", #Cosine
+                             "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v"}
         base_kernel_chars = {x for x in base_kernel_chars if x in include_symbols}
-        char_to_long_char = {"W": "WN", "R": "SE", "C": "const", "p":"Per", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "x":"Cos", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "l":"Lin", "!":"Lin1", "@":"Lin2", "#":"Lin3", "$":"Lin4", "%":"Lin5"}
+        char_to_long_char = {"W": "WN", "R": "SE", "C": "const",
+                             "_":"Per", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "6":"Per6", "7":"Per7", "8":"Per8", "9":"Per9", "0":"Per10",
+                             "x":"Cos", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "f":"Cos6", "g":"Cos7", "h":"Cos8", "i":"Cos9", "j":"Cos10",
+                             "l":"Lin", "m":"Lin1", "n":"Lin2", "o":"Lin3", "p":"Lin4", "q":"Lin5", "r":"Lin6", "s":"Lin7", "t":"Lin8", "u":"Lin9", "v":"Lin10"}
         char_to_long_char = {k:v for k,v in char_to_long_char.items() if k in include_symbols}
         char_to_num = {k:i for i,k in enumerate(["+", "*", *sorted(base_kernel_chars)])}
         num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 
-        num_params = {"W":0, "R":1, "C":1, **{k:2 for k in "p12345"}, **{k:1 for k in "xabcdef"}, **{k:1 for k in "l!@#$%"}}
+        num_params = {"W":0, "R":1, "C":1,
+                      **{k:2 for k in "_1234567890"},
+                      **{k:1 for k in "xabcdefghij"},
+                      **{k:1 for k in "lmnopqrstuv"}}
         param_idxs = {}
         gp_params_dim = 0
         for k, v in num_params.items():
@@ -104,11 +113,11 @@ def get_long_expression_with_params(expression, params):
                 param = [param]
 
             params_idx += 1
-            if char in ["W", "R", "C", "p", "1", "2", "3", "4", "5", "x", "a", "b", "c", "d", "e", "l", "!", "@", "#", "$", "%"]:
-                long_expression += "{}({})".format(
-                    char_to_long_char[char],
-                    ", ".join(f"{p:.2f}" for p in param) 
-                )
+            # if char in ["W", "R", "C", "p", "1", "2", "3", "4", "5", "x", "a", "b", "c", "d", "e", "l", "!", "@", "#", "$", "%"]:
+            long_expression += "{}({})".format(
+                char_to_long_char[char],
+                ", ".join(f"{p:.2f}" for p in param) 
+            )
         elif char == "*":
             long_expression += " × "
         elif char == "+":
@@ -277,41 +286,28 @@ class Kernel(nn.Module):
                 lengthscale_sq = F.softplus(p[0])
                 self.params.append(lengthscale_sq.item())
                 return {"op": "RBF", "lengthscale_sq": lengthscale_sq}
-            elif char in ["p", "1", "2", "3", "4", "5"]:
-                if char == "p":
-                    period_limits = (1/32, 1)
-                elif char=="1":
-                    period_limits = (1/32, 1/16)
-                elif char=="2":
-                    period_limits = (1/16, 1/8)
-                elif char=="3":
-                    period_limits = (1/8, 1/4)
-                elif char=="4":
-                    period_limits = (1/4, 1/2)
-                elif char=="5":
-                    period_limits = (1/2, 1)
-
-                # period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
-                # period = torch.sigmoid(raw_param[1] - 1)
+            elif char in ["_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]:
+                if char == "_":
+                    period_limits = (1/64, 1)
+                else:
+                    coarse_symbols = [x for x in "1234567890" if x in base_kernel_chars]
+                    period_limits = (
+                        64**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                        64**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                    )
                 period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
                 lengthscale_sq = F.softplus(p[1]) * period
                 self.params.append([period.item(), lengthscale_sq.item()])
                 return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
-            elif char in ["x", "a", "b", "c", "d", "e"]:
-                if char=="x":
-                    period_limits = (1/32, 1)
-                if char=="a":
-                    period_limits = (1/32, 1/16)
-                elif char=="b":
-                    period_limits = (1/16, 1/8)
-                elif char=="c":
-                    period_limits = (1/8, 1/4)
-                elif char=="d":
-                    period_limits = (1/4, 1/2)
-                elif char=="e":
-                    period_limits = (1/2, 1)
-                # period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
-                # period = torch.sigmoid(raw_param[1] - 1)
+            elif char in ["x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]:
+                if char == "x":
+                    period_limits = (1/64, 1)
+                else:
+                    coarse_symbols = [x for x in "abcdefghij" if x in base_kernel_chars]
+                    period_limits = (
+                        64**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                        64**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                    )
                 period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
                 self.params.append([period.item()])
                 return {"op": "Cosine", "period": period}
@@ -319,19 +315,15 @@ class Kernel(nn.Module):
             #     offset = raw_param[16] + 0.5
             #     self.params.append(offset.item())
             #     return {"op": "Linear",  "offset": offset}  
-            elif char in ["l", "!", "@", "#", "$", "%"]:
+            elif char in ["l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v"]:
                 if char=="l":
-                    offset_limits = (-1.5, 1.5)
-                if char=="!":
-                    offset_limits = (-1.5, -0.5)
-                elif char=="@":
-                    offset_limits = (-0.5, 0.25)
-                elif char=="#":
-                    offset_limits = (0.25, 0.75)
-                elif char=="$":
-                    offset_limits = (0.75, 1.5)
-                elif char=="%":
-                    offset_limits = (1.5, 2.5)
+                    offset_limits = (-0.5, 1.5)
+                else:
+                    coarse_symbols = [x for x in "" if x in base_kernel_chars]
+                    period_limits = (
+                        -0.5 + 2*coarse_symbols.index(char)/len(coarse_symbols),
+                        -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
+                    )
                 offset = offset_limits[0] + torch.sigmoid(p[0])*(offset_limits[1]-offset_limits[0])
                 self.params.append(offset.item())
                 return {"op": "Linear",  "offset": offset}  
