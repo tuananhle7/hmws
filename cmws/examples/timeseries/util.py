@@ -308,7 +308,7 @@ class Kernel(nn.Module):
                             100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                         )
                     else:
-                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum()-1)/len(coarse_symbols))
+                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
                         lower = coarse_params[coarse_symbols.index(char)]
                         upper = coarse_params[coarse_symbols.index(char)+1]
                         period_limits = (lower, upper)
@@ -328,7 +328,7 @@ class Kernel(nn.Module):
                             100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                         )
                     else:
-                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum()-1)/len(coarse_symbols))
+                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
                         lower = coarse_params[coarse_symbols.index(char)]
                         upper = coarse_params[coarse_symbols.index(char)+1]
                         period_limits = (lower, upper)
@@ -352,7 +352,7 @@ class Kernel(nn.Module):
                     else:
                         coarse_params = 0.5 + self.coarse_params['L'][0] + 2 * torch.cat(
                             torch.zeros(1),
-                            (self.coarse_params['L'][1:].exp().cumsum())/len(coarse_symbols)
+                            (self.coarse_params['L'][1:].exp().cumsum(0))/len(coarse_symbols)
                         )
                         lower = coarse_params[coarse_symbols.index(char)]
                         upper = coarse_params[coarse_symbols.index(char)+1]
