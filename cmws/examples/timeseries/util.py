@@ -294,12 +294,12 @@ class Kernel(nn.Module):
                 return {"op": "RBF", "lengthscale_sq": lengthscale_sq}
             elif char in ["_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]:
                 if char == "_":
-                    period_limits = (1/64, 1)
+                    period_limits = (1/100, 1)
                 else:
                     coarse_symbols = [x for x in "1234567890" if x in base_kernel_chars]
                     period_limits = (
-                        64**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                        64**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                        100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                        100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                     )
                 period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
                 lengthscale_sq = F.softplus(p[1]) * period
@@ -307,12 +307,12 @@ class Kernel(nn.Module):
                 return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
             elif char in ["x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]:
                 if char == "x":
-                    period_limits = (1/64, 1)
+                    period_limits = (1/100, 1)
                 else:
                     coarse_symbols = [x for x in "abcdefghij" if x in base_kernel_chars]
                     period_limits = (
-                        64**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                        64**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                        100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                        100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                     )
                 period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
                 self.params.append([period.item()])
