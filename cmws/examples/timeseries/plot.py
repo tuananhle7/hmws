@@ -382,14 +382,14 @@ def plot_comparison(path, checkpoint_paths):
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Log p")
     ax.set_ylim(-100, 100)
-    ax.set_xlim(0, 1000)
+    ax.set_xlim(0, run_args.num_iterations)
     ax.legend()
 
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
     ax.set_ylim(0, 1000000)
-    ax.set_xlim(0, 1000)
+    ax.set_xlim(0, run_args.num_iterations)
     ax.legend()
     for ax in axs:
         # ax.set_xlim(0, 20000)
