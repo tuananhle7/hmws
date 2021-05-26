@@ -326,7 +326,7 @@ class Kernel(nn.Module):
                     offset_limits = (-0.5, 1.5)
                 else:
                     coarse_symbols = [x for x in "mnopqrstuv" if x in base_kernel_chars]
-                    period_limits = (
+                    offset_limits = (
                         -0.5 + 2*coarse_symbols.index(char)/len(coarse_symbols),
                         -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
                     )
