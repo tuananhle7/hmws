@@ -500,6 +500,40 @@ class Guide(nn.Module):
             raw_locations [*sample_shape, *discrete_shape, *shape, num_grid_rows, num_grid_cols,
                            max_num_blocks]
         """
+        return self._sample_continuous(False, obs, discrete_latent, sample_shape)
+
+    def rsample_continuous(self, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x) (reparameterized)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program [*discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                                  max_num_blocks]
+            sample_shape
+
+        Returns
+            raw_locations [*sample_shape, *discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                           max_num_blocks]
+        """
+        return self._sample_continuous(True, obs, discrete_latent, sample_shape)
+
+    def _sample_continuous(self, reparameterized, obs, discrete_latent, sample_shape=[]):
+        """z_c ~ q(z_c | z_d, x) (reparameterized or non-reparameterized)
+
+        Args
+            obs [*shape, num_channels, im_size, im_size]
+            discrete_latent
+                num_blocks [*discrete_shape, *shape, num_grid_rows, num_grid_cols]
+                stacking_program [*discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                                  max_num_blocks]
+            sample_shape
+
+        Returns
+            raw_locations [*sample_shape, *discrete_shape, *shape, num_grid_rows, num_grid_cols,
+                           max_num_blocks]
+        """
         # Extract
         num_blocks, stacking_program = discrete_latent
         shape = obs.shape[:-3]
@@ -511,7 +545,9 @@ class Guide(nn.Module):
 
         # Sample from q(Raw locations | x)
         raw_locations = util.pad_tensor(
-            torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape),
+            torch.distributions.Normal(loc, scale).rsample(sample_shape + discrete_shape)
+            if reparameterized
+            else torch.distributions.Normal(loc, scale).sample(sample_shape + discrete_shape),
             num_blocks[None]
             .expand(
                 *[num_elements, *discrete_shape, *shape, self.num_grid_rows, self.num_grid_cols]
