@@ -49,6 +49,11 @@ def init_symbols(include_symbols):
 
     vocabulary_size = len(char_to_num)
 
+exclusive_symbol_groups = [
+    {"_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
+    {"x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
+]
+
 def get_raw_expression(expression, device):
     """
     Args
@@ -319,7 +324,7 @@ class Kernel(nn.Module):
                 if char=="l":
                     offset_limits = (-0.5, 1.5)
                 else:
-                    coarse_symbols = [x for x in "" if x in base_kernel_chars]
+                    coarse_symbols = [x for x in "mnopqrstuv" if x in base_kernel_chars]
                     period_limits = (
                         -0.5 + 2*coarse_symbols.index(char)/len(coarse_symbols),
                         -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
