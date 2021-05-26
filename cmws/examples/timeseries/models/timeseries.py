@@ -35,7 +35,7 @@ class GenerativeModel(nn.Module):
 
         self.learn_eps = learn_eps
         if self.learn_eps:
-            self.log_eps_sq = nn.Parameter(torch.Tensor([-2]))
+            self.log_eps_sq = nn.Parameter(torch.Tensor([-6]))
 
     @property
     def device(self):
