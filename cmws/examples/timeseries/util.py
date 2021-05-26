@@ -181,9 +181,9 @@ class Kernel(nn.Module):
         self.raw_params_index = 0
         self.params = []
 
-        self.value = self.getValue()
         self.mean_prior_sd = mean_prior_sd
         self.coarse_params = coarse_params
+        self.value = self.getValue()
 
     @property
     def device(self):
