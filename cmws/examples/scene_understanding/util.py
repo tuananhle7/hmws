@@ -93,7 +93,7 @@ def importance_sample_memory(
     # [memory_size, batch_size, 3, img_size, img_size]
     obs_expanded = obs[None].expand([memory_size, batch_size, 3, img_size, img_size])
     # -- SVI
-    continuous_latent, _ = guide.sample_continuous(obs_expanded, discrete_latent)
+    continuous_latent = guide.sample_continuous(obs_expanded, discrete_latent)
 
     # Combine latents
     latent = discrete_latent[0], discrete_latent[1], continuous_latent
