@@ -1,22 +1,25 @@
 sbatch_args="--partition=tenenbaum --time=5:00:00 --mem=8G -c2"
 sbatch_plot_args="--partition=tenenbaum --time=5:00:00 --mem=16G -c2"
 
-for num_particles in 3; do
-    for memory_size in 3; do
-        for num_proposals_mws in 3 10; do
+num_iterations=1500
+
+for num_particles in 3 10; do
+    for memory_size in 3 5; do
+        for num_proposals_mws in 5; do
            lr_guide_continuous=0.01
-           lr_guide_discrete=0.01
+           lr_guide_discrete=0.001
 	   for lr_prior_continuous in 0.0; do
            #lr_prior_continuous=0.0
            lr_prior_discrete=0.0
            lr_likelihood=0.01
-            for include_symbols in "WRCP1234567890" "WRCP1234567890Ll", "WRCP1234567890Lmnopqrstuv" "WRCP1234567890LmnopqrstuvXabcdefghij"; do
+            for include_symbols in "WRCP1234567890Ll" "WRCP1234567890Lmnopq" "WRCP1234567890Lmnopqrstuv"; do
                 for learn_eps in "--learn-eps"; do
-		   experiment_name=expt9_K${num_particles}_M${memory_size}_N${num_proposals_mws}_symbols${include_symbols}_lrc=${lr_prior_continuous}$learn_eps
-		   for seed in 1 2 3; do
+		   experiment_name=expt10_K${num_particles}_M${memory_size}_N${num_proposals_mws}_symbols${include_symbols}_lrc=${lr_prior_continuous}$learn_eps
+		   for seed in 1 2; do
 			algorithm=cmws_5
 			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm $seed
 			    --continue-training
+			    --num-iterations=$num_iterations
 			    --num-particles=$num_particles
 			    --full-training-data
 			    --generative-model-lstm-hidden-dim=10
@@ -40,6 +43,7 @@ for num_particles in 3; do
 			algorithm=rws
 			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm $seed
 			    --continue-training
+			    --num-iterations=$num_iterations
 			    --num-particles=$total_num_particles
 			    --full-training-data
 			    --generative-model-lstm-hidden-dim=10
