@@ -168,7 +168,7 @@ class GenerativeModel(nn.Module):
 
         return num_blocks, stacking_program
 
-    def get_obs_loc(self, latent):
+    def get_obs_loc(self, latent, camera_params=None):
         """Location parameter of p(x | z)
 
         Args:
@@ -201,7 +201,8 @@ class GenerativeModel(nn.Module):
             gamma=self.gamma,
             remove_color=self.remove_color,
             mode=self.mode,
-            shrink_factor=self.shrink_factor
+            shrink_factor=self.shrink_factor,
+            camera_params = camera_params
         )
 
     def log_prob(self, latent, obs):

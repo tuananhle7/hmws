@@ -387,7 +387,8 @@ def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, devic
     return verts, faces
 
 
-def render_block(size, color, position, im_size=32, remove_color=False,mode="cube"):
+def render_block(size, color, position, im_size=32, remove_color=False,mode="cube",
+    camera_elevation = 0.1, camera_azimuth=0):
     """Renders a cube given cube specs
 
     Args
@@ -402,12 +403,12 @@ def render_block(size, color, position, im_size=32, remove_color=False,mode="cub
     """
     num_cubes = torch.IntTensor([1])
     imgs = render_blocks(num_cubes[None], size[None,None,None], color[None,None,None], position[None,None,None], im_size,
-                         remove_color=remove_color,mode=mode)
+                         remove_color=remove_color,mode=mode, camera_elevation = camera_elevation, camera_azimuth=camera_azimuth)
     return imgs[0]
 
 
 def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, gamma=1e-6, remove_color=False,
-                 mode="cube"):
+                 mode="cube", camera_elevation = 0.1, camera_azimuth=0):
     """Renders blocks given cube specs
 
     Args
@@ -428,7 +429,7 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
     print("SIZES: ", sizes.shape)
 
     # Create camera
-    R, T = look_at_view_transform(3.7, 0.1, 180, at=((-0.15, 0.0, 0.1),),)
+    R, T = look_at_view_transform(3.7, camera_elevation, camera_azimuth+180, at=((-0.15, 0.0, 0.1),),)
     # R, T = look_at_view_transform(3.5, 0, 0,
     #                               up=((0.0, 0.0, 0.0),),
     #                               at=((0.0, 0.0, -0.5),))
@@ -586,7 +587,7 @@ def convert_raw_locations(
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[1] * 0.9#size[1]
+            y_size = size[1] * 0.9
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
@@ -651,7 +652,8 @@ def convert_raw_sigma(sigma):
 
 def render(
     primitives, num_blocks, stacking_program, raw_locations, im_size=32,
-    sigma=1e-10, gamma=1e-6, remove_color=False, mode="cube", shrink_factor=0.01
+    sigma=1e-10, gamma=1e-6, remove_color=False, mode="cube", shrink_factor=0.01,
+    camera_params=None
 ):
     """
     Args
@@ -669,6 +671,11 @@ def render(
 
     if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
     if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
+    
+    if camera_params is None:
+        camera_elevation = 0.1
+        camera_azimuth = 0
+    else: camera_elevation, camera_azimuth = camera_params
 
     # Extract
     shape = stacking_program.shape[:-3]
@@ -692,7 +699,7 @@ def render(
     locations_flattened = locations.view((num_elements, num_grid_rows * num_grid_cols, max_num_blocks, 3))
 
     imgs = render_blocks(num_blocks_flattened, square_size[stacking_program_flattened], square_color[stacking_program_flattened], locations_flattened, im_size,
-                        sigma,gamma, remove_color=remove_color, mode=mode)
+                        sigma,gamma, remove_color=remove_color, mode=mode, camera_elevation = camera_elevation, camera_azimuth=camera_azimuth)
     imgs = imgs.permute(0, 3, 1, 2)
 
     imgs = imgs.view(*[*shape, num_channels, *imgs.shape[-2:]])

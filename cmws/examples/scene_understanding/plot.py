@@ -216,6 +216,74 @@ def latent_to_str(latent):
 
     return "\n".join(latent_str)
 
+def plot_memory_scene_understanding(path, generative_model, guide, memory, obs, obs_id):
+    # modified from: https://github.com/tuananhle7/continuous_mws/blob/master/cmws/examples/timeseries/plot.py#L87-L102
+    obs = obs.squeeze(1)
+    num_test_obs, num_channels, im_size, _ = obs.shape
+    im_size = 256
+
+    num_particles = memory.size
+    latent, log_weight = util.importance_sample_memory(
+        num_particles, obs, obs_id, generative_model, guide, memory, im_size
+    )
+
+    num_blocks, stacking_program, raw_locations = latent
+
+    # Sort by log weight
+    # [num_test_obs, num_particles], [num_test_obs, num_particles]
+    _, sorted_indices = torch.sort(log_weight.T, descending=True)
+
+    # Sample predictions
+    # -- Expand obs
+    obs_expanded = obs[None].expand(num_particles, num_test_obs, 3, im_size, im_size)
+
+    num_rows = 4
+    num_cols = 5  # number to show
+    fig, axss = plt.subplots(
+        num_rows,
+        num_cols,
+        figsize=(3 * num_cols, 2 * num_rows),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+
+    for row in range(num_rows):
+        for test_obs_id in range(num_cols):
+            ax = axss[row][test_obs_id]
+            if row == 0:  # pull from observations
+                img = obs_expanded[0][test_obs_id].permute(1, 2, 0)
+            else:
+                particle_id = row - 1
+                sorted_particle_id = sorted_indices[test_obs_id, particle_id]
+
+                num_blocks_selected = num_blocks[sorted_particle_id, test_obs_id]
+                stacking_program_selected = stacking_program[sorted_particle_id, test_obs_id]
+                raw_locations_selected = raw_locations[sorted_particle_id, test_obs_id]
+
+                sampled_latent = (num_blocks_selected, stacking_program_selected, raw_locations_selected)
+
+                camera_elevation = 30
+                camera_azimuth = -40  # 40
+
+                sampled_obs = generative_model.get_obs_loc(sampled_latent, (camera_elevation, camera_azimuth))
+
+                img = sampled_obs.permute(1, 2, 0).detach().numpy()
+                ax.text(
+                    0.95,
+                    0.95,
+                    f"{log_weight[sorted_particle_id, test_obs_id].item():.0f}",
+                    transform=ax.transAxes,
+                    fontsize=7,
+                    va="top",
+                    ha="right",
+                    color="black",
+                )
+            ax.imshow(img)
+            ax.set_xticks([])
+            ax.set_yticks([])
+    util.save_fig(fig, path)
+
 
 def plot_reconstructions_scene_understanding(path, generative_model, guide, obs):
     """
@@ -284,7 +352,8 @@ def plot_reconstructions_scene_understanding(path, generative_model, guide, obs)
     util.save_fig(fig, path, dpi=300)
 
 
-def plot_primitives_scene_understanding(path, generative_model, remove_color=False, mode="cube"):
+def plot_primitives_scene_understanding(path, generative_model, remove_color=False, mode="cube",
+                                        camera_elevation=0.1, camera_azimuth=0):
     device = generative_model.device
     im_size = generative_model.im_size
     hi_res_im_size = 256
@@ -309,7 +378,9 @@ def plot_primitives_scene_understanding(path, generative_model, remove_color=Fal
             location,
             im_size=im_size,
             remove_color=remove_color,
-            mode=mode
+            mode=mode,
+            camera_elevation=camera_elevation,
+            camera_azimuth=camera_azimuth
         )
         obs_high_res = render.render_block(
             generative_model.primitives[i].size,
@@ -317,7 +388,9 @@ def plot_primitives_scene_understanding(path, generative_model, remove_color=Fal
             location,
             im_size=hi_res_im_size,
             remove_color=remove_color,
-            mode=mode
+            mode=mode,
+            camera_elevation=camera_elevation,
+            camera_azimuth=camera_azimuth
         )
         axss[0, i].imshow(obs.cpu())
         axss[1, i].imshow(obs_high_res.cpu())
@@ -366,7 +439,7 @@ def main(args):
                 remove_color=(run_args.remove_color == 1),
                 mode=run_args.mode
             )
-            obs, _ = train_dataset[:10]
+            obs, obs_id = train_dataset[:10]
 
             # Plot
             if run_args.model_type == "scene_understanding":
