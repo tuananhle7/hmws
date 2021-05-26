@@ -6,14 +6,14 @@ for num_particles in 5; do
         for num_proposals_mws in 10; do
            lr_guide_continuous=0.01
            lr_guide_discrete=0.01
-	   for lr_prior_continuous in 0.0 0.01; do
+	   for lr_prior_continuous in 0.0; do
            #lr_prior_continuous=0.0
            lr_prior_discrete=0.0
-           lr_likelihood=0.02
-            for include_symbols in "WRCP12345L!@#$%" "WRCP12345L!@#$%Xabcde"; do
+           lr_likelihood=0.01
+            for include_symbols in "WRCP12345L!@#$%"; do
                 for learn_eps in "--learn-eps" ""; do
-		   experiment_name=expt6_K${num_particles}_M${memory_size}_N${num_proposals_mws}_symbols${include_symbols}_lrc=${lr_prior_continuous}$learn_eps
-		   for seed in 1 2 3; do
+		   experiment_name=expt7_K${num_particles}_M${memory_size}_N${num_proposals_mws}_symbols${include_symbols}_lrc=${lr_prior_continuous}$learn_eps
+		   for seed in 1 2 3 4 5 6; do
 			algorithm=cmws_5
 			cmd="sbatch $sbatch_args --output=logs/${algorithm}_${experiment_name}_seed${seed}.out ./run.sh $experiment_name $algorithm
 			    --continue-training
