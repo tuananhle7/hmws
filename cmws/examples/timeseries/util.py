@@ -49,10 +49,7 @@ def init_symbols(include_symbols):
 
     vocabulary_size = len(char_to_num)
 
-exclusive_symbol_groups = [
-    {"_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
-    {"x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
-]
+exclusive_ops = ["ExpSinSq", "Cosine"]
 
 def get_raw_expression(expression, device):
     """
@@ -231,6 +228,10 @@ class Kernel(nn.Module):
         if len(values) == 1:
             return values[0]
         else:
+            ops = [k['op'] for k in values]
+            for op in exclusive_ops:
+                if ops.count(op)>1:
+                    raise ParsingError(f"Expression contains more than one {op}:" + str({"op":"*", "values":values}))
             return {"op": "*", "values": values}
 
     def parseParenthesis(self):
