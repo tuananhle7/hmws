@@ -49,7 +49,7 @@ def init_symbols(include_symbols):
 
     vocabulary_size = len(char_to_num)
 
-exclusive_ops = ["ExpSinSq", "Cosine"]
+exclusive_ops = ["Constant", "ExpSinSq", "Cosine"]
 
 def get_raw_expression(expression, device):
     """
