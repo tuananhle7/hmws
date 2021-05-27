@@ -334,7 +334,7 @@ def plot_comparison(path, checkpoint_paths):
     log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     # colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
-    colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
+    # colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
     num_iterations = 1000
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
@@ -352,7 +352,7 @@ def plot_comparison(path, checkpoint_paths):
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws_5", "cmws_4", "cmws_3", "cmws_2", "rws", "cmws", "vimco_2", "reinforce"]
+    algorithms = ["cmws_5", "rws", "vimco_2", "reinforce"]
     log_ps_np = dict(
         [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
     )
@@ -369,20 +369,30 @@ def plot_comparison(path, checkpoint_paths):
             kls_np[algorithm][seed][: len(kl)] = kl
 
     # Plot
+    colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
+    linestyles = {5e-3: "dotted", 1e-3: "solid", 5e-4: "dashed"}
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
     actual_fig, actual_ax = plt.subplots(1, 1, figsize=(6, 4))
     for algorithm in algorithms:
-        label = algorithm
+        if "cmws" in algorithm:
+            label = "HMWS"
+        elif "vimco" in algorithm:
+            label = "VIMCO"
+        else:
+            label = algorithm.upper()
+        # label = f"{algorithm} {continuous_guide_lr}"
+        # linestyle = linestyles[continuous_guide_lr]
         linestyle = "solid"
         color = colors[algorithm]
         plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
-
         # Logp
+        # log_p = log_ps_np[(algorithm, continuous_guide_lr)]
         log_p = log_ps_np[algorithm]
         ax = axs[0]
         plot_with_error_bars(ax, x, log_p, **plot_kwargs)
-
+        plot_with_error_bars(actual_ax, x, log_p, **plot_kwargs)
         # KL
+        # kl = kls_np[(algorithm, continuous_guide_lr)]
         kl = kls_np[algorithm]
         ax = axs[1]
         plot_with_error_bars(ax, x, kl, **plot_kwargs)
@@ -406,8 +416,8 @@ def plot_comparison(path, checkpoint_paths):
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, path, dpi=200)
 
-    actual_ax.set_ylim(0, 35)
-    actual_ax.set_xticks([0, 10000])
+    actual_ax.set_ylim(-75, 10)
+    actual_ax.set_xticks([0, num_iterations])
     actual_ax.set_xlabel("Iteration", labelpad=-10)
     actual_ax.set_ylabel(f"$\\log p_\\theta(x)$")
     actual_ax.legend()
@@ -651,4 +661,5 @@ if __name__ == "__main__":
                         time.sleep(30)
         else:
             main(args)
+
 
