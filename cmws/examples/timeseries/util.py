@@ -310,7 +310,7 @@ class Kernel(nn.Module):
                             max_period * 100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                         )
                     else:
-                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
+                        coarse_params = max_period * 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
                         lower = coarse_params[coarse_symbols.index(char)]
                         upper = coarse_params[coarse_symbols.index(char)+1]
                         period_limits = (lower, upper)
@@ -330,7 +330,7 @@ class Kernel(nn.Module):
                             max_period * 100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                         )
                     else:
-                        coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
+                        coarse_params = max_period * 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
                         lower = coarse_params[coarse_symbols.index(char)]
                         upper = coarse_params[coarse_symbols.index(char)+1]
                         period_limits = (lower, upper)
