@@ -122,80 +122,85 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     predictive_low = predictive_mean - 2 * predictive_std
     predictive_high = predictive_mean + 2 * predictive_std
 
-    # Plot
-    num_rows = log_weight.shape[0]
-    num_cols = num_test_obs
-    fig, axss = plt.subplots(
-        num_rows,
-        num_cols,
-        figsize=(3 * num_cols, 2 * num_rows),
-        sharex=True,
-        sharey=True,
-        squeeze=False,
-    )
+    for show_text in [False, True]:
+        # Plot
+        num_rows = log_weight.shape[0]
+        num_cols = num_test_obs
+        fig, axss = plt.subplots(
+            num_rows,
+            num_cols,
+            figsize=(3 * num_cols, 2 * num_rows),
+            sharex=True,
+            sharey=True,
+            squeeze=False,
+        )
 
-    for test_obs_id in range(num_test_obs):
-        if seed is not None:
-            util.set_seed(seed)
+        for test_obs_id in range(num_test_obs):
+            if seed is not None:
+                util.set_seed(seed)
+            for particle_id in range(log_weight.shape[0]):
+                # Plot obs
+                ax = axss[particle_id, test_obs_id]
+                plot_obs(ax, obs[test_obs_id])
+
+                # Compute sorted particle id
+                sorted_particle_id = sorted_indices[test_obs_id, particle_id]
+
+                if show_text:
+                    long_expression = get_full_expression(
+                        x[sorted_particle_id, test_obs_id],
+                        eos[sorted_particle_id, test_obs_id],
+                        raw_gp_params[sorted_particle_id, test_obs_id],
+                    )
+
+                    ax.text(
+                        0.05,
+                        0.95,
+                        "\n".join(textwrap.wrap(long_expression, 20)),
+                        transform=ax.transAxes,
+                        fontsize=7,
+                        va="top",
+                        ha="left",
+                        color="black",
+                    )
+                    ax.text(
+                        0.95,
+                        0.95,
+                        f"{log_weight[sorted_particle_id, test_obs_id].item():.0f}",
+                        transform=ax.transAxes,
+                        fontsize=7,
+                        va="top",
+                        ha="right",
+                        color="black",
+                    )
+                for sample_id in range(num_samples):
+                    ax.plot(
+                        torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                        obs_predictions[sample_id, sorted_particle_id, test_obs_id].cpu().detach(),
+                        color="C1",
+                        alpha=0.3,
+                    )
+                    ax.plot(
+                        torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                        predictive_mean[sorted_particle_id, test_obs_id].cpu().detach(),
+                        color="C1",
+                        alpha=1.0,
+                    )
+                    ax.fill_between(
+                        torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                        predictive_low[sorted_particle_id, test_obs_id].cpu().detach(),
+                        predictive_high[sorted_particle_id, test_obs_id].cpu().detach(),
+                        color="C1",
+                        alpha=0.1,
+                    )
+
         for particle_id in range(log_weight.shape[0]):
-            # Plot obs
-            ax = axss[particle_id, test_obs_id]
-            plot_obs(ax, obs[test_obs_id])
+            axss[particle_id, 0].set_ylabel(f"Particle {particle_id}")
 
-            # Compute sorted particle id
-            sorted_particle_id = sorted_indices[test_obs_id, particle_id]
-
-            long_expression = get_full_expression(
-                x[sorted_particle_id, test_obs_id],
-                eos[sorted_particle_id, test_obs_id],
-                raw_gp_params[sorted_particle_id, test_obs_id],
-            )
-            
-            ax.text(
-                0.05,
-                0.95,
-                "\n".join(textwrap.wrap(long_expression, 20)),
-                transform=ax.transAxes,
-                fontsize=7,
-                va="top",
-                ha="left",
-                color="black",
-            )
-            ax.text(
-                0.95,
-                0.95,
-                f"{log_weight[sorted_particle_id, test_obs_id].item():.0f}",
-                transform=ax.transAxes,
-                fontsize=7,
-                va="top",
-                ha="right",
-                color="black",
-            )
-            for sample_id in range(num_samples):
-                ax.plot(
-                    torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
-                    obs_predictions[sample_id, sorted_particle_id, test_obs_id].cpu().detach(),
-                    color="C1",
-                    alpha=0.3,
-                )
-                ax.plot(
-                    torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
-                    predictive_mean[sorted_particle_id, test_obs_id].cpu().detach(),
-                    color="C1",
-                    alpha=1.0,
-                )
-                ax.fill_between(
-                    torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
-                    predictive_low[sorted_particle_id, test_obs_id].cpu().detach(),
-                    predictive_high[sorted_particle_id, test_obs_id].cpu().detach(),
-                    color="C1",
-                    alpha=0.1,
-                )
-
-    for particle_id in range(log_weight.shape[0]):
-        axss[particle_id, 0].set_ylabel(f"Particle {particle_id}")
-
-    util.save_fig(fig, path)
+        if show_text:
+            util.save_fig(fig, path)
+        else:
+            util.save_fig(fig, path[:-4] + "_no-text" + path[-4:])
 
 
 def get_full_expression(raw_expression, eos, raw_gp_params):
