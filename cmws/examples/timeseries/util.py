@@ -350,10 +350,10 @@ class Kernel(nn.Module):
                             -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
                         )
                     else:
-                        coarse_params = 0.5 + self.coarse_params['L'][0] + 2 * torch.cat(
+                        coarse_params = 0.5 + self.coarse_params['L'][0] + 2 * torch.cat([
                             torch.zeros(1),
                             (self.coarse_params['L'][1:].exp().cumsum(0))/len(coarse_symbols)
-                        )
+                        ], dim=0)
                         lower = coarse_params[coarse_symbols.index(char)]
                         upper = coarse_params[coarse_symbols.index(char)+1]
                         offset_limits = (lower, upper)
