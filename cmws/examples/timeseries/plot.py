@@ -420,7 +420,7 @@ def plot_comparison(path, checkpoint_paths):
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, path, dpi=200)
 
-    actual_ax.set_ylim(-75, 25)
+    actual_ax.set_ylim(-105, 30)
     actual_ax.set_xticks([0, num_iterations])
     actual_ax.set_xlabel("Iteration", labelpad=-10)
     actual_ax.set_ylabel(f"$\\log p_\\theta(x)$")
