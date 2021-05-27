@@ -333,7 +333,8 @@ def plot_comparison(path, checkpoint_paths):
     x = []
     log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    # colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
     num_iterations = 1000
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
@@ -351,7 +352,7 @@ def plot_comparison(path, checkpoint_paths):
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws_5", "cmws_4", "cmws_3", "cmws_2", "rws", "cmws"]
+    algorithms = ["cmws_5", "cmws_4", "cmws_3", "cmws_2", "rws", "cmws", "vimco_2", "reinforce"]
     log_ps_np = dict(
         [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
     )
@@ -369,6 +370,7 @@ def plot_comparison(path, checkpoint_paths):
 
     # Plot
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+    actual_fig, actual_ax = plt.subplots(1, 1, figsize=(6, 4))
     for algorithm in algorithms:
         label = algorithm
         linestyle = "solid"
@@ -398,10 +400,19 @@ def plot_comparison(path, checkpoint_paths):
     ax.set_ylim(0, 1000000)
     ax.set_xlim(0, num_iterations)
     ax.legend()
+
     for ax in axs:
         # ax.set_xlim(0, 20000)
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, path, dpi=200)
+
+    actual_ax.set_ylim(0, 35)
+    actual_ax.set_xticks([0, 10000])
+    actual_ax.set_xlabel("Iteration", labelpad=-10)
+    actual_ax.set_ylabel(f"$\\log p_\\theta(x)$")
+    actual_ax.legend()
+    sns.despine(ax=actual_ax, trim=True)
+    util.save_fig(actual_fig, "/".join(path.split("/")[:-1]) + "/timeseries_logp.pdf", dpi=200)
 
 
 def main(args):
