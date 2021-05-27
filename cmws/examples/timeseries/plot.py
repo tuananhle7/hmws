@@ -14,6 +14,7 @@ from cmws.examples.timeseries import util as timeseries_util
 from cmws.examples.timeseries import lstm_util
 import cmws.examples.timeseries.inference
 import pathlib
+from collections import defaultdict
 
 def plot_obs(ax, obs):
     """
@@ -331,10 +332,13 @@ def plot_comparison(path, checkpoint_paths):
 
     # Load
     x = []
-    log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    #log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    #kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     # colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
     # colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
+    log_ps = defaultdict(list)
+    kls=defaultdict(list)
+
     num_iterations = 1000
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
