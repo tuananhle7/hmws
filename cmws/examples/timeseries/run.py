@@ -60,6 +60,7 @@ def get_args_parser():
         "--model-type", default="timeseries", choices=["timeseries",], help=" ",
     )
     parser.add_argument("--allow_repeat_factors", action="store_true", help=" ")
+    parser.add_argument("--max-period", default=1.0, type=float)
 
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")

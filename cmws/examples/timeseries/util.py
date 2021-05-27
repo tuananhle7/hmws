@@ -14,8 +14,8 @@ from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
 
 include_scale = False
-def init_model_util(include_symbols, allow_repeat_factors):
-    global base_kernel_chars, char_to_long_char, char_to_num, num_to_char, gp_params_dim, param_idxs, vocabulary_size, exclusive_ops
+def init_model_util(include_symbols, allow_repeat_factors, arg_max_period):
+    global base_kernel_chars, char_to_long_char, char_to_num, num_to_char, gp_params_dim, param_idxs, vocabulary_size, exclusive_ops, max_period
     if include_scale:
         raise NotImplementedError()
         base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
@@ -53,6 +53,8 @@ def init_model_util(include_symbols, allow_repeat_factors):
         exclusive_ops = []
     else:
         exclusive_ops = ["Constant", "ExpSinSq", "Cosine"]
+
+    max_period = arg_max_period
 
 def get_raw_expression(expression, device):
     """
@@ -304,8 +306,8 @@ class Kernel(nn.Module):
 
                     if self.coarse_params is None:
                         period_limits = (
-                            100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                            100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                            max_period * 100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                            max_period * 100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                         )
                     else:
                         coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
@@ -324,8 +326,8 @@ class Kernel(nn.Module):
                     coarse_symbols = [x for x in "abcdefghij" if x in base_kernel_chars]
                     if self.coarse_params is None:
                         period_limits = (
-                            100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                            100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                            max_period * 100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
+                            max_period * 100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
                         )
                     else:
                         coarse_params = 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
@@ -434,7 +436,7 @@ class Kernel(nn.Module):
 def init(run_args, device, fast=False):
     memory = None
     if run_args.model_type == "timeseries":
-        init_model_util(run_args.include_symbols, getattr(run_args, "allow_repeat_factors", False))
+        init_model_util(run_args.include_symbols, getattr(run_args, "allow_repeat_factors", False), getattr(run_args, "max_period", 1))
 
         # Generative model
         generative_model = timeseries.GenerativeModel(
