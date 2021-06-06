@@ -436,7 +436,7 @@ def main(args):
             # NOTE: Plotting the train dataset only
             train_dataset = data.SceneUnderstandingDataset(
                 device, run_args.num_grid_rows, run_args.num_grid_cols, test=False,
-                remove_color=(run_args.remove_color == 1),
+                remove_color=run_args.remove_color,
                 mode=run_args.mode
             )
             obs, obs_id = train_dataset[:10]
@@ -450,7 +450,7 @@ def main(args):
                     obs
                 )
                 plot_primitives_scene_understanding(
-                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, (run_args.remove_color == 1),
+                    f"{save_dir}/primitives/{num_iterations}.png", generative_model, run_args.remove_color,
                     run_args.mode
                 )
 

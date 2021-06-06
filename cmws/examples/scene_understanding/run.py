@@ -60,8 +60,8 @@ def get_args_parser():
     parser.add_argument(
         "--model-type", default="scene_understanding", choices=["scene_understanding"], help=" ",
     )
-    parser.add_argument("--remove-color", default=0, type=int, # not a boolean just to be sure don't encounter bool => string issues
-                        help="Control whether color is rendered. Either 0 (don't remove color) or 1 (remove color).")
+    parser.add_argument("--remove-color", action="store_true",
+                        help="Control whether color is rendered. If true, unicolor primitives and color is not learnable.")
 
     # Data
     parser.add_argument("--data-num-primitives", default=3, type=int, help=" ")

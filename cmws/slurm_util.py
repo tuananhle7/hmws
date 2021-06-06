@@ -66,7 +66,7 @@ def submit_slurm_job(run_args, logs_dir, job_name, no_repeat=False):
         # + "--constraint=high-capacity "
         # + f"-p tenenbaum "
         + "--constraint=20GB "
-        + "-x node093 "
+        + "-x node093,node040,node094 "
         + f'-J "{job_name}" '
         + f'-o "{logs_dir}/%j.out" '
         + f'-e "{logs_dir}/%j.err" '

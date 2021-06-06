@@ -170,7 +170,7 @@ def train(model, optimizer, stats, args):
                 args.num_grid_cols,
                 args.batch_size,
                 test=False,
-                remove_color=(args.remove_color == 1),
+                remove_color=args.remove_color,
                 mode=args.mode,
                 shrink_factor=args.shrink_factor
             )
@@ -181,7 +181,7 @@ def train(model, optimizer, stats, args):
             args.num_grid_cols,
             args.batch_size,
             test=True,
-            remove_color=(args.remove_color == 1),
+            remove_color=args.remove_color,
             mode=args.mode,
             shrink_factor=args.shrink_factor
         )

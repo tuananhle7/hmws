@@ -219,7 +219,6 @@ class GenerativeModel(nn.Module):
 
         Returns: [*sample_shape, *shape]
         """
-        # TODO: tests still fail
         # p(z)
         latent_log_prob = self.latent_log_prob(latent)
 
@@ -247,7 +246,6 @@ class GenerativeModel(nn.Module):
 
         Returns: [*continuous_shape, *discrete_shape, *shape]
         """
-        # TODO: test
         # Extract
         num_blocks, stacking_program = discrete_latent
         raw_locations = continuous_latent

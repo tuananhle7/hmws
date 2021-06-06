@@ -430,11 +430,7 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
 
     # Create camera
     R, T = look_at_view_transform(3.7, camera_elevation, camera_azimuth+180, at=((-0.15, 0.0, 0.1),),)
-    # R, T = look_at_view_transform(3.5, 0, 0,
-    #                               up=((0.0, 0.0, 0.0),),
-    #                               at=((0.0, 0.0, -0.5),))
-    cameras = FoVPerspectiveCameras(device=device, R=R, T=T,
-                                    )#fov=90.0)  # fov=45.0)
+    cameras = FoVPerspectiveCameras(device=device, R=R, T=T)
 
     # Settings for rasterizer (optional blur)
     # https://github.com/facebookresearch/pytorch3d/blob/1c45ec9770ee3010477272e4cd5387f9ccb8cb51/pytorch3d/renderer/mesh/shader.py
@@ -517,7 +513,7 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
     # Render image
     rendered_scenes = renderer(batched_mesh)   # (B, H, W, 4)
 
-    # TODO: clean up code -- patch to handle rendering a blank img if not blocks in full cell
+    # patch to handle rendering a blank img if not blocks in full cell
     if len(empty_idxs) == 0: imgs = rendered_scenes
     else:
         imgs = torch.ones_like(torch.empty(num_batches, im_size, im_size, 4))
@@ -529,7 +525,7 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
 
 
     # Remove alpha channel and return (B, im_size, im_size, 3)
-    imgs = imgs[:, ..., :3]#.detach().squeeze().cpu().numpy()
+    imgs = imgs[:, ..., :3]
 
     return imgs.to(device)
 
@@ -564,7 +560,6 @@ def convert_raw_locations(
     # -z = closer to the camera, +z = farther away
     z_spacing = 1  # spacing in the z direction between cells
     z = torch.tensor(0.0 + z_spacing * z_cell, device=device)
-    # z = torch.tensor(num_rows - (z_spacing*z_cell + 1), device=device)
 
     # each box is width 1.6 (+/- 0.8)
     min_x = -0.8
@@ -667,8 +662,6 @@ def render(
     Returns [*shape, num_channels=3, im_size, im_size]
     """
 
-    # TODO: adjust input to include cell idxs + more blocks
-
     if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
     if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
     
@@ -692,7 +685,6 @@ def render(
     locations = convert_raw_locations_batched(raw_locations, stacking_program, primitives, mode, shrink_factor)
 
     # Flatten
-    # num_blocks_flattened = torch.sum(num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols)),axis=1)
     num_blocks_flattened = num_blocks.reshape((num_elements, num_grid_rows * num_grid_cols))
 
     stacking_program_flattened = stacking_program.reshape((num_elements, num_grid_rows * num_grid_cols, max_num_blocks))
