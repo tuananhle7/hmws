@@ -37,7 +37,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--experiment-name", default="", help=" ")
     parser.add_argument(
-        "--algorithm", default="rws", choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_4", "cmws_5"], help=" ",
+        "--algorithm", default="rws", choices=["rws", "elbo", "cmws", "cmws_2", "cmws_4", "cmws_5", "vimco", "reinforce", "vimco_2"], help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
     parser.add_argument("--batch-size", default=5, type=int, help=" ")
