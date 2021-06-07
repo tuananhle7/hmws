@@ -54,8 +54,9 @@ def init(run_args, device):
 
     return model, optimizer, stats
 
+
 def importance_sample_memory(
-    num_particles, obs, obs_id, generative_model, guide, memory, img_size=256
+        num_particles, obs, obs_id, generative_model, guide, memory, img_size=256
 ):
     # modifed from: https://github.com/tuananhle7/continuous_mws/blob/a43dd325e1e2c765d9811773ff5885b6f5f400e4/cmws/examples/timeseries/inference.py#L239
     """

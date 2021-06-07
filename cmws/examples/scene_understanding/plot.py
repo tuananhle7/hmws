@@ -66,138 +66,152 @@ def plot_with_error_bars(ax, x, data, **plot_kwargs):
             color=lines[0].get_color(),
         )
 
-def get_analysis_plots(experiment_name, grid_sizes=[2, 3], cmws_version="cmws_2"):
+def get_analysis_plots(experiment_name, grid_sizes=[2, 3], algorithms=["cmws_2", "cmws_4", "rws"],
+                      aggregate_shrink=True, shrink_factors=[0.01]):
     save_dir = f"../save/{experiment_name}"
     checkpoint_paths = []
     for config_name in sorted(os.listdir(save_dir)):
         checkpoint_paths.append(util.get_checkpoint_path(experiment_name, config_name, -1))
 
     for grid_size in grid_sizes:  # grid size
-        fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+        for shrink_factor in shrink_factors:
+            fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
 
-        colors = {cmws_version: "C0", "rws": "C1"}
-        added_label = {k: False for k in colors.keys()}  # keep track of whether we've used alg as label
-        for checkpoint_path in checkpoint_paths:
-            checkpoint_path = f"../{checkpoint_path}"
+            colors = {alg: f'C{idx}' for idx, alg in enumerate(algorithms)}#{cmws_version: "C0", "rws": "C1"}
+            added_label = {k: False for k in colors.keys()}  # keep track of whether we've used alg as label
+            for checkpoint_path in checkpoint_paths:
+                checkpoint_path = f"../{checkpoint_path}"
 
-            # Fix seed
-            util.set_seed(1)
+                # Fix seed
+                util.set_seed(1)
 
-            if os.path.exists(checkpoint_path):
-                # Load checkpoint
-                try:
-                    model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
-                        checkpoint_path, device="cpu"
-                    )
-                except:
-                    continue
+                if os.path.exists(checkpoint_path):
+                    # Load checkpoint
+                    try:
+                        model, optimizer, stats, run_args = scene3d_util.load_checkpoint(
+                            checkpoint_path, device="cpu"
+                        )
+                    except:
+                        continue
 
-                if run_args.num_grid_cols != grid_size: continue
+                    if run_args.num_grid_cols != grid_size: continue
+                    if run_args.algorithm not in set(algorithms): continue
+                    if run_args.shrink_factor != 0.01: continue # PATCH
+                    if not aggregate_shrink and run_args.shrink_factor != shrink_factor: continue
 
-                generative_model, guide = model["generative_model"], model["guide"]
-                num_iterations = len(stats.losses)
+                    generative_model, guide = model["generative_model"], model["guide"]
+                    num_iterations = len(stats.losses)
 
-                if not added_label[run_args.algorithm]:
-                    label = run_args.algorithm
-                    added_label[run_args.algorithm] = True
-                else:
-                    label = None
-                color = colors[run_args.algorithm]
-                plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
+                    if not added_label[run_args.algorithm]:
+                        label = run_args.algorithm
+                        added_label[run_args.algorithm] = True
+                    else:
+                        label = None
+                    color = colors[run_args.algorithm]
+                    plot_kwargs = {"label": label, "color": color, "alpha": 0.8, "linewidth": 1.5}
 
-                # Logp
-                ax = axs[0]
-                ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps], **plot_kwargs)
+                    # Logp
+                    ax = axs[0]
+                    ax.plot([x[0] for x in stats.log_ps], [x[1] for x in stats.log_ps], **plot_kwargs)
 
-                # KL
-                ax = axs[1]
-                ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
-        ax = axs[0]
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("Log p")
+                    # KL
+                    ax = axs[1]
+                    ax.plot([x[0] for x in stats.kls], [x[1] for x in stats.kls], **plot_kwargs)
+            ax = axs[0]
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("Log p")
 
-        ax = axs[1]
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("KL")
-        ax.legend()
-        for ax in axs:
-            sns.despine(ax=ax, trim=True)
-        util.save_fig(fig, f"{save_dir}/losses_{grid_size}.png", dpi=200)
+            ax = axs[1]
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("KL")
+            ax.legend()
+            for ax in axs:
+                sns.despine(ax=ax, trim=True)
+            if aggregate_shrink: util.save_fig(fig, f"{save_dir}/losses_{grid_size}.png", dpi=200)
+            else: util.save_fig(fig, f"{save_dir}/losses_{grid_size}_{shrink_factor}.png", dpi=200)
 
     for grid_size in grid_sizes:  # grid size
-        # Load
-        x = []
-        log_ps = {cmws_version: [], "cmws": [], "rws": []}
-        kls = {cmws_version: [], "cmws": [], "rws": []}
-        colors = {cmws_version: "C0", "rws": "C1"}
-        for checkpoint_path in checkpoint_paths:
-            checkpoint_path = f"../{checkpoint_path}"
-            if os.path.exists(checkpoint_path):
-                # Load checkpoint
-                try:
-                    model, optimizer, stats, run_args = scene_understanding_util.load_checkpoint(
-                        checkpoint_path, device="cpu"
-                    )
-                except:
-                    continue
-                if run_args.num_grid_cols != grid_size: continue
-                x_new = [x[0] for x in stats.log_ps]
-                if len(x_new) > len(x):
-                    x = x_new
-                log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
-                kls[run_args.algorithm].append([x[1] for x in stats.kls])
-        # Make numpy arrays
-        max_len = len(x)
-        if grid_size == 2:
-            num_seeds = 5  # 10
-        else:
-            num_seeds = 5
-        algorithms = [cmws_version, "rws"]
-        log_ps_np = dict(
-            [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
-        )
-        kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
-        for algorithm in algorithms:
-            for seed in range(num_seeds):
-                try:
-                    log_p = log_ps[algorithm][seed]
-                    kl = kls[algorithm][seed]
-                except Exception:
-                    log_p = []
-                    kl = []
-                log_ps_np[algorithm][seed][: len(log_p)] = log_p
-                kls_np[algorithm][seed][: len(kl)] = kl
+        for shrink_factor in shrink_factors:
+            # Load
+            x = []
+            log_ps = {alg: [] for idx, alg in enumerate(algorithms)}
+            kls = {alg: [] for idx, alg in enumerate(algorithms)}
+            colors = {alg: f'C{idx}' for idx, alg in enumerate(algorithms)}
+            for checkpoint_path in checkpoint_paths:
+                checkpoint_path = f"../{checkpoint_path}"
+                if os.path.exists(checkpoint_path):
+                    # Load checkpoint
+                    try:
+                        model, optimizer, stats, run_args = scene3d_util.load_checkpoint(
+                            checkpoint_path, device="cpu"
+                        )
+                    except:
+                        continue
+                    if run_args.num_grid_cols != grid_size: continue
+                    if run_args.shrink_factor != 0.01: continue # PATCH
+                    if not aggregate_shrink and run_args.shrink_factor != shrink_factor: continue
+                    if run_args.algorithm not in set(algorithms): continue
 
-        # Plot
-        fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
-        for algorithm in algorithms:
-            label = algorithm
-            linestyle = "solid"
-            color = colors[algorithm]
-            plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
 
-            # Logp
-            log_p = log_ps_np[algorithm]
+                    x_new = [x[0] for x in stats.log_ps]
+                    if len(x_new) > len(x):
+                        x = x_new
+                    log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
+                    kls[run_args.algorithm].append([x[1] for x in stats.kls])
+            # Make numpy arrays
+            max_len = len(x)
+            if grid_size == 2:
+                num_seeds = 5  # 10
+            else:
+                num_seeds = 5
+            log_ps_np = dict(
+                [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
+            )
+            kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
+            for algorithm in algorithms:
+                for seed in range(num_seeds):
+                    try:
+                        log_p = log_ps[algorithm][seed]
+                        kl = kls[algorithm][seed]
+                    except Exception:
+                        log_p = []
+                        kl = []
+                    log_ps_np[algorithm][seed][: len(log_p)] = log_p
+                    kls_np[algorithm][seed][: len(kl)] = kl
+
+            # Plot
+            fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
+            for algorithm in algorithms:
+                label = algorithm
+                linestyle = "solid"
+                color = colors[algorithm]
+                plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
+
+                # Logp
+                log_p = log_ps_np[algorithm]
+                ax = axs[0]
+                plot_with_error_bars(ax, x, log_p, **plot_kwargs)
+
+                # KL
+                kl = kls_np[algorithm]
+                ax = axs[1]
+                plot_with_error_bars(ax, x, kl, **plot_kwargs)
+
             ax = axs[0]
-            plot_with_error_bars(ax, x, log_p, **plot_kwargs)
+            ax.set_xlim([0,5000])
+            ax.set_xticks([0, 5000])
+            ax.set_xlabel("Iteration", labelpad=-10)
+            ax.set_ylabel(f"$\\log p_\\theta(x)$")
+            ax.legend()
 
-            # KL
-            kl = kls_np[algorithm]
             ax = axs[1]
-            plot_with_error_bars(ax, x, kl, **plot_kwargs)
-
-        ax = axs[0]
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("Log p")
-        ax.legend()
-
-        ax = axs[1]
-        ax.set_xlabel("Iteration")
-        ax.set_ylabel("KL")
-        ax.legend()
-        for ax in axs:
-            sns.despine(ax=ax, trim=True)
-        util.save_fig(fig, f"{save_dir}/losses_{grid_size}_overlay.png", dpi=200)
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("KL")
+            ax.legend()
+            for ax in axs:
+                sns.despine(ax=ax, trim=True)
+            if aggregate_shrink: util.save_fig(fig, f"{save_dir}/losses_{grid_size}_overlay.png", dpi=200)
+            else: util.save_fig(fig, f"{save_dir}/losses_{grid_size}_{shrink_factor}_overlay.png", dpi=200)
 
 
 def latent_to_str(latent):
@@ -216,73 +230,86 @@ def latent_to_str(latent):
 
     return "\n".join(latent_str)
 
-def plot_memory_scene_understanding(path, generative_model, guide, memory, obs, obs_id):
-    # modified from: https://github.com/tuananhle7/continuous_mws/blob/master/cmws/examples/timeseries/plot.py#L87-L102
-    obs = obs.squeeze(1)
-    num_test_obs, num_channels, im_size, _ = obs.shape
-    im_size = 256
+def get_formal_overlay_plots(experiment_name, file_tag, grid_sizes=[2, 3], algorithms=["cmws_5", "rws", "vimco_2", "reinforce"],
+                      aggregate_shrink=True, shrink_factors=[0.01], num_iters_show=5000):
+    label_map = {"cmws_5": "HMWS", "rws": "RWS",
+                 "reinforce": "REINFORCE", "vimco_2": "VIMCO"}
 
-    num_particles = memory.size
-    latent, log_weight = util.importance_sample_memory(
-        num_particles, obs, obs_id, generative_model, guide, memory, im_size
-    )
+    save_dir = f"../save/{experiment_name}"
+    checkpoint_paths = []
+    for config_name in sorted(os.listdir(save_dir)):
+        checkpoint_paths.append(util.get_checkpoint_path(experiment_name, config_name, -1))
 
-    num_blocks, stacking_program, raw_locations = latent
+    for grid_size in grid_sizes:  # grid size
+        for shrink_factor in shrink_factors:
+            # Load
+            x = []
+            log_ps = {alg: [] for idx, alg in enumerate(algorithms)}
+            kls = {alg: [] for idx, alg in enumerate(algorithms)}
+            colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
+            #colors = {alg: f'C{idx}' for idx, alg in enumerate(algorithms)}
+            for checkpoint_path in checkpoint_paths:
+                checkpoint_path = f"../{checkpoint_path}"
+                if os.path.exists(checkpoint_path):
+                    # Load checkpoint
+                    try:
+                        model, optimizer, stats, run_args = scene3d_util.load_checkpoint(
+                            checkpoint_path, device="cpu"
+                        )
+                    except:
+                        continue
+                    if run_args.num_grid_cols != grid_size: continue
+                    if run_args.shrink_factor != 0.01: continue # PATCH
+                    if not aggregate_shrink and run_args.shrink_factor != shrink_factor: continue
+                    if run_args.algorithm not in set(algorithms): continue
+                    #if len(stats.losses) < num_iters_show: continue
 
-    # Sort by log weight
-    # [num_test_obs, num_particles], [num_test_obs, num_particles]
-    _, sorted_indices = torch.sort(log_weight.T, descending=True)
-
-    # Sample predictions
-    # -- Expand obs
-    obs_expanded = obs[None].expand(num_particles, num_test_obs, 3, im_size, im_size)
-
-    num_rows = 4
-    num_cols = 5  # number to show
-    fig, axss = plt.subplots(
-        num_rows,
-        num_cols,
-        figsize=(3 * num_cols, 2 * num_rows),
-        sharex=True,
-        sharey=True,
-        squeeze=False,
-    )
-
-    for row in range(num_rows):
-        for test_obs_id in range(num_cols):
-            ax = axss[row][test_obs_id]
-            if row == 0:  # pull from observations
-                img = obs_expanded[0][test_obs_id].permute(1, 2, 0)
+                    x_new = [x[0] for x in stats.log_ps]
+                    if len(x_new) > len(x):
+                        x = x_new
+                    log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
+                    kls[run_args.algorithm].append([x[1] for x in stats.kls])
+            # Make numpy arrays
+            max_len = len(x)
+            if grid_size == 2:
+                num_seeds = 5  # 10
             else:
-                particle_id = row - 1
-                sorted_particle_id = sorted_indices[test_obs_id, particle_id]
+                num_seeds = 5
+            log_ps_np = dict(
+                [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
+            )
+            kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
+            for algorithm in algorithms:
+                for seed in range(num_seeds):
+                    try:
+                        log_p = log_ps[algorithm][seed]
+                        kl = kls[algorithm][seed]
+                    except Exception:
+                        log_p = []
+                        kl = []
+                    log_ps_np[algorithm][seed][: len(log_p)] = log_p
+                    kls_np[algorithm][seed][: len(kl)] = kl
 
-                num_blocks_selected = num_blocks[sorted_particle_id, test_obs_id]
-                stacking_program_selected = stacking_program[sorted_particle_id, test_obs_id]
-                raw_locations_selected = raw_locations[sorted_particle_id, test_obs_id]
+            # Plot
+            fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+            for algorithm in algorithms:
+                label = label_map[algorithm]
+                linestyle = "solid"
+                color = colors[algorithm]
+                plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
 
-                sampled_latent = (num_blocks_selected, stacking_program_selected, raw_locations_selected)
+                # Logp
+                log_p = log_ps_np[algorithm]
+                plot_with_error_bars(ax, x, log_p, **plot_kwargs)
 
-                camera_elevation = 30
-                camera_azimuth = -40  # 40
+            ax.set_xlim([0,num_iters_show])
+            ax.set_xticks([0, num_iters_show])
+            ax.set_xlabel("Iteration", labelpad=-10)
+            ax.set_ylabel(f"$\\log p_\\theta(x)$")
+            ax.legend(loc='lower right')
+            sns.despine(ax=ax, trim=True)
 
-                sampled_obs = generative_model.get_obs_loc(sampled_latent, (camera_elevation, camera_azimuth))
-
-                img = sampled_obs.permute(1, 2, 0).detach().numpy()
-                ax.text(
-                    0.95,
-                    0.95,
-                    f"{log_weight[sorted_particle_id, test_obs_id].item():.0f}",
-                    transform=ax.transAxes,
-                    fontsize=7,
-                    va="top",
-                    ha="right",
-                    color="black",
-                )
-            ax.imshow(img)
-            ax.set_xticks([])
-            ax.set_yticks([])
-    util.save_fig(fig, path)
+            util.save_fig(fig, f"{save_dir}/losses_{file_tag}_overlay.pdf", dpi=400)
 
 
 def plot_reconstructions_scene_understanding(path, generative_model, guide, obs):
