@@ -12,13 +12,36 @@ from cmws.examples.timeseries.models import timeseries
 from cmws.examples.timeseries import data
 from cmws.util import logging
 import cmws.examples.timeseries.expression_prior_pretraining
+from cmws.examples.timeseries import lstm_util
 
-base_kernel_chars = {"W", "R", "E", "L"}
-char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin"}
-char_to_num = {"W": 0, "R": 1, "E": 2, "L": 3, "*": 4, "+": 5, "(": 6, ")": 7}
+base_kernel_chars = {"W", "R", "1", "2", "3", "4", "C"}
+char_to_long_char = {
+    "W": "WN",
+    "R": "SE",
+    "1": "Per_Short",
+    "2": "Per_Medium",
+    "3": "Per_Long",
+    "4": "Per_XLong",
+    # "L": "Lin",
+    "C": "Const",
+}
+char_to_num = {
+    "W": 0,
+    "R": 1,
+    "1": 2,
+    "2": 3,
+    "3": 4,
+    "4": 5,
+    # "L": 6,
+    "C": 6,
+    "*": 7,
+    "+": 8,
+    "(": 9,
+    ")": 10,
+}
 num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 vocabulary_size = len(char_to_num)
-gp_params_dim = 8
+gp_params_dim = 16
 epsilon = 1e-4
 
 
@@ -87,12 +110,16 @@ def get_long_expression_with_params(expression, params):
                 long_expression += f"{char_to_long_char[char]}({param:.2f})"
             elif char == "R":
                 long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
-            elif char == "E":
+            elif char == "1" or char == "2" or char == "3" or char == "4":
                 long_expression += (
                     f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f}, {param[2]:.2f})"
                 )
             elif char == "L":
-                long_expression += f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f})"
+                long_expression += (
+                    f"{char_to_long_char[char]}({param[0]:.2f}, {param[1]:.2f}, {param[2]:.2f})"
+                )
+            elif char == "C":
+                long_expression += f"{char_to_long_char[char]}({param:.2f})"
         elif char == "*":
             long_expression += " × "
         elif char == "+":
@@ -116,12 +143,60 @@ def count_base_kernels(raw_expression):
     return result
 
 
+def get_num_base_kernels(raw_expression, eos):
+    """
+    Args:
+        raw_expression [*shape, max_num_chars]
+        eos [*shape, max_num_chars]
+
+    Returns: [*shape]
+    """
+    # Extract
+    device = raw_expression.device
+    max_num_chars = raw_expression.shape[-1]
+    shape = raw_expression.shape[:-1]
+    num_elements = cmws.util.get_num_elements(shape)
+
+    # Flatten
+    raw_expression_flattened = raw_expression.view(-1, max_num_chars)
+    eos_flattened = eos.view(-1, max_num_chars)
+
+    # Compute num timesteps
+    # [num_elements]
+    num_timesteps_flattened = lstm_util.get_num_timesteps(eos_flattened)
+
+    result = []
+    for element_id in range(num_elements):
+        result.append(
+            count_base_kernels(
+                raw_expression_flattened[element_id, : num_timesteps_flattened[element_id]]
+            )
+        )
+    return torch.tensor(result, device=device).long().view(shape)
+
+
+def get_full_expression(raw_expression, eos, raw_gp_params):
+    num_chars = lstm_util.get_num_timesteps(eos)
+    num_base_kernels = get_num_base_kernels(raw_expression, eos)
+    long_expression = get_long_expression(get_expression(raw_expression[:num_chars]))
+    try:
+        kernel = Kernel(
+            get_expression(raw_expression[:num_chars]), raw_gp_params[:num_base_kernels],
+        )
+        return get_long_expression_with_params(
+            get_expression(raw_expression[:num_chars]), kernel.params
+        )
+    except ParsingError as e:
+        print(e)
+        return long_expression
+
+
 class ParsingError(Exception):
     pass
 
 
 class Kernel(nn.Module):
-    """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | L
+    """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | L | C
     Adapted from
     https://github.com/insperatum/wsvae/blob/7dee0708587e6a33b7328206ce5edd8262d568b6/gp.py#L12
 
@@ -129,17 +204,32 @@ class Kernel(nn.Module):
         expression (str) consists of characters *, +, (, ) or
             W = WhiteNoise
             R = SquaredExponential
-            E = Periodic
-            C = Linear
-        raw_params [num_base_kernels, gp_params_dim=5]
+            1 = Periodic Short
+            2 = Periodic Medium
+            3 = Periodic Long
+            4 = Periodic Extra Long
+            L = Linear
+            C = Constant
+        raw_params [num_base_kernels, gp_params_dim=14]
             raw_params[i, 0] raw_scale_sq (WhiteNoise)
             raw_params[i, 1] raw_scale_sq (SE)
             raw_params[i, 2] raw_lengthscale_sq (SE)
-            raw_params[i, 3] raw_scale_sq (Per)
-            raw_params[i, 4] raw_period (Per)
-            raw_params[i, 5] raw_lengthscale_sq (Per)
-            raw_params[i, 6] raw_scale_sq (Linear)
-            raw_params[i, 7] raw_offset (Linear)
+            raw_params[i, 3] raw_scale_sq (Per_S)
+            raw_params[i, 4] raw_period (Per_S)
+            raw_params[i, 5] raw_lengthscale_sq (Per_S)
+            raw_params[i, 6] raw_scale_sq (Per_M)
+            raw_params[i, 7] raw_period (Per_M)
+            raw_params[i, 8] raw_lengthscale_sq (Per_M)
+            raw_params[i, 9] raw_scale_sq (Per_L)
+            raw_params[i, 10] raw_period (Per_L)
+            raw_params[i, 11] raw_lengthscale_sq (Per_L)
+            raw_params[i, 12] raw_scale_sq (Per_XL)
+            raw_params[i, 13] raw_period (Per_XL)
+            raw_params[i, 14] raw_lengthscale_sq (Per_XL)
+            # raw_params[i, 15] raw_scale_b_sq (Linear)
+            # raw_params[i, 16] raw_scale_sq (Linear)
+            # raw_params[i, 17] raw_offset (Linear)
+            raw_params[i, 15] raw_const (Constant)
     """
 
     def __init__(self, expression, raw_params):
@@ -221,18 +311,43 @@ class Kernel(nn.Module):
             raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
         if char == "W":
-            scale_sq = F.softplus(raw_param[0]) + 1e-4
+            # scale_sq = F.softplus(raw_param[0]) + 1e-2
+
+            # scale_sq = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            scale_sq = torch.sigmoid(raw_param[0]) * (max_val - min_val) + min_val
             self.params.append(scale_sq.item())
             return {"op": "WhiteNoise", "scale_sq": scale_sq}
         elif char == "R":
-            scale_sq = F.softplus(raw_param[1]) + 1e-4
-            lengthscale_sq = F.softplus(raw_param[2]) + 1e-4
+            # scale_sq = F.softplus(raw_param[1]) + 1e-2
+            # lengthscale_sq = F.softplus(raw_param[2]) + 0.1
+
+            # scale_sq = torch.tensor(0.5, device=self.device)
+            # lengthscale_sq = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            scale_sq = torch.sigmoid(raw_param[1]) * (max_val - min_val) + min_val
+            lengthscale_sq = torch.sigmoid(raw_param[2]) * (max_val - min_val) + min_val
             self.params.append([scale_sq.item(), lengthscale_sq.item()])
             return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
-        elif char == "E":
-            scale_sq = F.softplus(raw_param[3]) + 1e-4
-            period = F.softplus(raw_param[4]) + 1e-1
-            lengthscale_sq = F.softplus(raw_param[5]) + 1e-4
+        elif char == "1":
+            scale_sq = F.softplus(raw_param[3]) + 1e-2
+            min_period, max_period = 0.1, 0.2
+            period = torch.sigmoid(raw_param[4]) * (max_period - min_period) + min_period
+            lengthscale_sq = F.softplus(raw_param[5]) + 1e-1
+
+            scale_sq = torch.tensor(0.5, device=self.device)
+            period = torch.tensor(0.2, device=self.device)
+            lengthscale_sq = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            scale_sq = torch.sigmoid(raw_param[3]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.19, 0.21
+            period = torch.sigmoid(raw_param[4]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.49, 0.51
+            lengthscale_sq = torch.sigmoid(raw_param[5]) * (max_val - min_val) + min_val
+
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
             return {
                 "op": "ExpSinSq",
@@ -240,11 +355,101 @@ class Kernel(nn.Module):
                 "period": period,
                 "lengthscale_sq": lengthscale_sq,
             }
-        if char == "L":
-            scale_sq = F.softplus(raw_param[6]) + 1e-4
-            offset = raw_param[7]
-            self.params.append([scale_sq.item(), offset.item()])
-            return {"op": "Constant", "scale_sq": scale_sq, "offset": offset}
+        elif char == "2":
+            # scale_sq = F.softplus(raw_param[6]) + 1e-2
+            # min_period, max_period = 0.2, 0.5
+            # period = torch.sigmoid(raw_param[7]) * (max_period - min_period) + min_period
+            # lengthscale_sq = F.softplus(raw_param[8]) + 1e-1
+
+            # scale_sq = torch.tensor(0.5, device=self.device)
+            # period = torch.tensor(0.5, device=self.device)
+            # lengthscale_sq = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            scale_sq = torch.sigmoid(raw_param[6]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.49, 0.51
+            period = torch.sigmoid(raw_param[7]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.49, 0.51
+            lengthscale_sq = torch.sigmoid(raw_param[8]) * (max_val - min_val) + min_val
+
+            self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
+            return {
+                "op": "ExpSinSq",
+                "scale_sq": scale_sq,
+                "period": period,
+                "lengthscale_sq": lengthscale_sq,
+            }
+        elif char == "3":
+            # scale_sq = F.softplus(raw_param[9]) + 1e-2
+            # min_period, max_period = 0.5, 1.0
+            # period = torch.sigmoid(raw_param[10]) * (max_period - min_period) + min_period
+            # lengthscale_sq = F.softplus(raw_param[11]) + 1e-1
+
+            # scale_sq = torch.tensor(0.5, device=self.device)
+            # period = torch.tensor(1.0, device=self.device)
+            # lengthscale_sq = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            scale_sq = torch.sigmoid(raw_param[9]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.99, 1.01
+            period = torch.sigmoid(raw_param[10]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.49, 0.51
+            lengthscale_sq = torch.sigmoid(raw_param[11]) * (max_val - min_val) + min_val
+
+            self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
+            return {
+                "op": "ExpSinSq",
+                "scale_sq": scale_sq,
+                "period": period,
+                "lengthscale_sq": lengthscale_sq,
+            }
+        elif char == "4":
+            # scale_sq = F.softplus(raw_param[12]) + 1e-2
+            # # period = F.softplus(raw_param[13]) + 1.0
+            # min_period, max_period = 1.0, 4.0
+            # period = torch.sigmoid(raw_param[13]) * (max_period - min_period) + min_period
+            # lengthscale_sq = F.softplus(raw_param[14]) + 1e-1
+
+            # scale_sq = torch.tensor(0.5, device=self.device)
+            # period = torch.tensor(1.5, device=self.device)
+            # lengthscale_sq = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            scale_sq = torch.sigmoid(raw_param[12]) * (max_val - min_val) + min_val
+            min_val, max_val = 1.49, 1.51
+            period = torch.sigmoid(raw_param[13]) * (max_val - min_val) + min_val
+            min_val, max_val = 0.49, 0.51
+            lengthscale_sq = torch.sigmoid(raw_param[14]) * (max_val - min_val) + min_val
+
+            self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
+            return {
+                "op": "ExpSinSq",
+                "scale_sq": scale_sq,
+                "period": period,
+                "lengthscale_sq": lengthscale_sq,
+            }
+        # elif char == "L":
+        #     scale_b_sq = F.softplus(raw_param[15]) + 1e-1
+        #     scale_sq = F.softplus(raw_param[16]) + 1e-4
+        #     min_offset, max_offset = -1.5, 1.5
+        #     offset = torch.sigmoid(raw_param[17]) * (max_offset - min_offset) + min_offset
+        #     self.params.append([scale_b_sq.item(), scale_sq.item(), offset.item()])
+        #     return {
+        #         "op": "Linear",
+        #         "scale_b_sq": scale_b_sq,
+        #         "scale_sq": scale_sq,
+        #         "offset": offset,
+        #     }
+        elif char == "C":
+            # const = F.softplus(raw_param[15]) + 1e-2
+
+            # const = torch.tensor(0.5, device=self.device)
+
+            min_val, max_val = 0.49, 0.51
+            const = torch.sigmoid(raw_param[15]) * (max_val - min_val) + min_val
+
+            self.params.append(const.item())
+            return {"op": "Constant", "const": const}
         else:
             raise ParsingError("Cannot parse char: " + str(char))
 
@@ -269,9 +474,10 @@ class Kernel(nn.Module):
                 t = t * self.forward(x_1, x_2, v)
             result = t
         elif kernel["op"] == "Linear":
+            sb2 = kernel["scale_b_sq"]
             c = kernel["offset"]
             s2 = kernel["scale_sq"]
-            result = (x_1 - c) * (x_2 - c) * s2
+            result = sb2 + (x_1 - c) * (x_2 - c) * s2
         elif kernel["op"] == "WhiteNoise":
             result = (x_1 == x_2).float() * kernel["scale_sq"]
         elif kernel["op"] == "RBF":
@@ -283,6 +489,16 @@ class Kernel(nn.Module):
             l2 = kernel["lengthscale_sq"]
             s2 = kernel["scale_sq"]
             result = (-2 * (math.pi * (x_1 - x_2).abs() / t).sin() ** 2 / l2).exp() * s2
+        elif kernel["op"] == "Constant":
+            # Extract
+            batch_size, num_timesteps_1, _ = x_1.shape
+            num_timesteps_2 = x_2.shape[-1]
+
+            const = kernel["const"]
+            result = (
+                torch.ones((batch_size, num_timesteps_1, num_timesteps_2), device=self.device)
+                * const
+            )
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
 

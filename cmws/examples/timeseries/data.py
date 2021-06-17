@@ -11,7 +11,7 @@ from cmws import util
 import cmws.examples.timeseries.plot
 import cmws.examples.timeseries.expression_prior_pretraining
 
-num_timesteps = 256
+num_timesteps = 128
 
 
 def standardize(x):
@@ -22,7 +22,7 @@ def standardize(x):
 
 
 @functools.lru_cache(maxsize=None)
-def load_all_data():
+def load_all_data(new=False):
     """
     https://github.com/insperatum/wsvae/blob/master/examples/timeseries/main-timeseries.py#L81
 
@@ -30,7 +30,10 @@ def load_all_data():
         list of timeseries where each timeseries is a list of floats
     """
     # Init
-    path = str(pathlib.Path(__file__).parent.joinpath("data.p"))
+    if new:
+        path = str(pathlib.Path(__file__).parent.joinpath("data", "data_new.p"))
+    else:
+        path = str(pathlib.Path(__file__).parent.joinpath("data.p"))
 
     # Read file
     with open(path, "rb") as f:
@@ -61,18 +64,26 @@ def cut_data(data):
     return [x[:num_timesteps] for x in data]
 
 
-def get_train_test_data():
+def get_train_test_data(new=False):
     """
     https://github.com/insperatum/wsvae/blob/master/examples/timeseries/main-timeseries.py#L81
     """
-    data = standardize_data(cut_data(filter_data(load_all_data())))
     custom_data = standardize_data(cut_data(filter_data(load_custom_data())))
-    num_train_data, num_test_data = 2000, 2000
-    num_non_custom_test_data = num_test_data - len(custom_data)
+    if new:
+        data = standardize_data(load_all_data(new=new))
+        num_train_data, num_test_data = 150, 50
+        num_non_custom_test_data = num_test_data - len(custom_data)
 
-    random.seed(0)
-    train_data = random.sample(data[:num_train_data], 200)
-    test_data = custom_data + data[num_train_data : (num_train_data + num_non_custom_test_data)]
+        train_data = data[:num_train_data]
+        test_data = custom_data + data[num_train_data : (num_train_data + num_non_custom_test_data)]
+    else:
+        data = standardize_data(cut_data(filter_data(load_all_data(new=new))))
+        num_train_data, num_test_data = 2000, 2000
+        num_non_custom_test_data = num_test_data - len(custom_data)
+
+        random.seed(0)
+        train_data = random.sample(data[:num_train_data], 200)
+        test_data = custom_data + data[num_train_data : (num_train_data + num_non_custom_test_data)]
     return train_data, test_data
 
 
@@ -95,19 +106,21 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         seed (int): only used for generation
     """
 
-    def __init__(self, device, test=False, full_data=False, synthetic=False):
+    def __init__(self, device, test=False, full_data=False, synthetic=False, new=False):
         self.device = device
         self.test = test
         self.synthetic = synthetic
+        self.new = new
         if self.synthetic:
+            # self.num_data = 200
             if self.test:
-                self.num_data = 20
+                self.num_data = 200
             else:
                 self.num_data = 200
             path = (
-                pathlib.Path(__file__)
-                .parent.absolute()
+                pathlib.Path(__file__).parent.absolute()
                 .joinpath("data", "synthetic", "test.pt" if self.test else "train.pt")
+                # .joinpath("data", "synthetic", "train.pt")
             )
             if not path.exists():
                 util.logging.info(f"Generating dataset (test = {self.test})...")
@@ -116,7 +129,8 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
 
                 # Set seed
-                util.set_seed(0)
+                util.set_seed(1 if self.test else 0)
+                # util.set_seed(0)
 
                 self.obs = generate_synthetic_data(self.num_data, 20, 128, device)
                 self.obs_id = torch.arange(self.num_data, device=device)
@@ -131,22 +145,22 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 self.obs, self.obs_id = torch.load(path, map_location=device)
                 util.logging.info(f"Dataset (test = {self.test}) loaded {path}")
         else:
-            train_obs, test_obs = get_train_test_data()
+            train_obs, test_obs = get_train_test_data(new=self.new)
 
-            # self.obs = torch.tensor(train_obs, device=self.device).float()
+            self.obs = torch.tensor(train_obs, device=self.device).float()
             # if not full_data:
             #     self.obs = self.obs[[9, 29, 100, 108, 134, 168, 180, 191]]
 
-            if self.test:
-                self.obs = torch.tensor(test_obs, device=self.device).float()
-                if not full_data:
-                    self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
-            else:
-                self.obs = torch.tensor(train_obs, device=self.device).float()
-                if not full_data:
-                    self.obs = self.obs[[9, 29, 100, 108, 134, 168, 180, 191]]
-                    # self.obs = self.obs[[80]]
-                    # self.obs = self.obs[[29]]
+            # if self.test:
+            #     self.obs = torch.tensor(test_obs, device=self.device).float()
+            #     if not self.new and not full_data:
+            #         self.obs = self.obs[[99, 906, 920, 957, 697, 901, 1584]]
+            # else:
+            #     self.obs = torch.tensor(train_obs, device=self.device).float()
+            #     if not self.new and not full_data:
+            #         self.obs = self.obs[[9, 29, 100, 108, 134, 168, 180, 191]]
+            #         # self.obs = self.obs[[80]]
+            #         # self.obs = self.obs[[29]]
             self.num_data = len(self.obs)
             self.obs_id = torch.arange(self.num_data, device=device)
 
@@ -157,13 +171,15 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_timeseries_data_loader(device, batch_size, test=False, full_data=False, synthetic=False):
+def get_timeseries_data_loader(
+    device, batch_size, test=False, full_data=False, synthetic=False, new=False
+):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        TimeseriesDataset(device, test=test, full_data=full_data, synthetic=synthetic),
+        TimeseriesDataset(device, test=test, full_data=full_data, synthetic=synthetic, new=new),
         batch_size=batch_size,
         shuffle=shuffle,
     )
@@ -176,10 +192,10 @@ def plot_data():
     timeseries_dataset = {}
 
     # Train
-    timeseries_dataset["train"] = TimeseriesDataset(device, full_data=True)
+    timeseries_dataset["train"] = TimeseriesDataset(device, full_data=True, new=True)
 
     # Test
-    timeseries_dataset["test"] = TimeseriesDataset(device, test=True, full_data=False)
+    timeseries_dataset["test"] = TimeseriesDataset(device, test=True, full_data=False, new=True)
 
     for mode in ["test", "train"]:
         start = 0
@@ -187,7 +203,7 @@ def plot_data():
 
         while start < len(timeseries_dataset[mode]):
             obs, obs_id = timeseries_dataset[mode][start:end]
-            path = f"./data/plots/{mode}/{start:05.0f}_{end:05.0f}.png"
+            path = f"./data/plots_new/{mode}/{start:05.0f}_{end:05.0f}.png"
 
             fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
 

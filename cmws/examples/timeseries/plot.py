@@ -15,7 +15,7 @@ from cmws.examples.timeseries import lstm_util
 import cmws.examples.timeseries.inference
 
 
-def plot_obs(ax, obs):
+def plot_obs(ax, obs, no_yticks=False):
     """
     Args
         ax
@@ -26,7 +26,10 @@ def plot_obs(ax, obs):
     ax.plot(obs, color="C0")
     ax.set_ylim(-4, 4)
     ax.set_xticks([])
-    ax.set_yticks([-4, 4])
+    if no_yticks:
+        ax.set_yticks([])
+    else:
+        ax.set_yticks([-4, 4])
     ax.tick_params(axis="y", direction="in")
 
 
@@ -71,7 +74,16 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None):
+def plot_predictions_timeseries(
+    path,
+    generative_model,
+    guide,
+    obs,
+    memory=None,
+    obs_id=None,
+    plot_separate=False,
+    plot_separate_dir="",
+):
     """
     Args:
         path (str)
@@ -85,7 +97,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     num_test_obs, num_timesteps = obs.shape
 
     # Sample latent
-    num_svi_iterations = 10
+    num_svi_iterations = 0
     if memory is None:
         num_particles = 10
         latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
@@ -137,14 +149,12 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
             ax = axss[particle_id, test_obs_id]
             plot_obs(ax, obs[test_obs_id])
 
+            if plot_separate:
+                fig_separate, ax_separate = plt.subplots(1, 1, figsize=(6, 4))
+                plot_obs(ax_separate, obs[test_obs_id], no_yticks=True)
+
             # Compute sorted particle id
             sorted_particle_id = sorted_indices[test_obs_id, particle_id]
-
-            # long_expression = timeseries_util.get_long_expression(
-            #     timeseries_util.get_expression(
-            #         x[sorted_particle_id, test_obs_id][: num_chars[sorted_particle_id, test_obs_id]]
-            #     )
-            # )
             long_expression = timeseries_util.get_full_expression(
                 x[sorted_particle_id, test_obs_id],
                 eos[sorted_particle_id, test_obs_id],
@@ -189,6 +199,32 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
                     predictive_high[sorted_particle_id, test_obs_id].cpu().detach(),
                     color="C1",
                     alpha=0.1,
+                )
+                if plot_separate:
+                    ax_separate.plot(
+                        torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                        obs_predictions[sample_id, sorted_particle_id, test_obs_id].cpu().detach(),
+                        color="C1",
+                        alpha=0.3,
+                    )
+                    ax_separate.plot(
+                        torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                        predictive_mean[sorted_particle_id, test_obs_id].cpu().detach(),
+                        color="C1",
+                        alpha=1.0,
+                    )
+                    ax_separate.fill_between(
+                        torch.arange(data.num_timesteps, 2 * data.num_timesteps).float(),
+                        predictive_low[sorted_particle_id, test_obs_id].cpu().detach(),
+                        predictive_high[sorted_particle_id, test_obs_id].cpu().detach(),
+                        color="C1",
+                        alpha=0.1,
+                    )
+
+            if plot_separate:
+                util.save_fig(fig_separate, f"{plot_separate_dir}/{particle_id}_{test_obs_id}.pdf")
+                util.save_txt(
+                    long_expression, f"{plot_separate_dir}/{particle_id}_{test_obs_id}.txt"
                 )
 
     for particle_id in range(num_particles):
@@ -266,16 +302,24 @@ def get_colors(num_colors, cmap=matplotlib.cm.Blues):
     return [cmap.to_rgba(i + 1) for i in range(num_colors)]
 
 
+def append_to_dict(k, x, dict_):
+    if k in dict_:
+        dict_[k].append(x)
+    else:
+        dict_[k] = [x]
+
+
 def plot_comparison(path, checkpoint_paths):
     device = util.get_device()
+    algorithms = ["cmws_5", "rws", "vimco_2", "reinforce"]
+    lrss = [[1e-3] for _ in range(len(algorithms))]
 
     util.logging.info(f"Plotting stats for all runs in the experiment: {checkpoint_paths}")
 
     # Load
     x = []
-    log_ps = {"cmws_2": [], "cmws": [], "rws": []}
-    kls = {"cmws_2": [], "cmws": [], "rws": []}
-    colors = {"cmws_2": "C0", "cmws": "C2", "rws": "C1"}
+    log_ps = {}
+    kls = {}
     for checkpoint_path in checkpoint_paths:
         if os.path.exists(checkpoint_path):
             # Load checkpoint
@@ -285,63 +329,94 @@ def plot_comparison(path, checkpoint_paths):
             x_new = [x[0] for x in stats.log_ps]
             if len(x_new) > len(x):
                 x = x_new
-            log_ps[run_args.algorithm].append([x[1] for x in stats.log_ps])
-            kls[run_args.algorithm].append([x[1] for x in stats.kls])
+            append_to_dict(
+                (run_args.algorithm, run_args.continuous_guide_lr),
+                [x[1] for x in stats.log_ps],
+                log_ps,
+            )
+            append_to_dict(
+                (run_args.algorithm, run_args.continuous_guide_lr), [x[1] for x in stats.kls], kls
+            )
 
     # Make numpy arrays
     max_len = len(x)
     num_seeds = 5
-    algorithms = ["cmws_2", "rws", "cmws"]
-    log_ps_np = dict(
-        [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
-    )
-    kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
-    for algorithm in algorithms:
-        for seed in range(num_seeds):
-            try:
-                log_p = log_ps[algorithm][seed]
-                kl = kls[algorithm][seed]
-            except Exception:
-                log_p = []
-                kl = []
-            log_ps_np[algorithm][seed][: len(log_p)] = log_p
-            kls_np[algorithm][seed][: len(kl)] = kl
+    # algorithms = ["cmws_5", "rws"]
+    # log_ps_np = dict(
+    #     [[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms]
+    # )
+    # kls_np = dict([[algorithm, np.full((num_seeds, max_len), np.nan)] for algorithm in algorithms])
+    log_ps_np, kls_np = {}, {}
+    for algorithm, continuous_guide_lrs in zip(algorithms, lrss):
+        for continuous_guide_lr in continuous_guide_lrs:
+            log_ps_np[(algorithm, continuous_guide_lr)] = np.full((num_seeds, max_len), np.nan)
+            kls_np[(algorithm, continuous_guide_lr)] = np.full((num_seeds, max_len), np.nan)
+            for seed in range(num_seeds):
+                try:
+                    log_p = log_ps[(algorithm, continuous_guide_lr)][seed]
+                    kl = kls[(algorithm, continuous_guide_lr)][seed]
+                except Exception:
+                    log_p = []
+                    kl = []
+                log_ps_np[(algorithm, continuous_guide_lr)][seed][: len(log_p)] = log_p
+                kls_np[(algorithm, continuous_guide_lr)][seed][: len(kl)] = kl
 
     # Plot
+    colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
+    linestyles = {5e-3: "dotted", 1e-3: "solid", 5e-4: "dashed"}
     fig, axs = plt.subplots(1, 2, figsize=(2 * 6, 1 * 4))
-    for algorithm in algorithms:
-        label = algorithm
-        linestyle = "solid"
-        color = colors[algorithm]
-        plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
 
-        # Logp
-        log_p = log_ps_np[algorithm]
-        ax = axs[0]
-        plot_with_error_bars(ax, x, log_p, **plot_kwargs)
+    actual_fig, actual_ax = plt.subplots(1, 1, figsize=(6, 4))
+    # for algorithm in algorithms:
+    for algorithm, continuous_guide_lrs in zip(algorithms, lrss):
+        for continuous_guide_lr in continuous_guide_lrs:
+            if "cmws" in algorithm:
+                label = "HMWS"
+            elif "vimco" in algorithm:
+                label = "VIMCO"
+            else:
+                label = algorithm.upper()
+            # label = f"{algorithm} {continuous_guide_lr}"
+            linestyle = linestyles[continuous_guide_lr]
+            color = colors[algorithm]
+            plot_kwargs = {"color": color, "linestyle": linestyle, "label": label}
 
-        # KL
-        kl = kls_np[algorithm]
-        ax = axs[1]
-        plot_with_error_bars(ax, x, kl, **plot_kwargs)
+            # Logp
+            log_p = log_ps_np[(algorithm, continuous_guide_lr)]
+            ax = axs[0]
+            plot_with_error_bars(ax, x, log_p, **plot_kwargs)
+            plot_with_error_bars(actual_ax, x, log_p, **plot_kwargs)
+
+            # KL
+            kl = kls_np[(algorithm, continuous_guide_lr)]
+            ax = axs[1]
+            plot_with_error_bars(ax, x, kl, **plot_kwargs)
 
     ax = axs[0]
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Log p")
-    ax.set_ylim(-500, 600)
-    ax.set_xlim(0, 1000)
+    ax.set_ylabel("log p(x)")
+    # ax.set_ylim(200, 450)
+    # ax.set_xlim(0, 2000)
     ax.legend()
 
     ax = axs[1]
     ax.set_xlabel("Iteration")
     ax.set_ylabel("KL")
-    ax.set_ylim(0, 1000000)
-    ax.set_xlim(0, 1000)
+    # ax.set_ylim(0, 1000000)
+    # ax.set_xlim(0, 2000)
     ax.legend()
     for ax in axs:
         # ax.set_xlim(0, 20000)
         sns.despine(ax=ax, trim=True)
     util.save_fig(fig, path, dpi=200)
+
+    actual_ax.set_ylim(0, 35)
+    actual_ax.set_xticks([0, 10000])
+    actual_ax.set_xlabel("Iteration", labelpad=-10)
+    actual_ax.set_ylabel(f"$\\log p_\\theta(x)$")
+    actual_ax.legend()
+    sns.despine(ax=actual_ax, trim=True)
+    util.save_fig(actual_fig, "timeseries_logp.pdf", dpi=200)
 
 
 def main(args):
@@ -372,6 +447,12 @@ def main(args):
             model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
                 checkpoint_path, device=device
             )
+            # if run_args.seed != 0:
+            #     continue
+            # if run_args.algorithm != "rws":
+            #     continue
+            # if run_args.continuous_guide_lr != 1e-3:
+            #     continue
             generative_model, guide, memory = (
                 model["generative_model"],
                 model["guide"],
@@ -382,6 +463,7 @@ def main(args):
 
             # Plot stats
             plot_stats(f"{save_dir}/stats.png", stats)
+            # continue
 
             # Plot reconstructions and other things
             # Load data
@@ -389,9 +471,9 @@ def main(args):
 
             # -- Test
             test_timeseries_dataset = data.TimeseriesDataset(
-                device, test=True, synthetic=run_args.synthetic_data
+                device, test=True, synthetic=run_args.synthetic_data, new=run_args.new_data,
             )
-            obs["test"], _ = test_timeseries_dataset[:]
+            obs["test"], _ = test_timeseries_dataset[:25]
 
             # -- Train
             train_timeseries_dataset = data.TimeseriesDataset(
@@ -399,24 +481,36 @@ def main(args):
                 test=False,
                 full_data=run_args.full_training_data,
                 synthetic=run_args.synthetic_data,
+                new=run_args.new_data,
             )
             if run_args.full_training_data:
                 obs["train"], obs_id = train_timeseries_dataset[
                     # [62, 188, 269, 510, 711, 1262, 1790]
                     # [29]
-                    [9, 29, 100, 108, 134, 168, 180, 191]
+                    # [9, 29, 100, 108, 134, 168, 180, 191]
+                    :25
+                    # 16:17
                 ]
             else:
                 obs["train"], obs_id = train_timeseries_dataset[:]
 
             # Plot
+            done = False
             if run_args.model_type == "timeseries":
                 # Plot prior
-                plot_prior_timeseries(
-                    f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=100
-                )
+                # plot_prior_timeseries(
+                #     f"{save_dir}/prior/{num_iterations}.png", generative_model, num_samples=100
+                # )
                 # Plot predictions
                 if memory is not None:
+                    # if run_args.seed == 0:
+                    #     done = True
+                    #     plot_separate = True
+                    #     plot_separate_dir = f"{save_dir}/predictions/train/memory/{num_iterations}"
+                    # else:
+                    #     plot_separate = False
+                    #     plot_separate_dir = ""
+
                     plot_predictions_timeseries(
                         f"{save_dir}/predictions/train/memory/{num_iterations}.png",
                         generative_model,
@@ -424,6 +518,8 @@ def main(args):
                         obs["train"],
                         memory,
                         obs_id,
+                        # plot_separate=plot_separate,
+                        # plot_separate_dir=plot_separate_dir,
                     )
                 for mode in ["train", "test"]:
                     plot_predictions_timeseries(
@@ -433,6 +529,8 @@ def main(args):
                         obs[mode],
                     )
 
+            # if done:
+            #     return True
             plotted_something = True
         else:
             # Checkpoint doesn't exist

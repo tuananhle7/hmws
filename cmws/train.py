@@ -153,10 +153,11 @@ def train(model, optimizer, stats, args):
                 test=False,
                 full_data=args.full_training_data,
                 synthetic=args.synthetic_data,
+                new=args.new_data,
             )
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
-            device, args.batch_size, test=True, synthetic=args.synthetic_data
+            device, args.batch_size, test=True, synthetic=args.synthetic_data, new=args.new_data
         )
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
         type(generative_model)
@@ -172,7 +173,7 @@ def train(model, optimizer, stats, args):
                 test=False,
                 remove_color=args.remove_color,
                 mode=args.mode,
-                shrink_factor=args.shrink_factor
+                shrink_factor=args.shrink_factor,
             )
         )
         test_data_loader = cmws.examples.scene_understanding.data.get_scene_understanding_data_loader(
@@ -183,7 +184,7 @@ def train(model, optimizer, stats, args):
             test=True,
             remove_color=args.remove_color,
             mode=args.mode,
-            shrink_factor=args.shrink_factor
+            shrink_factor=args.shrink_factor,
         )
     else:
         # Generate test data

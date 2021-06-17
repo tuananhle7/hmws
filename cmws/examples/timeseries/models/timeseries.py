@@ -300,8 +300,14 @@ class GenerativeModel(nn.Module):
                     zero_obs_prob[sample_id, element_id] = True
 
                 covariance_matrix.append(covariance_matrix_se)
-        covariance_matrix = torch.stack(covariance_matrix).view(
-            num_samples, num_elements, timeseries_data.num_timesteps, timeseries_data.num_timesteps
+        covariance_matrix = (
+            torch.stack(covariance_matrix).view(
+                num_samples,
+                num_elements,
+                timeseries_data.num_timesteps,
+                timeseries_data.num_timesteps,
+            )
+            + 0.02 * torch.eye(timeseries_data.num_timesteps, device=self.device)[None, None]
         )
 
         # -- Expand obs
@@ -333,7 +339,8 @@ class GenerativeModel(nn.Module):
                     raw_gp_params_flattened[bad_sample_id, bad_element_id],
                 )
                 cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
-            raise RuntimeError(f"MVN log prob error: {e}")
+            obs_log_prob = -torch.ones((num_samples, num_elements), device=self.device) * 1e6
+            # raise RuntimeError(f"MVN log prob error: {e}")
 
         # -- Mask out zero log probs
         obs_log_prob[zero_obs_prob] = -1e6
@@ -494,6 +501,9 @@ class GenerativeModel(nn.Module):
                     raw_gp_params_flattened[bad_element_id],
                 )
                 cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
+                return torch.zeros(
+                    *[*sample_shape, *shape, timeseries_data.num_timesteps], device=self.device
+                )
             raise RuntimeError(f"MVN sample error: {e}")
 
         return obs
@@ -581,9 +591,32 @@ class GenerativeModel(nn.Module):
         loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)
 
         # Sample obs
-        joint_dist = cmws.util.get_multivariate_normal_dist(
-            loc, covariance_matrix=covariance_matrix
-        )
+        try:
+            joint_dist = cmws.util.get_multivariate_normal_dist(
+                loc, covariance_matrix=covariance_matrix
+            )
+        except Exception as e:
+            error_str = str(e)
+            end = error_str.find("U(") - 2
+            start = error_str.find("batch ") + len("batch ")
+            bad_element_id = int(error_str[start:end])
+            try:
+                covariance_matrix[bad_element_id].cholesky()
+            except Exception:
+                bad_kernel = timeseries_util.get_full_expression(
+                    raw_expression_flattened[bad_element_id],
+                    eos_flattened[bad_element_id],
+                    raw_gp_params_flattened[bad_element_id],
+                )
+                cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
+                return torch.distributions.MultivariateNormal(
+                    torch.zeros(*[*shape, timeseries_data.num_timesteps], device=self.device),
+                    torch.diag_embed(
+                        torch.ones(*[*shape, timeseries_data.num_timesteps], device=self.device)
+                    ),
+                )
+            raise RuntimeError(f"MVN sample predictions error: {e}")
+
         return cmws.util.condition_mvn(joint_dist, obs)
 
 
