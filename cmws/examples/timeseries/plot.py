@@ -309,7 +309,7 @@ def append_to_dict(k, x, dict_):
         dict_[k] = [x]
 
 
-def plot_comparison(path, checkpoint_paths):
+def plot_comparison(path, paper_plot_path, checkpoint_paths):
     device = util.get_device()
     algorithms = ["cmws_5", "rws", "vimco_2", "reinforce"]
     lrss = [[1e-3] for _ in range(len(algorithms))]
@@ -416,7 +416,7 @@ def plot_comparison(path, checkpoint_paths):
     actual_ax.set_ylabel(f"$\\log p_\\theta(x)$")
     actual_ax.legend()
     sns.despine(ax=actual_ax, trim=True)
-    util.save_fig(actual_fig, "timeseries_logp.pdf", dpi=200)
+    util.save_fig(actual_fig, paper_plot_path, dpi=200)
 
 
 def main(args):
@@ -430,7 +430,11 @@ def main(args):
         checkpoint_paths = [args.checkpoint_path]
 
     # Plot log p and KL for all checkpoints
-    plot_comparison(f"save/{args.experiment_name}/stats.png", checkpoint_paths)
+    plot_comparison(
+        f"save/{args.experiment_name}/stats.png",
+        f"save/{args.experiment_name}/stats.pdf",
+        checkpoint_paths,
+    )
     # return True
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"
