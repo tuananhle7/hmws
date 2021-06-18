@@ -184,6 +184,11 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
 
     Returns distribution with batch_shape [*shape] and event_shape [dim]
     """
+    jitter = (
+        1e-3 * torch.eye(covariance_matrix.shape[-1], device=loc.device) * (1 + covariance_matrix)
+    )
+    return torch.distributions.MultivariateNormal(loc, covariance_matrix + jitter)
+
     # Extract
     shape = loc.shape[:-1]
     dim = loc.shape[-1]
@@ -210,7 +215,7 @@ def get_multivariate_normal_dist(loc, covariance_matrix, verbose=False):
         while True:
             jitter_new = jitter[bad_batch_id] * (10 ** exponents[bad_batch_id])
             exponents[bad_batch_id] += 1
-            if jitter_new > 1.0:
+            if jitter_new > 5.0:
                 raise error_1
             covariance_matrix.view((num_elements, dim, dim))[bad_batch_id].diagonal(
                 dim1=-2, dim2=-1
@@ -435,6 +440,12 @@ def logit(y):
     https://github.com/pytorch/pytorch/issues/37060
     """
     return torch.log(y) - torch.log1p(-y)
+
+
+def save_txt(str, path):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(str)
+    logging.info(f"Saved to {path}")
 
 
 if __name__ == "__main__":

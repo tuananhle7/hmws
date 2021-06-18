@@ -57,6 +57,7 @@ def get_args_parser():
     parser.add_argument("--test-num-particles", default=100, type=int, help=" ")
 
     # Data
+    parser.add_argument("--new-data", action="store_true", help=" ")
     parser.add_argument("--full-training-data", action="store_true", help=" ")
     parser.add_argument("--synthetic-data", action="store_true", help=" ")
 

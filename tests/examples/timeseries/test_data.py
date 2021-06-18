@@ -16,7 +16,7 @@ def test_timeseries_dataset():
     assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
 
 
-def test_stacking_data_loader():
+def test_timeseries_data_loader():
     device = cmws.util.get_device()
     batch_size = 7
 
@@ -42,7 +42,7 @@ def test_timeseries_dataset_synthetic():
     assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
 
     # Test
-    timeseries_dataset = TimeseriesDataset(device, test=True)
+    timeseries_dataset = TimeseriesDataset(device, test=True, synthetic=True)
     assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_data, 256]
     assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
 
@@ -62,3 +62,17 @@ def test_stacking_data_loader_synthetic():
     obs, obs_id = next(iter(data_loader))
     assert list(obs.shape) == [batch_size, 256]
     assert list(obs_id.shape) == [batch_size]
+
+
+def test_timeseries_dataset_new():
+    device = cmws.util.get_device()
+
+    # Train
+    timeseries_dataset = TimeseriesDataset(device, new=True)
+    assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_data, 128]
+    assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
+
+    # Test
+    timeseries_dataset = TimeseriesDataset(device, test=True, new=True)
+    assert list(timeseries_dataset.obs.shape) == [timeseries_dataset.num_data, 128]
+    assert list(timeseries_dataset.obs_id.shape) == [timeseries_dataset.num_data]
