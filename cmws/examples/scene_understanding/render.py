@@ -281,7 +281,7 @@ def get_block_mesh(position, size):
         device=device,
     ).view(-1, 3)
 
-    print("size: ", size, "position: ", position, " vertices: ", vertices)
+    # print("size: ", size, "position: ", position, " vertices: ", vertices)
 
     return vertices, faces
 
@@ -427,8 +427,6 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
 
     # Extract
     device = sizes.device
-
-    print("SIZES: ", sizes.shape)
 
     # Create camera
     R, T = look_at_view_transform(3.7, camera_elevation, camera_azimuth+180, at=((-0.15, 0.0, 0.1),),)
@@ -576,7 +574,8 @@ def convert_raw_locations(
 
     min_x = cell_x_min
     max_x = cell_x_max
-    shrink_factor = shrink_factor#0.4
+
+    epsilon = 0.005 # tiny offset to ensure vertices don't directly overlap
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
@@ -584,7 +583,7 @@ def convert_raw_locations(
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[1] #* 0.9
+            y_size = size[1]
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
@@ -597,7 +596,7 @@ def convert_raw_locations(
 
         locations.append(torch.stack([x, y, z]))
 
-        y = y + y_size
+        y = y + y_size + epsilon
         min_x = x
         max_x = min_x + x_size
     return torch.stack(locations)
@@ -666,6 +665,8 @@ def render(
 
     if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
     if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
+
+    print("gamma: ", gamma, ", sigma: ", sigma)
     
     if camera_params is None:
         camera_elevation = 0.1
