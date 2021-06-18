@@ -157,11 +157,11 @@ def get_cube_mesh(position, size):
             dtype=torch.float,
             device=device,
         ).view(-1, 3)
-        - 0.5
+        #- 0.5
     )
     translation = position.clone()
     translation[-1] += size / 2
-    vertices = centered_vertices * size + translation[None]
+    vertices = centered_vertices * size + translation[None] - 0.5
 
     # hardcoded face indices
     faces = torch.tensor(
@@ -215,7 +215,7 @@ def get_block_mesh(position, size):
 
     Args
         position [3]
-        size [3] # [width (x), length (z), height (y)]
+        size [3] # [width (x), height (y), length (z)]
 
     Returns
         vertices [num_vertices, 3]
@@ -231,11 +231,11 @@ def get_block_mesh(position, size):
             dtype=torch.float,
             device=device,
         ).view(-1, 3)
-        - 0.5
+        #- 0.5
     )
     translation = position.clone()
-    #translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
-    vertices = centered_vertices * size + translation[None]
+    translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
+    vertices = centered_vertices * size + translation[None] - 0.5 # center
 
     # hardcoded face indices
     faces = torch.tensor(
@@ -280,6 +280,8 @@ def get_block_mesh(position, size):
         dtype=torch.int32,
         device=device,
     ).view(-1, 3)
+
+    print("size: ", size, "position: ", position, " vertices: ", vertices)
 
     return vertices, faces
 
@@ -582,7 +584,7 @@ def convert_raw_locations(
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[1] * 0.9
+            y_size = size[1] #* 0.9
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
