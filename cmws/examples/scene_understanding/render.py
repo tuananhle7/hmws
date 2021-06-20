@@ -285,12 +285,14 @@ def get_block_mesh(position, size):
 
     return vertices, faces
 
-def get_torus_mesh(r, R, sides = 100, rings = 5, device='cuda'):
+def get_torus_mesh(position, r, R, sides = 100, rings = 5, device='cuda'):
     """Computes a torus mesh
     Modified from:  https://pytorch3d.readthedocs.io/en/latest/_modules/pytorch3d/utils/torus.html
     Args
+        position: x,y,z loc [3]
         r: inner radius []
         R: outer radius []
+        position:
         sides: num inner divisions []
         rings: num outer divisions []
         device (string)
@@ -326,16 +328,23 @@ def get_torus_mesh(r, R, sides = 100, rings = 5, device='cuda'):
             index11 = index1 + (j1 % sides)
             faces.append([index00, index10, index11])
             faces.append([index11, index01, index00])
-    verts = torch.tensor(verts, dtype=torch.float32, device=device)
+
+    # modify based on x,y,z loc
+    translation = position.clone()
+    vertices = torch.tensor(verts, dtype=torch.float32, device=device)
+    pos_adjusted_verts = vertices + translation[None] - 0.5
+    verts = [pos_adjusted_verts]
+    # verts = torch.tensor(verts, dtype=torch.float32, device=device)
     faces = torch.tensor(faces, dtype=torch.int64, device=device)
     return verts, faces
 
-def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, device='cuda'):
+def get_cylinder_mesh(position, radius, height, sides = 100, rings = 5, closed=True, device='cuda'):
     """Computes a cylinder mesh
     Modified from:  https://github.com/hallpaz/3dsystems20/blob/master/extensions_utils/cylinder.py
     Args
-        radius []
-        height []
+        position: x,y,z loc [3]
+        radius: []
+        height: []
         sides: num inner divisions []
         rings: num outer divisions []
         closed: sealed cylinder (Bool)
@@ -384,7 +393,13 @@ def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, devic
             index1 = i1 % sides
             faces.append([index0, len(verts) - 2, index1])
             faces.append([index1 + (rings - 1) * sides, len(verts) - 1, index0 + (rings - 1) * sides])
-    verts = torch.tensor(verts, dtype=torch.float32, device=device)
+
+    # adjust vertices based on position
+    translation = position.clone()
+    vertices = torch.tensor(verts, dtype=torch.float32, device=device)
+    pos_adjusted_verts = vertices + translation[None] - 0.5 # center
+    verts = [pos_adjusted_verts]
+    # verts = torch.tensor(verts, dtype=torch.float32, device=device)
     faces = torch.tensor(faces, dtype=torch.int64, device=device)
     return verts, faces
 
