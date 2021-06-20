@@ -63,6 +63,12 @@ def get_args_parser():
     parser.add_argument("--remove-color", action="store_true",
                         help="Control whether color is rendered. If true, unicolor primitives and color is not learnable.")
 
+    # Blur Parameters
+    parser.add_argument("--learn-blur", action="store_true",
+                        help="Whether sigma + gamma (blur parameters for renderer) are learnable.")
+    parser.add_argument("--blur-scale", default=1.0, type=float,
+                        help="Optional scaling of initial blur (higher value means more extreme initial blurring")
+
     # Data
     parser.add_argument("--data-num-primitives", default=3, type=int, help=" ")
 

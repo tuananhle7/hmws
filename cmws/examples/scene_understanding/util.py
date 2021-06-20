@@ -22,7 +22,9 @@ def init(run_args, device):
             max_num_blocks=run_args.max_num_blocks,
             remove_color=run_args.remove_color, # map from int to bool
             mode=run_args.mode,
-            shrink_factor=run_args.shrink_factor
+            shrink_factor=run_args.shrink_factor,
+            learn_blur=run_args.learn_blur,
+            blur_scale=run_args.blur_scale
         ).to(device)
 
         # Guide

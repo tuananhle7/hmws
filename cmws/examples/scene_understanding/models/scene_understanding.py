@@ -19,7 +19,9 @@ class GenerativeModel(nn.Module):
         obs_dist_type="normal",
         remove_color=False,
         mode="cube",
-        shrink_factor=0.01
+        shrink_factor=0.01,
+        learn_blur=True,
+        blur_scale=1
     ):
         super().__init__()
 
@@ -49,9 +51,14 @@ class GenerativeModel(nn.Module):
                 [render.LearnableBlock(f"{i}", learn_color=not remove_color) for i in range(self.num_primitives)]
             )
 
-        # Rendering parameters
-        self.sigma = nn.Parameter(torch.randn(()))
-        self.gamma = nn.Parameter(torch.randn(()))
+        # Rendering parameters to control blending
+        if learn_blur: # allow sigma + gamma to be tuned
+            # blur scale optionally increases the extremity of initial blur
+            self.sigma = nn.Parameter(torch.randn(()) * blur_scale)
+            self.gamma = nn.Parameter(torch.randn(()))
+        else: # set to defaults (not tensors - avoid post-processing in render)
+            self.sigma = 1e-10
+            self.gamma=1e-6
 
     @property
     def device(self):
