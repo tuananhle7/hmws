@@ -157,11 +157,11 @@ def get_cube_mesh(position, size):
             dtype=torch.float,
             device=device,
         ).view(-1, 3)
-        - 0.5
+        #- 0.5
     )
     translation = position.clone()
     translation[-1] += size / 2
-    vertices = centered_vertices * size + translation[None]
+    vertices = centered_vertices * size + translation[None] - 0.5
 
     # hardcoded face indices
     faces = torch.tensor(
@@ -215,7 +215,7 @@ def get_block_mesh(position, size):
 
     Args
         position [3]
-        size [3] # [width (x), length (z), height (y)]
+        size [3] # [width (x), height (y), length (z)]
 
     Returns
         vertices [num_vertices, 3]
@@ -231,11 +231,11 @@ def get_block_mesh(position, size):
             dtype=torch.float,
             device=device,
         ).view(-1, 3)
-        - 0.5
+        #- 0.5
     )
     translation = position.clone()
-    #translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
-    vertices = centered_vertices * size + translation[None]
+    translation[-1] += size[-1] / 2 # adjust based on length (z-dir) (?)
+    vertices = centered_vertices * size + translation[None] - 0.5 # center
 
     # hardcoded face indices
     faces = torch.tensor(
@@ -281,14 +281,18 @@ def get_block_mesh(position, size):
         device=device,
     ).view(-1, 3)
 
+    # print("size: ", size, "position: ", position, " vertices: ", vertices)
+
     return vertices, faces
 
-def get_torus_mesh(r, R, sides = 100, rings = 5, device='cuda'):
+def get_torus_mesh(position, r, R, sides = 100, rings = 5, device='cuda'):
     """Computes a torus mesh
     Modified from:  https://pytorch3d.readthedocs.io/en/latest/_modules/pytorch3d/utils/torus.html
     Args
+        position: x,y,z loc [3]
         r: inner radius []
         R: outer radius []
+        position:
         sides: num inner divisions []
         rings: num outer divisions []
         device (string)
@@ -324,16 +328,23 @@ def get_torus_mesh(r, R, sides = 100, rings = 5, device='cuda'):
             index11 = index1 + (j1 % sides)
             faces.append([index00, index10, index11])
             faces.append([index11, index01, index00])
-    verts = torch.tensor(verts, dtype=torch.float32, device=device)
+
+    # modify based on x,y,z loc
+    translation = position.clone()
+    vertices = torch.tensor(verts, dtype=torch.float32, device=device)
+    pos_adjusted_verts = vertices + translation[None] - 0.5
+    verts = [pos_adjusted_verts]
+    # verts = torch.tensor(verts, dtype=torch.float32, device=device)
     faces = torch.tensor(faces, dtype=torch.int64, device=device)
     return verts, faces
 
-def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, device='cuda'):
+def get_cylinder_mesh(position, radius, height, sides = 100, rings = 5, closed=True, device='cuda'):
     """Computes a cylinder mesh
     Modified from:  https://github.com/hallpaz/3dsystems20/blob/master/extensions_utils/cylinder.py
     Args
-        radius []
-        height []
+        position: x,y,z loc [3]
+        radius: []
+        height: []
         sides: num inner divisions []
         rings: num outer divisions []
         closed: sealed cylinder (Bool)
@@ -382,7 +393,13 @@ def get_cylinder_mesh(radius, height, sides = 100, rings = 5, closed=True, devic
             index1 = i1 % sides
             faces.append([index0, len(verts) - 2, index1])
             faces.append([index1 + (rings - 1) * sides, len(verts) - 1, index0 + (rings - 1) * sides])
-    verts = torch.tensor(verts, dtype=torch.float32, device=device)
+
+    # adjust vertices based on position
+    translation = position.clone()
+    vertices = torch.tensor(verts, dtype=torch.float32, device=device)
+    pos_adjusted_verts = vertices + translation[None] - 0.5 # center
+    verts = [pos_adjusted_verts]
+    # verts = torch.tensor(verts, dtype=torch.float32, device=device)
     faces = torch.tensor(faces, dtype=torch.int64, device=device)
     return verts, faces
 
@@ -425,8 +442,6 @@ def render_blocks(num_cubes, sizes, colors, positions, im_size=32, sigma=1e-10, 
 
     # Extract
     device = sizes.device
-
-    print("SIZES: ", sizes.shape)
 
     # Create camera
     R, T = look_at_view_transform(3.7, camera_elevation, camera_azimuth+180, at=((-0.15, 0.0, 0.1),),)
@@ -574,7 +589,8 @@ def convert_raw_locations(
 
     min_x = cell_x_min
     max_x = cell_x_max
-    shrink_factor = shrink_factor#0.4
+
+    epsilon = 0.005 # tiny offset to ensure vertices don't directly overlap
 
     locations = []
     for primitive_id, raw_location in zip(stacking_program, raw_locations):
@@ -582,7 +598,7 @@ def convert_raw_locations(
         if mode == "block":
             size = primitives[primitive_id].size # [width (x), length (z), height (y)]
             x_size = size[0]
-            y_size = size[1] * 0.9
+            y_size = size[1]
         else:
             x_size = primitives[primitive_id].size # same scalar
             y_size = primitives[primitive_id].size
@@ -595,7 +611,7 @@ def convert_raw_locations(
 
         locations.append(torch.stack([x, y, z]))
 
-        y = y + y_size
+        y = y + y_size + epsilon
         min_x = x
         max_x = min_x + x_size
     return torch.stack(locations)
@@ -664,6 +680,8 @@ def render(
 
     if torch.is_tensor(gamma):gamma = convert_raw_gamma(gamma)
     if torch.is_tensor(sigma):sigma = convert_raw_sigma(sigma)
+
+    print("gamma: ", gamma, ", sigma: ", sigma)
     
     if camera_params is None:
         camera_elevation = 0.1
