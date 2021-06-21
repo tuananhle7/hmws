@@ -119,8 +119,8 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 self.num_data = 200
             path = (
                 pathlib.Path(__file__).parent.absolute()
-                .joinpath("data", "synthetic", "test.pt" if self.test else "train.pt")
-                # .joinpath("data", "synthetic", "train.pt")
+                # .joinpath("data", "synthetic", "test.pt" if self.test else "train.pt")
+                .joinpath("data", "synthetic", "train.pt")
             )
             if not path.exists():
                 util.logging.info(f"Generating dataset (test = {self.test})...")
@@ -129,8 +129,8 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
 
                 # Set seed
-                util.set_seed(1 if self.test else 0)
-                # util.set_seed(0)
+                # util.set_seed(1 if self.test else 0)
+                util.set_seed(0)
 
                 self.obs = generate_synthetic_data(self.num_data, 20, 128, device)
                 self.obs_id = torch.arange(self.num_data, device=device)

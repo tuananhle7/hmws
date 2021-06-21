@@ -3,7 +3,7 @@ from cmws.examples.timeseries import run
 
 
 def get_run_argss():
-    experiment_name = "2021_06_17_rerunning_neurips_experiments"
+    experiment_name = "2021_06_18_rerunning_neurips_experiments"
 
     for seed in range(5):
         # CMWS4
