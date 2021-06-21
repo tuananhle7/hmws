@@ -300,7 +300,7 @@ class SceneUnderstandingDataset(torch.utils.data.Dataset):
         self.mode=mode
         self.shrink_factor=shrink_factor
 
-        print("color status: ", remove_color)
+        print("color status: ", remove_color, " grid size: ", self.num_grid_rows, self.num_grid_cols)
 
         if self.test:
             self.num_data = self.num_test_data

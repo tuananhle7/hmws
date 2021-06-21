@@ -38,7 +38,9 @@ def init(run_args, device):
         # Memory
         if "mws" in run_args.algorithm:
             memory = cmws.memory.Memory(
-                len(data.SceneUnderstandingDataset(device, test=False,remove_color=run_args.remove_color,
+                len(data.SceneUnderstandingDataset(device, num_grid_rows=run_args.num_grid_rows,
+                                                    num_grid_cols=run_args.num_grid_cols,
+                                                   test=False,remove_color=run_args.remove_color,
                                                    mode=run_args.mode,shrink_factor=run_args.shrink_factor)),
                 run_args.memory_size,
                 generative_model,
@@ -133,10 +135,17 @@ def load_checkpoint(path, device, num_tries=3):
             time.sleep(wait_time)
     run_args = checkpoint["run_args"]
 
+    # hacks to handle changes to args
+    # try:
+    #     mode = run_args.mode
+    # except:
+    #     run_args.mode = "cube"  # hack to handle being modes run before primitive changes
     try:
-        mode = run_args.mode
+        learn_blur = run_args.learn_blur
+        blur_scale = run_args.blur_scale
     except:
-        run_args.mode = "cube"  # hack to handle being modes run before primitive changes
+        run_args.learn_blur = True
+        run_args.blur_scale = 1.0
 
     model, optimizer, stats = init(run_args, device)
 

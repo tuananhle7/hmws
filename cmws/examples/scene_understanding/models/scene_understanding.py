@@ -55,7 +55,7 @@ class GenerativeModel(nn.Module):
         if learn_blur: # allow sigma + gamma to be tuned
             # blur scale optionally increases the extremity of initial blur
             self.sigma = nn.Parameter(torch.randn(()) * blur_scale)
-            self.gamma = nn.Parameter(torch.randn(()))
+            self.gamma = nn.Parameter(torch.randn(()) * blur_scale)
         else: # set to defaults (not tensors - avoid post-processing in render)
             self.sigma = 1e-10
             self.gamma=1e-6
