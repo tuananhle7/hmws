@@ -7,7 +7,6 @@ from pathlib import Path
 import cmws
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from cmws.examples.timeseries.models import timeseries
 from cmws.examples.timeseries import data
 from cmws.util import logging
