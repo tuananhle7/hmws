@@ -475,7 +475,11 @@ def main(args):
 
             # -- Test
             test_timeseries_dataset = data.TimeseriesDataset(
-                device, test=True, synthetic=run_args.synthetic_data, new=run_args.new_data,
+                device,
+                test=True,
+                synthetic=run_args.synthetic_data,
+                new=run_args.new_data,
+                gp_param_range=run_args.continuous_param_range,
             )
             obs["test"], _ = test_timeseries_dataset[:25]
 
@@ -486,6 +490,7 @@ def main(args):
                 full_data=run_args.full_training_data,
                 synthetic=run_args.synthetic_data,
                 new=run_args.new_data,
+                gp_param_range=run_args.continuous_param_range,
             )
             if run_args.full_training_data:
                 obs["train"], obs_id = train_timeseries_dataset[

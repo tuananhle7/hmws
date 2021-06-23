@@ -11,10 +11,11 @@ class GenerativeModel(nn.Module):
     """
     """
 
-    def __init__(self, max_num_chars, lstm_hidden_dim):
+    def __init__(self, max_num_chars, lstm_hidden_dim, gp_param_range=0.02):
         super().__init__()
         self.max_num_chars = max_num_chars
         self.lstm_hidden_dim = lstm_hidden_dim
+        self.gp_param_range = gp_param_range
 
         # Prior for the expression (discrete)
         self.expression_lstm = nn.LSTM(timeseries_util.vocabulary_size, self.lstm_hidden_dim)
@@ -294,6 +295,7 @@ class GenerativeModel(nn.Module):
                             element_id,
                             : num_base_kernels_flattened[sample_id, element_id],
                         ],
+                        self.gp_param_range,
                     )(x_1, x_2)[0]
                 except timeseries_util.ParsingError:
                     covariance_matrix_se = identity_matrix
@@ -470,6 +472,7 @@ class GenerativeModel(nn.Module):
                 covariance_matrix_se = timeseries_util.Kernel(
                     timeseries_util.get_expression(raw_expression_se),
                     raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                    self.gp_param_range,
                 )(x_1, x_2)[0]
             except timeseries_util.ParsingError:
                 covariance_matrix_se = identity_matrix * 1e-6
@@ -578,6 +581,7 @@ class GenerativeModel(nn.Module):
                 covariance_matrix_se = timeseries_util.Kernel(
                     timeseries_util.get_expression(raw_expression_se),
                     raw_gp_params_flattened[element_id, : num_base_kernels_flattened[element_id],],
+                    self.gp_param_range,
                 )(x_1, x_2)[0]
             except timeseries_util.ParsingError:
                 covariance_matrix_se = identity_matrix * 1e-6
