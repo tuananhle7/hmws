@@ -7,7 +7,6 @@ from pathlib import Path
 import cmws
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from cmws.examples.timeseries.models import timeseries
 from cmws.examples.timeseries import data
 from cmws.util import logging
@@ -195,6 +194,10 @@ class ParsingError(Exception):
     pass
 
 
+def get_interval(center, range_):
+    return center - range_ / 2, center + range_ / 2
+
+
 class Kernel(nn.Module):
     """Kernel -> Kernel + Kernel | Kernel * Kernel | W | R | E | L | C
     Adapted from
@@ -232,7 +235,7 @@ class Kernel(nn.Module):
             raw_params[i, 15] raw_const (Constant)
     """
 
-    def __init__(self, expression, raw_params):
+    def __init__(self, expression, raw_params, param_range=0.02):
         super().__init__()
         self.expression = expression
         self.index = 0
@@ -240,6 +243,7 @@ class Kernel(nn.Module):
         self.raw_params = raw_params
         self.raw_params_index = 0
         self.params = []
+        self.param_range = param_range
 
         self.value = self.getValue()
 
@@ -315,7 +319,7 @@ class Kernel(nn.Module):
 
             # scale_sq = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             scale_sq = torch.sigmoid(raw_param[0]) * (max_val - min_val) + min_val
             self.params.append(scale_sq.item())
             return {"op": "WhiteNoise", "scale_sq": scale_sq}
@@ -326,26 +330,26 @@ class Kernel(nn.Module):
             # scale_sq = torch.tensor(0.5, device=self.device)
             # lengthscale_sq = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             scale_sq = torch.sigmoid(raw_param[1]) * (max_val - min_val) + min_val
             lengthscale_sq = torch.sigmoid(raw_param[2]) * (max_val - min_val) + min_val
             self.params.append([scale_sq.item(), lengthscale_sq.item()])
             return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
         elif char == "1":
-            scale_sq = F.softplus(raw_param[3]) + 1e-2
-            min_period, max_period = 0.1, 0.2
-            period = torch.sigmoid(raw_param[4]) * (max_period - min_period) + min_period
-            lengthscale_sq = F.softplus(raw_param[5]) + 1e-1
+            # scale_sq = F.softplus(raw_param[3]) + 1e-2
+            # min_period, max_period = 0.1, 0.2
+            # period = torch.sigmoid(raw_param[4]) * (max_period - min_period) + min_period
+            # lengthscale_sq = F.softplus(raw_param[5]) + 1e-1
 
-            scale_sq = torch.tensor(0.5, device=self.device)
-            period = torch.tensor(0.2, device=self.device)
-            lengthscale_sq = torch.tensor(0.5, device=self.device)
+            # scale_sq = torch.tensor(0.5, device=self.device)
+            # period = torch.tensor(0.2, device=self.device)
+            # lengthscale_sq = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             scale_sq = torch.sigmoid(raw_param[3]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.19, 0.21
+            min_val, max_val = get_interval(0.2, self.param_range)
             period = torch.sigmoid(raw_param[4]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             lengthscale_sq = torch.sigmoid(raw_param[5]) * (max_val - min_val) + min_val
 
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
@@ -365,11 +369,11 @@ class Kernel(nn.Module):
             # period = torch.tensor(0.5, device=self.device)
             # lengthscale_sq = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             scale_sq = torch.sigmoid(raw_param[6]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             period = torch.sigmoid(raw_param[7]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             lengthscale_sq = torch.sigmoid(raw_param[8]) * (max_val - min_val) + min_val
 
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
@@ -389,11 +393,11 @@ class Kernel(nn.Module):
             # period = torch.tensor(1.0, device=self.device)
             # lengthscale_sq = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             scale_sq = torch.sigmoid(raw_param[9]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.99, 1.01
+            min_val, max_val = get_interval(1.0, self.param_range)
             period = torch.sigmoid(raw_param[10]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             lengthscale_sq = torch.sigmoid(raw_param[11]) * (max_val - min_val) + min_val
 
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
@@ -414,11 +418,11 @@ class Kernel(nn.Module):
             # period = torch.tensor(1.5, device=self.device)
             # lengthscale_sq = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             scale_sq = torch.sigmoid(raw_param[12]) * (max_val - min_val) + min_val
-            min_val, max_val = 1.49, 1.51
+            min_val, max_val = get_interval(1.5, self.param_range)
             period = torch.sigmoid(raw_param[13]) * (max_val - min_val) + min_val
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             lengthscale_sq = torch.sigmoid(raw_param[14]) * (max_val - min_val) + min_val
 
             self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
@@ -445,7 +449,7 @@ class Kernel(nn.Module):
 
             # const = torch.tensor(0.5, device=self.device)
 
-            min_val, max_val = 0.49, 0.51
+            min_val, max_val = get_interval(0.5, self.param_range)
             const = torch.sigmoid(raw_param[15]) * (max_val - min_val) + min_val
 
             self.params.append(const.item())
@@ -515,7 +519,9 @@ def init(run_args, device, fast=False):
     if run_args.model_type == "timeseries":
         # Generative model
         generative_model = timeseries.GenerativeModel(
-            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.lstm_hidden_dim
+            max_num_chars=run_args.max_num_chars,
+            lstm_hidden_dim=run_args.lstm_hidden_dim,
+            gp_param_range=run_args.continuous_param_range,
         ).to(device)
 
         # Guide

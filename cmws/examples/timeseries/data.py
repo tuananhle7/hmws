@@ -87,8 +87,8 @@ def get_train_test_data(new=False):
     return train_data, test_data
 
 
-def generate_synthetic_data(num_data, max_num_chars, lstm_hidden_dim, device):
-    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim).to(device)
+def generate_synthetic_data(num_data, max_num_chars, lstm_hidden_dim, device, gp_param_range=0.02):
+    generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim, gp_param_range).to(device)
     cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
         generative_model, batch_size=50, num_iterations=500
     )
@@ -106,11 +106,14 @@ class TimeseriesDataset(torch.utils.data.Dataset):
         seed (int): only used for generation
     """
 
-    def __init__(self, device, test=False, full_data=False, synthetic=False, new=False):
+    def __init__(
+        self, device, test=False, full_data=False, synthetic=False, new=False, gp_param_range=0.02
+    ):
         self.device = device
         self.test = test
         self.synthetic = synthetic
         self.new = new
+        self.gp_param_range = gp_param_range
         if self.synthetic:
             # self.num_data = 200
             if self.test:
@@ -119,8 +122,8 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 self.num_data = 200
             path = (
                 pathlib.Path(__file__).parent.absolute()
-                .joinpath("data", "synthetic", "test.pt" if self.test else "train.pt")
-                # .joinpath("data", "synthetic", "train.pt")
+                # .joinpath("data", "synthetic", "test.pt" if self.test else "train.pt")
+                .joinpath("data", "synthetic", f"{self.gp_param_range}", "train.pt")
             )
             if not path.exists():
                 util.logging.info(f"Generating dataset (test = {self.test})...")
@@ -129,10 +132,12 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
 
                 # Set seed
-                util.set_seed(1 if self.test else 0)
-                # util.set_seed(0)
+                # util.set_seed(1 if self.test else 0)
+                util.set_seed(0)
 
-                self.obs = generate_synthetic_data(self.num_data, 20, 128, device)
+                self.obs = generate_synthetic_data(
+                    self.num_data, 20, 128, device, self.gp_param_range
+                )
                 self.obs_id = torch.arange(self.num_data, device=device)
 
                 # Save dataset
@@ -172,14 +177,21 @@ class TimeseriesDataset(torch.utils.data.Dataset):
 
 
 def get_timeseries_data_loader(
-    device, batch_size, test=False, full_data=False, synthetic=False, new=False
+    device, batch_size, test=False, full_data=False, synthetic=False, new=False, gp_param_range=0.02
 ):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        TimeseriesDataset(device, test=test, full_data=full_data, synthetic=synthetic, new=new),
+        TimeseriesDataset(
+            device,
+            test=test,
+            full_data=full_data,
+            synthetic=synthetic,
+            new=new,
+            gp_param_range=gp_param_range,
+        ),
         batch_size=batch_size,
         shuffle=shuffle,
     )

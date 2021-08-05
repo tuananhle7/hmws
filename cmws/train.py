@@ -154,10 +154,16 @@ def train(model, optimizer, stats, args):
                 full_data=args.full_training_data,
                 synthetic=args.synthetic_data,
                 new=args.new_data,
+                gp_param_range=args.continuous_param_range,
             )
         )
         test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
-            device, args.batch_size, test=True, synthetic=args.synthetic_data, new=args.new_data
+            device,
+            args.batch_size,
+            test=True,
+            synthetic=args.synthetic_data,
+            new=args.new_data,
+            gp_param_range=args.continuous_param_range,
         )
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
         type(generative_model)

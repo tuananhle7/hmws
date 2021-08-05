@@ -24,7 +24,7 @@ def main(args):
 
 
 def get_config_name(args):
-    return f"{args.algorithm}_{args.seed}"
+    return f"{args.algorithm}_{args.continuous_param_range}_{args.seed}"
 
 
 def get_args_parser():
@@ -67,6 +67,7 @@ def get_args_parser():
     parser.add_argument(
         "--model-type", default="timeseries", choices=["timeseries",], help=" ",
     )
+    parser.add_argument("--continuous-param-range", default=0.02, type=float, help=" ")
 
     # Optimization
     parser.add_argument("--continue-training", action="store_true", help=" ")
