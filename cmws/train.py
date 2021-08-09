@@ -176,7 +176,6 @@ def train(model, optimizer, stats, args):
                 test=False,
                 full_data=args.full_training_data,
                 synthetic=args.synthetic_data,
-                new=args.new_data,
                 gp_param_range=args.continuous_param_range,
             )
         )
@@ -185,7 +184,6 @@ def train(model, optimizer, stats, args):
             args.batch_size,
             test=True,
             synthetic=args.synthetic_data,
-            new=args.new_data,
             gp_param_range=args.continuous_param_range,
         )
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
