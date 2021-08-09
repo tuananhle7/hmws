@@ -9,12 +9,13 @@ import textwrap
 import torch
 import numpy as np
 from cmws import util, losses
-from cmws.examples.timeseries import data, run
-from cmws.examples.timeseries import util as timeseries_util
-from cmws.examples.timeseries import lstm_util
-import cmws.examples.timeseries.inference
+from cmws.examples.timeseries_real import data, run
+from cmws.examples.timeseries_real import util as timeseries_util
+from cmws.examples.timeseries_real import lstm_util
+import cmws.examples.timeseries_real.inference
 import pathlib
 from collections import defaultdict
+
 
 def plot_obs(ax, obs):
     """
@@ -72,7 +73,17 @@ def plot_stats(path, stats):
     util.save_fig(fig, path)
 
 
-def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None, obs_id=None, seed=None, num_particles=None, svi=False):
+def plot_predictions_timeseries(
+    path,
+    generative_model,
+    guide,
+    obs,
+    memory=None,
+    obs_id=None,
+    seed=None,
+    num_particles=None,
+    svi=False,
+):
     """
     Args:
         path (str)
@@ -89,7 +100,7 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
     num_svi_iterations = 0
     if memory is None:
         num_particles = 10
-        latent, log_weight = cmws.examples.timeseries.inference.svi_importance_sampling(
+        latent, log_weight = cmws.examples.timeseries_real.inference.svi_importance_sampling(
             num_particles, num_svi_iterations, obs, generative_model, guide
         )
     else:
@@ -97,11 +108,11 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
         if svi:
             num_particles = num_particles or 10
             num_svi_iterations = None
-            latent, log_weight = cmws.examples.timeseries.inference.svi_memory(
+            latent, log_weight = cmws.examples.timeseries_real.inference.svi_memory(
                 num_svi_iterations, obs, obs_id, generative_model, guide, memory
             )
         else:
-            latent, log_weight = cmws.examples.timeseries.inference.importance_sample_memory(
+            latent, log_weight = cmws.examples.timeseries_real.inference.importance_sample_memory(
                 num_particles, obs, obs_id, generative_model, guide, memory
             )
     x, eos, raw_gp_params = latent
@@ -206,23 +217,23 @@ def plot_predictions_timeseries(path, generative_model, guide, obs, memory=None,
 
 def get_full_expression(raw_expression, eos, raw_gp_params):
     num_chars = lstm_util.get_num_timesteps(eos)
-    num_base_kernels = get_num_base_kernels(
-        raw_expression, eos
-    )
+    num_base_kernels = get_num_base_kernels(raw_expression, eos)
     long_expression = timeseries_util.get_long_expression(
-        timeseries_util.get_expression(
-            raw_expression[: num_chars]
-        )
+        timeseries_util.get_expression(raw_expression[:num_chars])
     )
     try:
         kernel = timeseries_util.Kernel(
-            timeseries_util.get_expression(raw_expression[: num_chars]),
-            raw_gp_params[ : num_base_kernels],
+            timeseries_util.get_expression(raw_expression[:num_chars]),
+            raw_gp_params[:num_base_kernels],
         )
-        return timeseries_util.get_long_expression_with_params(timeseries_util.get_expression(raw_expression[: num_chars]), kernel.params)
+        return timeseries_util.get_long_expression_with_params(
+            timeseries_util.get_expression(raw_expression[:num_chars]), kernel.params
+        )
     except timeseries_util.ParsingError as e:
         print(e)
         return long_expression
+
+
 def get_num_base_kernels(raw_expression, eos):
     """
     Args:
@@ -282,7 +293,7 @@ def plot_prior_timeseries(path, generative_model, num_samples):
         # Plot obs
         ax = axss[0, sample_id]
         plot_obs(ax, obs[sample_id])
-        
+
         long_expression = timeseries_util.get_long_expression(
             timeseries_util.get_expression(raw_expression[sample_id][: num_chars[sample_id]])
         )
@@ -332,12 +343,12 @@ def plot_comparison(path, checkpoint_paths):
 
     # Load
     x = []
-    #log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
-    #kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    # log_ps = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
+    # kls = {"cmws_5":[], "cmws_4":[], "cmws_3":[], "cmws_2": [], "cmws": [], "rws": []}
     # colors = {"cmws_5":"C5", "cmws_4":"C4", "cmws_3":"C3", "cmws_2": "C0", "cmws": "C2", "rws": "C1"}
     # colors = {"cmws_5": "C0", "rws": "C1", "vimco": "C2", "reinforce": "C3", "vimco_2": "C4"}
     log_ps = defaultdict(list)
-    kls=defaultdict(list)
+    kls = defaultdict(list)
 
     num_iterations = 1000
     for checkpoint_path in checkpoint_paths:
@@ -431,7 +442,7 @@ def plot_comparison(path, checkpoint_paths):
 
 def main(args):
     # Cuda
-    device = torch.device('cpu') if args.cpu else util.get_device()
+    device = torch.device("cpu") if args.cpu else util.get_device()
 
     # Checkpoint paths
     if args.checkpoint_path is None:
@@ -489,7 +500,7 @@ def main(args):
                 synthetic=run_args.synthetic_data,
             )
             if run_args.full_training_data:
-                if data.datafile=="data.p":
+                if data.datafile == "data.p":
                     # obs["train"], obs_id = train_timeseries_dataset[::5]
                     obs["train"], obs_id = train_timeseries_dataset[
                         # [62, 188, 269, 510, 711, 1262, 1790]
@@ -508,9 +519,7 @@ def main(args):
                 if pathlib.Path(filename).is_file():
                     print(f"{filename} already exists. Skipping")
                 else:
-                    plot_prior_timeseries(
-                        filename, generative_model, num_samples=25
-                    )
+                    plot_prior_timeseries(filename, generative_model, num_samples=25)
                 # Plot predictions
                 if memory is not None:
                     # Short
@@ -545,7 +554,7 @@ def main(args):
                                 memory,
                                 obs_id,
                                 seed=1,
-                                num_particles=num_particles
+                                num_particles=num_particles,
                             )
                 # for mode in ["train", "test"]:
                 #     plot_predictions_timeseries(
@@ -572,21 +581,22 @@ def main(args):
 def calc_log_p(filename, generative_model, guide, device):
     # Load Data
     batch_size = 10
-    train_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+    train_data_loader = cmws.examples.timeseries_real.data.get_timeseries_data_loader(
         device, batch_size, test=False, full_data=True, synthetic=False,
     )
-    test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+    test_data_loader = cmws.examples.timeseries_real.data.get_timeseries_data_loader(
         device, batch_size, test=True, full_data=True, synthetic=False
     )
 
     # Calc log p
     out = ""
+
     def myprint(s):
         nonlocal out
         out = out + s
         print(s)
 
-    if hasattr(generative_model, 'log_eps_sq'):
+    if hasattr(generative_model, "log_eps_sq"):
         myprint(f"eps = {generative_model.log_eps_sq.exp().sqrt()}\n")
     for test_num_particles in [10, 100]:
         myprint(f"log_p with {test_num_particles} particles: ")
@@ -628,7 +638,7 @@ def get_parser():
     parser.add_argument("--repeat", action="store_true", help="")
     parser.add_argument("--long", action="store_true", help="")
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
-    parser.add_argument('--cpu', action="store_true")
+    parser.add_argument("--cpu", action="store_true")
 
     return parser
 
@@ -649,7 +659,7 @@ if __name__ == "__main__":
                         # if not args.long:
                         # print("Running once more with --long")
                         # args.long = True
-                        #main(args)
+                        # main(args)
                         print("Exiting")
                         break
                     else:
@@ -659,11 +669,10 @@ if __name__ == "__main__":
                 else:
                     n_wait += 1
                     if n_wait >= 120:
-                       util.logging.info("Giving up...")
+                        util.logging.info("Giving up...")
                     else:
                         util.logging.info("Didn't plot anything ... waiting 30 seconds")
                         time.sleep(30)
         else:
             main(args)
-
 

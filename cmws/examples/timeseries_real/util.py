@@ -8,43 +8,149 @@ import cmws
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from cmws.examples.timeseries.models import timeseries
-from cmws.examples.timeseries import data
+from cmws.examples.timeseries_real.models import timeseries
+from cmws.examples.timeseries_real import data
 from cmws.util import logging
-import cmws.examples.timeseries.expression_prior_pretraining
+import cmws.examples.timeseries_real.expression_prior_pretraining
 
 include_scale = False
+
+
 def init_model_util(include_symbols, allow_repeat_factors, arg_max_period):
     global base_kernel_chars, char_to_long_char, char_to_num, num_to_char, gp_params_dim, param_idxs, vocabulary_size, exclusive_ops, max_period
     if include_scale:
         raise NotImplementedError()
         base_kernel_chars = {"W", "R", "E", "L", "1", "2", "3", "4", "5", "a", "b", "c", "d", "e"}
-        char_to_long_char = {"W": "WN", "R": "SE", "E": "Per", "L": "Lin", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5"}
-        char_to_num = {"+":0, "*":1, "W":2, "R":3, "E":4, "L":5, "1":6, "2":7, "3":8, "4":9, "5":10, "a":11, "b":12, "c":13, "d":14, "e":15}
+        char_to_long_char = {
+            "W": "WN",
+            "R": "SE",
+            "E": "Per",
+            "L": "Lin",
+            "1": "Per1",
+            "2": "Per2",
+            "3": "Per3",
+            "4": "Per4",
+            "5": "Per5",
+            "a": "Cos1",
+            "b": "Cos2",
+            "c": "Cos3",
+            "d": "Cos4",
+            "e": "Cos5",
+        }
+        char_to_num = {
+            "+": 0,
+            "*": 1,
+            "W": 2,
+            "R": 3,
+            "E": 4,
+            "L": 5,
+            "1": 6,
+            "2": 7,
+            "3": 8,
+            "4": 9,
+            "5": 10,
+            "a": 11,
+            "b": 12,
+            "c": 13,
+            "d": 14,
+            "e": 15,
+        }
         num_to_char = dict([(v, k) for k, v in char_to_num.items()])
         gp_params_dim = 8
     else:
-        base_kernel_chars = {"W", "R", "C",
-                             "_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", #Periodic
-                             "x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", #Cosine
-                             "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v"}
+        base_kernel_chars = {
+            "W",
+            "R",
+            "C",
+            "_",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "0",  # Periodic
+            "x",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",  # Cosine
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+        }
         base_kernel_chars = {x for x in base_kernel_chars if x in include_symbols}
-        char_to_long_char = {"W": "WN", "R": "SE", "C": "const",
-                             "_":"Per", "1":"Per1", "2":"Per2", "3":"Per3", "4":"Per4", "5":"Per5", "6":"Per6", "7":"Per7", "8":"Per8", "9":"Per9", "0":"Per10",
-                             "x":"Cos", "a":"Cos1", "b":"Cos2", "c":"Cos3", "d":"Cos4", "e":"Cos5", "f":"Cos6", "g":"Cos7", "h":"Cos8", "i":"Cos9", "j":"Cos10",
-                             "l":"Lin", "m":"Lin1", "n":"Lin2", "o":"Lin3", "p":"Lin4", "q":"Lin5", "r":"Lin6", "s":"Lin7", "t":"Lin8", "u":"Lin9", "v":"Lin10"}
-        char_to_long_char = {k:v for k,v in char_to_long_char.items() if k in include_symbols}
-        char_to_num = {k:i for i,k in enumerate(["+", "*", *sorted(base_kernel_chars)])}
+        char_to_long_char = {
+            "W": "WN",
+            "R": "SE",
+            "C": "const",
+            "_": "Per",
+            "1": "Per1",
+            "2": "Per2",
+            "3": "Per3",
+            "4": "Per4",
+            "5": "Per5",
+            "6": "Per6",
+            "7": "Per7",
+            "8": "Per8",
+            "9": "Per9",
+            "0": "Per10",
+            "x": "Cos",
+            "a": "Cos1",
+            "b": "Cos2",
+            "c": "Cos3",
+            "d": "Cos4",
+            "e": "Cos5",
+            "f": "Cos6",
+            "g": "Cos7",
+            "h": "Cos8",
+            "i": "Cos9",
+            "j": "Cos10",
+            "l": "Lin",
+            "m": "Lin1",
+            "n": "Lin2",
+            "o": "Lin3",
+            "p": "Lin4",
+            "q": "Lin5",
+            "r": "Lin6",
+            "s": "Lin7",
+            "t": "Lin8",
+            "u": "Lin9",
+            "v": "Lin10",
+        }
+        char_to_long_char = {k: v for k, v in char_to_long_char.items() if k in include_symbols}
+        char_to_num = {k: i for i, k in enumerate(["+", "*", *sorted(base_kernel_chars)])}
         num_to_char = dict([(v, k) for k, v in char_to_num.items()])
 
-        num_params = {"W":0, "R":1, "C":1,
-                      **{k:2 for k in "_1234567890"},
-                      **{k:1 for k in "xabcdefghij"},
-                      **{k:1 for k in "lmnopqrstuv"}}
+        num_params = {
+            "W": 0,
+            "R": 1,
+            "C": 1,
+            **{k: 2 for k in "_1234567890"},
+            **{k: 1 for k in "xabcdefghij"},
+            **{k: 1 for k in "lmnopqrstuv"},
+        }
         param_idxs = {}
         gp_params_dim = 0
         for k, v in num_params.items():
-            param_idxs[k] = [gp_params_dim+i for i in range(v)]
+            param_idxs[k] = [gp_params_dim + i for i in range(v)]
             gp_params_dim += v
 
     vocabulary_size = len(char_to_num)
@@ -55,6 +161,7 @@ def init_model_util(include_symbols, allow_repeat_factors, arg_max_period):
         exclusive_ops = ["Constant", "ExpSinSq", "Cosine"]
 
     max_period = arg_max_period
+
 
 def get_raw_expression(expression, device):
     """
@@ -122,8 +229,7 @@ def get_long_expression_with_params(expression, params):
             params_idx += 1
             # if char in ["W", "R", "C", "p", "1", "2", "3", "4", "5", "x", "a", "b", "c", "d", "e", "l", "!", "@", "#", "$", "%"]:
             long_expression += "{}({})".format(
-                char_to_long_char[char],
-                ", ".join(f"{p:.2f}" for p in param) 
+                char_to_long_char[char], ", ".join(f"{p:.2f}" for p in param)
             )
         elif char == "*":
             long_expression += " × "
@@ -234,10 +340,13 @@ class Kernel(nn.Module):
         if len(values) == 1:
             return values[0]
         else:
-            ops = [k['op'] for k in values]
+            ops = [k["op"] for k in values]
             for op in exclusive_ops:
-                if ops.count(op)>1:
-                    raise ParsingError(f"Expression contains more than one {op}:" + str({"op":"*", "values":values}))
+                if ops.count(op) > 1:
+                    raise ParsingError(
+                        f"Expression contains more than one {op}:"
+                        + str({"op": "*", "values": values})
+                    )
             return {"op": "*", "values": values}
 
     def parseParenthesis(self):
@@ -260,21 +369,30 @@ class Kernel(nn.Module):
             raw_param = self.raw_params[self.raw_params_index]
             self.raw_params_index += 1
 
-        if include_scale: 
+        if include_scale:
             if char == "W":
-                scale_sq = F.softplus(raw_param[0])*0.1
+                scale_sq = F.softplus(raw_param[0]) * 0.1
                 self.params.append(scale_sq.item())
                 return {"op": "WhiteNoise", "scale_sq": scale_sq}
             elif char == "R":
-                scale_sq = F.softplus(raw_param[1])*0.1
+                scale_sq = F.softplus(raw_param[1]) * 0.1
                 lengthscale_sq = F.softplus(raw_param[2])
                 self.params.append([scale_sq.item(), lengthscale_sq.item()])
                 return {"op": "RBF", "scale_sq": scale_sq, "lengthscale_sq": lengthscale_sq}
             elif char in ["E", "1", "2", "3", "4", "5"]:
                 raise NotImplementedError()
-                period_limits = (1/128, 1) if char=="E" else ((int(char)-1)/4 * 127/128+1/128, int(char)/4 * 127/128+1/128)
-                scale_sq = F.softplus(raw_param[3])*0.1
-                period = period_limits[0] + torch.sigmoid(raw_param[4])*(period_limits[1]-period_limits[0])
+                period_limits = (
+                    (1 / 128, 1)
+                    if char == "E"
+                    else (
+                        (int(char) - 1) / 4 * 127 / 128 + 1 / 128,
+                        int(char) / 4 * 127 / 128 + 1 / 128,
+                    )
+                )
+                scale_sq = F.softplus(raw_param[3]) * 0.1
+                period = period_limits[0] + torch.sigmoid(raw_param[4]) * (
+                    period_limits[1] - period_limits[0]
+                )
                 lengthscale_sq = F.softplus(raw_param[5])
                 self.params.append([scale_sq.item(), period.item(), lengthscale_sq.item()])
                 return {
@@ -284,10 +402,10 @@ class Kernel(nn.Module):
                     "lengthscale_sq": lengthscale_sq,
                 }
             elif char == "L":
-                scale_sq = F.softplus(raw_param[6])*0.1
+                scale_sq = F.softplus(raw_param[6]) * 0.1
                 offset = raw_param[7] + 1
                 self.params.append([scale_sq.item(), offset.item()])
-                return {"op": "Linear",  "scale_sq": scale_sq, "offset": offset}
+                return {"op": "Linear", "scale_sq": scale_sq, "offset": offset}
             raise NotImplementedError
         else:
             p = [raw_param[i] for i in param_idxs.get(char, [])]
@@ -300,76 +418,102 @@ class Kernel(nn.Module):
                 return {"op": "RBF", "lengthscale_sq": lengthscale_sq}
             elif char in ["_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]:
                 if char == "_":
-                    period_limits = (1/100, 1)
+                    period_limits = (1 / 100, 1)
                 else:
                     coarse_symbols = [x for x in "1234567890" if x in base_kernel_chars]
 
                     if self.coarse_params is None:
                         period_limits = (
-                            max_period * 100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                            max_period * 100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                            max_period
+                            * 100 ** (-1 + coarse_symbols.index(char) / len(coarse_symbols)),
+                            max_period
+                            * 100 ** (-1 + (coarse_symbols.index(char) + 1) / len(coarse_symbols)),
                         )
                     else:
-                        coarse_params = max_period * 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
+                        coarse_params = max_period * 100 ** (
+                            -1 + (self.coarse_params["P"].exp().cumsum(0) - 1) / len(coarse_symbols)
+                        )
                         lower = coarse_params[coarse_symbols.index(char)]
-                        upper = coarse_params[coarse_symbols.index(char)+1]
+                        upper = coarse_params[coarse_symbols.index(char) + 1]
                         period_limits = (lower, upper)
 
-                period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
+                period = period_limits[0] + torch.sigmoid(p[0]) * (
+                    period_limits[1] - period_limits[0]
+                )
                 lengthscale_sq = F.softplus(p[1]) * period
                 self.params.append([period.item(), lengthscale_sq.item()])
-                return {"op": "ExpSinSq", "period": period, "lengthscale_sq": lengthscale_sq, }
+                return {
+                    "op": "ExpSinSq",
+                    "period": period,
+                    "lengthscale_sq": lengthscale_sq,
+                }
             elif char in ["x", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]:
                 if char == "x":
-                    period_limits = (1/100, 1)
+                    period_limits = (1 / 100, 1)
                 else:
                     coarse_symbols = [x for x in "abcdefghij" if x in base_kernel_chars]
                     if self.coarse_params is None:
                         period_limits = (
-                            max_period * 100**(-1 + coarse_symbols.index(char)/len(coarse_symbols)),
-                            max_period * 100**(-1 + (coarse_symbols.index(char)+1)/len(coarse_symbols)),
+                            max_period
+                            * 100 ** (-1 + coarse_symbols.index(char) / len(coarse_symbols)),
+                            max_period
+                            * 100 ** (-1 + (coarse_symbols.index(char) + 1) / len(coarse_symbols)),
                         )
                     else:
-                        coarse_params = max_period * 100**(-1 + (self.coarse_params['P'].exp().cumsum(0)-1)/len(coarse_symbols))
+                        coarse_params = max_period * 100 ** (
+                            -1 + (self.coarse_params["P"].exp().cumsum(0) - 1) / len(coarse_symbols)
+                        )
                         lower = coarse_params[coarse_symbols.index(char)]
-                        upper = coarse_params[coarse_symbols.index(char)+1]
+                        upper = coarse_params[coarse_symbols.index(char) + 1]
                         period_limits = (lower, upper)
-                period = period_limits[0] + torch.sigmoid(p[0])*(period_limits[1]-period_limits[0])
+                period = period_limits[0] + torch.sigmoid(p[0]) * (
+                    period_limits[1] - period_limits[0]
+                )
                 self.params.append([period.item()])
                 return {"op": "Cosine", "period": period}
             # elif char == "L":
             #     offset = raw_param[16] + 0.5
             #     self.params.append(offset.item())
-            #     return {"op": "Linear",  "offset": offset}  
+            #     return {"op": "Linear",  "offset": offset}
             elif char in ["l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v"]:
-                if char=="l":
+                if char == "l":
                     offset_limits = (-0.5, 1.5)
                 else:
                     coarse_symbols = [x for x in "mnopqrstuv" if x in base_kernel_chars]
                     if self.coarse_params is None:
                         offset_limits = (
-                            -0.5 + 2*coarse_symbols.index(char)/len(coarse_symbols),
-                            -0.5 + 2*(coarse_symbols.index(char)+1)/len(coarse_symbols),
+                            -0.5 + 2 * coarse_symbols.index(char) / len(coarse_symbols),
+                            -0.5 + 2 * (coarse_symbols.index(char) + 1) / len(coarse_symbols),
                         )
                     else:
-                        coarse_params = 0.5 + self.coarse_params['L'][0] + 2 * torch.cat([
-                            torch.zeros(1),
-                            (self.coarse_params['L'][1:].exp().cumsum(0))/len(coarse_symbols)
-                        ], dim=0)
+                        coarse_params = (
+                            0.5
+                            + self.coarse_params["L"][0]
+                            + 2
+                            * torch.cat(
+                                [
+                                    torch.zeros(1),
+                                    (self.coarse_params["L"][1:].exp().cumsum(0))
+                                    / len(coarse_symbols),
+                                ],
+                                dim=0,
+                            )
+                        )
                         lower = coarse_params[coarse_symbols.index(char)]
-                        upper = coarse_params[coarse_symbols.index(char)+1]
+                        upper = coarse_params[coarse_symbols.index(char) + 1]
                         offset_limits = (lower, upper)
 
-                offset = offset_limits[0] + torch.sigmoid(p[0])*(offset_limits[1]-offset_limits[0])
+                offset = offset_limits[0] + torch.sigmoid(p[0]) * (
+                    offset_limits[1] - offset_limits[0]
+                )
                 self.params.append(offset.item())
-                return {"op": "Linear",  "offset": offset}  
+                return {"op": "Linear", "offset": offset}
             elif char == "C":
                 value = F.softplus(p[0])
                 self.params.append(value.item())
                 return {"op": "Constant", "value": value}
 
         raise ParsingError("Cannot parse char: " + str(char))
-        
 
     def forward(self, x_1, x_2, kernel=None, top_level=True):
         """
@@ -418,7 +562,7 @@ class Kernel(nn.Module):
             # print(kernel['op'], "t", t, "l2", l2, "s2", s2)
         elif kernel["op"] == "Constant":
             c = kernel["value"]
-            result = torch.full((x_1-x_2).shape, c.item(), device=x_1.device)
+            result = torch.full((x_1 - x_2).shape, c.item(), device=x_1.device)
         else:
             raise ParsingError(f"Cannot parse kernel op {kernel['op']}")
 
@@ -427,7 +571,7 @@ class Kernel(nn.Module):
             raise RuntimeError("Covariance nan")
 
         if top_level:
-            result = result + self.mean_prior_sd**2
+            result = result + self.mean_prior_sd ** 2
 
         return result
 
@@ -436,13 +580,18 @@ class Kernel(nn.Module):
 def init(run_args, device, fast=False):
     memory = None
     if run_args.model_type == "timeseries":
-        init_model_util(run_args.include_symbols, getattr(run_args, "allow_repeat_factors", False), getattr(run_args, "max_period", 1))
+        init_model_util(
+            run_args.include_symbols,
+            getattr(run_args, "allow_repeat_factors", False),
+            getattr(run_args, "max_period", 1),
+        )
 
         # Generative model
         generative_model = timeseries.GenerativeModel(
-            max_num_chars=run_args.max_num_chars, lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim,
-            learn_eps=getattr(run_args, 'learn_eps', False),
-            learn_coarse=getattr(run_args, 'learn_coarse', False)
+            max_num_chars=run_args.max_num_chars,
+            lstm_hidden_dim=run_args.generative_model_lstm_hidden_dim,
+            learn_eps=getattr(run_args, "learn_eps", False),
+            learn_coarse=getattr(run_args, "learn_coarse", False),
         ).to(device)
 
         # Guide
@@ -452,8 +601,12 @@ def init(run_args, device, fast=False):
 
         if not fast:
             # Pretrain the prior
-            cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
-                generative_model, guide, batch_size=10, num_iterations=4000, include_symbols=run_args.include_symbols or None
+            cmws.examples.timeseries_real.expression_prior_pretraining.pretrain_expression_prior(
+                generative_model,
+                guide,
+                batch_size=10,
+                num_iterations=4000,
+                include_symbols=run_args.include_symbols or None,
             )
 
         # Memory
@@ -473,45 +626,69 @@ def init(run_args, device, fast=False):
     model = {"generative_model": generative_model, "guide": guide, "memory": memory}
 
     # Optimizer
-    if hasattr(run_args, "lr_guide_continuous"): 
-        guide_continuous_params = [*guide.gp_params_lstm.parameters(), *guide.gp_params_extractor.parameters()]
+    if hasattr(run_args, "lr_guide_continuous"):
+        guide_continuous_params = [
+            *guide.gp_params_lstm.parameters(),
+            *guide.gp_params_extractor.parameters(),
+        ]
         guide_discrete_params = [
             *guide.obs_embedder.parameters(),
             *guide.expression_embedder.parameters(),
             *guide.expression_lstm.parameters(),
             *guide.expression_extractor.parameters(),
         ]
-    
-        prior_continuous_params = [*generative_model.gp_params_lstm.parameters(), *generative_model.gp_params_extractor.parameters()]
-        prior_discrete_params = [*generative_model.expression_lstm.parameters(), *generative_model.expression_extractor.parameters()]
+
+        prior_continuous_params = [
+            *generative_model.gp_params_lstm.parameters(),
+            *generative_model.gp_params_extractor.parameters(),
+        ]
+        prior_discrete_params = [
+            *generative_model.expression_lstm.parameters(),
+            *generative_model.expression_extractor.parameters(),
+        ]
         likelihood_params = [
             *([generative_model.log_eps_sq] if generative_model.learn_eps else []),
-            *(generative_model.coarse_params.values() if generative_model.learn_coarse else [])
+            *(generative_model.coarse_params.values() if generative_model.learn_coarse else []),
         ]
-    
-        assert len(set(guide.parameters()) - set([*guide_continuous_params, *guide_discrete_params])) == 0
-        assert len(set(generative_model.parameters()) - set([*prior_continuous_params, *prior_discrete_params, *likelihood_params])) == 0
 
-        optimizer = torch.optim.Adam([
-            {'params': guide_continuous_params, 'lr':run_args.lr_guide_continuous},
-            {'params': guide_discrete_params, 'lr':run_args.lr_guide_discrete},
-            {'params': prior_continuous_params, 'lr':run_args.lr_prior_continuous},
-            {'params': prior_discrete_params, 'lr':run_args.lr_prior_discrete},
-            {'params': likelihood_params, 'lr':run_args.lr_likelihood},
-        ], lr=run_args.lr)
+        assert (
+            len(set(guide.parameters()) - set([*guide_continuous_params, *guide_discrete_params]))
+            == 0
+        )
+        assert (
+            len(
+                set(generative_model.parameters())
+                - set([*prior_continuous_params, *prior_discrete_params, *likelihood_params])
+            )
+            == 0
+        )
+
+        optimizer = torch.optim.Adam(
+            [
+                {"params": guide_continuous_params, "lr": run_args.lr_guide_continuous},
+                {"params": guide_discrete_params, "lr": run_args.lr_guide_discrete},
+                {"params": prior_continuous_params, "lr": run_args.lr_prior_continuous},
+                {"params": prior_discrete_params, "lr": run_args.lr_prior_discrete},
+                {"params": likelihood_params, "lr": run_args.lr_likelihood},
+            ],
+            lr=run_args.lr,
+        )
 
     elif hasattr(run_args, "lr_continuous_latents"):
-        #LEGACY CODE
+        # LEGACY CODE
         continuous_latent_parameters = list(guide.gp_params_extractor.parameters())
         other_parameters = [
             *generative_model.parameters(),
-            *(set(guide.parameters()) - set(continuous_latent_parameters))
+            *(set(guide.parameters()) - set(continuous_latent_parameters)),
         ]
 
-        optimizer = torch.optim.Adam([
-            {'params': continuous_latent_parameters, 'lr':run_args.lr_continuous_latents},
-            {'params': other_parameters},
-        ], lr=run_args.lr)
+        optimizer = torch.optim.Adam(
+            [
+                {"params": continuous_latent_parameters, "lr": run_args.lr_continuous_latents},
+                {"params": other_parameters},
+            ],
+            lr=run_args.lr,
+        )
     else:
         raise NotImplementedError()
 

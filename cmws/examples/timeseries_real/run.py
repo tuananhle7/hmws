@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from cmws import train, util
-from cmws.examples.timeseries import util as timeseries_util
+from cmws.examples.timeseries_real import util as timeseries_util
 
 
 def main(args):
@@ -35,7 +35,18 @@ def get_args_parser():
     parser.add_argument(
         "--algorithm",
         default="rws",
-        choices=["rws", "elbo", "vimco", "cmws", "cmws_2", "cmws_3", "cmws_4", "cmws_5", "vimco_2", "reinforce"],
+        choices=[
+            "rws",
+            "elbo",
+            "vimco",
+            "cmws",
+            "cmws_2",
+            "cmws_3",
+            "cmws_4",
+            "cmws_5",
+            "vimco_2",
+            "reinforce",
+        ],
         help=" ",
     )
     parser.add_argument("--seed", default=1, type=int, help=" ")
@@ -45,7 +56,7 @@ def get_args_parser():
     parser.add_argument("--num-proposals-mws", default=10, type=int, help=" ")
     parser.add_argument("--test-num-particles", default=100, type=int, help=" ")
 
-    parser.add_argument('--include-symbols', default="PXLWRCp12345xabcdel!@#$%", type=str)
+    parser.add_argument("--include-symbols", default="PXLWRCp12345xabcdel!@#$%", type=str)
     # Data
     parser.add_argument("--full-training-data", action="store_true", help=" ")
     parser.add_argument("--synthetic-data", action="store_true", help=" ")

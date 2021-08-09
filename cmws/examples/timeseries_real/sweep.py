@@ -1,5 +1,5 @@
 import cmws.slurm_util
-from cmws.examples.timeseries import run
+from cmws.examples.timeseries_real import run
 
 
 def get_run_argss():

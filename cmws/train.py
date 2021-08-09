@@ -19,6 +19,8 @@ def train(model, optimizer, stats, args):
         config_name = cmws.examples.csg.run.get_config_name(args)
     elif "cmws.examples.timeseries.models" in str(type(generative_model)):
         config_name = cmws.examples.timeseries.run.get_config_name(args)
+    elif "cmws.examples.timeseries_real.models" in str(type(generative_model)):
+        config_name = cmws.examples.timeseries_real.run.get_config_name(args)
     elif "cmws.examples.scene_understanding.models" in str(type(generative_model)):
         config_name = cmws.examples.scene_understanding.run.get_config_name(args)
     checkpoint_path = util.get_checkpoint_path(args.experiment_name, config_name)
@@ -165,6 +167,27 @@ def train(model, optimizer, stats, args):
             new=args.new_data,
             gp_param_range=args.continuous_param_range,
         )
+    elif "cmws.examples.timeseries_real.models.timeseries." in str(type(generative_model)):
+        # Use a data loader
+        train_data_iterator = util.cycle(
+            cmws.examples.timeseries_real.data.get_timeseries_data_loader(
+                device,
+                args.batch_size,
+                test=False,
+                full_data=args.full_training_data,
+                synthetic=args.synthetic_data,
+                new=args.new_data,
+                gp_param_range=args.continuous_param_range,
+            )
+        )
+        test_data_loader = cmws.examples.timeseries_real.data.get_timeseries_data_loader(
+            device,
+            args.batch_size,
+            test=True,
+            synthetic=args.synthetic_data,
+            new=args.new_data,
+            gp_param_range=args.continuous_param_range,
+        )
     elif "cmws.examples.scene_understanding.models.scene_understanding." in str(
         type(generative_model)
     ):
@@ -211,6 +234,7 @@ def train(model, optimizer, stats, args):
             or "cmws.examples.stacking_3d.models.stacking." in str(type(generative_model))
             or "cmws.examples.csg.models.shape_program_pytorch" in str(type(generative_model))
             or "cmws.examples.timeseries.models.timeseries" in str(type(generative_model))
+            or "cmws.examples.timeseries_real.models.timeseries" in str(type(generative_model))
             or "cmws.examples.scene_understanding.models.scene_understanding"
             in str(type(generative_model))
         ):
@@ -340,6 +364,8 @@ def train(model, optimizer, stats, args):
                     or "cmws.examples.csg.models.shape_program_pytorch"
                     in str(type(generative_model))
                     or "cmws.examples.timeseries.models.timeseries" in str(type(generative_model))
+                    or "cmws.examples.timeseries_real.models.timeseries"
+                    in str(type(generative_model))
                     or "cmws.examples.scene_understanding.models.scene_understanding"
                     in str(type(generative_model))
                 ):
@@ -388,6 +414,10 @@ def train(model, optimizer, stats, args):
                 cmws.examples.timeseries.util.save_checkpoint(
                     checkpoint_path, model, optimizer, stats, run_args=args
                 )
+            elif "cmws.examples.timeseries_real.models" in str(type(generative_model)):
+                cmws.examples.timeseries_real.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
             elif "cmws.examples.scene_understanding.models" in str(type(generative_model)):
                 cmws.examples.scene_understanding.util.save_checkpoint(
                     checkpoint_path, model, optimizer, stats, run_args=args
@@ -411,6 +441,10 @@ def train(model, optimizer, stats, args):
                 )
             elif "cmws.examples.timeseries.models" in str(type(generative_model)):
                 cmws.examples.timeseries.util.save_checkpoint(
+                    checkpoint_path_iter, model, optimizer, stats, run_args=args,
+                )
+            elif "cmws.examples.timeseries_real.models" in str(type(generative_model)):
+                cmws.examples.timeseries_real.util.save_checkpoint(
                     checkpoint_path_iter, model, optimizer, stats, run_args=args,
                 )
             elif "cmws.examples.scene_understanding.models" in str(type(generative_model)):

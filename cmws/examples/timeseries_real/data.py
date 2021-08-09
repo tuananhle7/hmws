@@ -1,4 +1,4 @@
-from cmws.examples.timeseries.models.timeseries import GenerativeModel
+from cmws.examples.timeseries_real.models.timeseries import GenerativeModel
 import pathlib
 import pickle
 import functools
@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from cmws import util
-import cmws.examples.timeseries.plot
-import cmws.examples.timeseries.expression_prior_pretraining
+import cmws.examples.timeseries_real.plot
+import cmws.examples.timeseries_real.expression_prior_pretraining
 
 # datafile = "data.p"
 # num_timesteps = 256
@@ -40,8 +40,22 @@ def load_all_data():
     with open(path, "rb") as f:
         d_in = pickle.load(f)
 
-    exclude_categories = ["Lighting2_TRAIN", "Lighting7_TRAIN", "SmallKitchenAppliances_TRAIN", "CinC_ECG_torso_TRAIN", "Earthquakes_TRAIN", "ScreenType_TRAIN", "Haptics_TRAIN", "NonInvasiveFatalECG_Thorax1_TRAIN", "Computers_TRAIN", "Cricket_Z_TRAIN", "LargeKitchenAppliances_TRAIN", "RefrigerationDevices_TRAIN", "Trace_TRAIN"]
-    data = [x for X in d_in if X['source'] not in exclude_categories for x in X["data"]]
+    exclude_categories = [
+        "Lighting2_TRAIN",
+        "Lighting7_TRAIN",
+        "SmallKitchenAppliances_TRAIN",
+        "CinC_ECG_torso_TRAIN",
+        "Earthquakes_TRAIN",
+        "ScreenType_TRAIN",
+        "Haptics_TRAIN",
+        "NonInvasiveFatalECG_Thorax1_TRAIN",
+        "Computers_TRAIN",
+        "Cricket_Z_TRAIN",
+        "LargeKitchenAppliances_TRAIN",
+        "RefrigerationDevices_TRAIN",
+        "Trace_TRAIN",
+    ]
+    data = [x for X in d_in if X["source"] not in exclude_categories for x in X["data"]]
 
     util.logging.info(f"Loaded {len(data)} timeseries")
     return data
@@ -78,19 +92,24 @@ def get_train_test_data():
         num_train_data, num_test_data = 200, 200
         num_non_custom_test_data = num_test_data - len(custom_data)
 
-        step = len(data)//(num_train_data + num_non_custom_test_data)
-        train_data = data[:num_train_data*step:step]
-        test_data = custom_data + data[num_train_data*step:(num_train_data+num_non_custom_test_data)*step:step]
+        step = len(data) // (num_train_data + num_non_custom_test_data)
+        train_data = data[: num_train_data * step : step]
+        test_data = (
+            custom_data
+            + data[
+                num_train_data * step : (num_train_data + num_non_custom_test_data) * step : step
+            ]
+        )
     elif datafile == "data/data_new.p":
-        train_data = data[:10*(len(data)//10)-50]
-        test_data = data[10*(len(data)//10)-50:]
+        train_data = data[: 10 * (len(data) // 10) - 50]
+        test_data = data[10 * (len(data) // 10) - 50 :]
 
     return train_data, test_data
 
 
 def generate_synthetic_data(num_data, max_num_chars, lstm_hidden_dim, include_symbols, device):
     generative_model = GenerativeModel(max_num_chars, lstm_hidden_dim).to(device)
-    cmws.examples.timeseries.expression_prior_pretraining.pretrain_expression_prior(
+    cmws.examples.timeseries_real.expression_prior_pretraining.pretrain_expression_prior(
         generative_model, batch_size=50, num_iterations=500, include_symbols=include_symbols
     )
     return torch.stack([generative_model.sample()[1] for _ in range(num_data)])
@@ -154,7 +173,7 @@ class TimeseriesDataset(torch.utils.data.Dataset):
                 self.obs = torch.tensor(train_obs, device=self.device).float()
                 if not full_data:
                     self.obs = self.obs[::25]
-                    #self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
+                    # self.obs = self.obs[[62, 188, 269, 510, 711, 1262, 1790]]
             self.num_data = len(self.obs)
             self.obs_id = torch.arange(self.num_data, device=device)
 
@@ -169,8 +188,8 @@ def get_timeseries_data_loader(device, batch_size, test=False, full_data=False, 
     if test:
         shuffle = False
     else:
-        shuffle = datafile!="data/data_new.p"
-        
+        shuffle = datafile != "data/data_new.p"
+
     return torch.utils.data.DataLoader(
         TimeseriesDataset(device, test=test, full_data=full_data, synthetic=synthetic),
         batch_size=batch_size,
@@ -201,7 +220,7 @@ def plot_data():
             fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
 
             for i in range(len(obs)):
-                cmws.examples.timeseries.plot.plot_obs(axss.flat[i], obs[i])
+                cmws.examples.timeseries_real.plot.plot_obs(axss.flat[i], obs[i])
 
             util.save_fig(fig, path)
 
@@ -220,7 +239,7 @@ def plot_data():
 
     #     for i in range(len(obs)):
     #         ax = axss.flat[i]
-    #         cmws.examples.timeseries.plot.plot_obs(ax, obs[i])
+    #         cmws.examples.timeseries_real.plot.plot_obs(ax, obs[i])
     #         ax.axvline(255, color="gray")
     #         ax.set_xlim(0, 355)
 

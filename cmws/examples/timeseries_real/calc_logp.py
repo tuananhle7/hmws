@@ -9,31 +9,33 @@ import textwrap
 import torch
 import numpy as np
 from cmws import util, losses
-from cmws.examples.timeseries import data, run
-from cmws.examples.timeseries import util as timeseries_util
-from cmws.examples.timeseries import lstm_util
-import cmws.examples.timeseries.inference
+from cmws.examples.timeseries_real import data, run
+from cmws.examples.timeseries_real import util as timeseries_util
+from cmws.examples.timeseries_real import lstm_util
+import cmws.examples.timeseries_real.inference
 import pathlib
 
+
 def main(args):
-    device = torch.device('cpu') if args.cpu else util.get_device()
+    device = torch.device("cpu") if args.cpu else util.get_device()
 
     # Model
     model, optimizer, stats, run_args = timeseries_util.load_checkpoint(
-                    args.checkpoint_path, device=device
-                )
+        args.checkpoint_path, device=device
+    )
 
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
 
     # Load Data
-    train_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+    train_data_loader = cmws.examples.timeseries_real.data.get_timeseries_data_loader(
         device, args.batch_size, test=False, full_data=True, synthetic=False,
     )
-    test_data_loader = cmws.examples.timeseries.data.get_timeseries_data_loader(
+    test_data_loader = cmws.examples.timeseries_real.data.get_timeseries_data_loader(
         device, args.batch_size, test=True, full_data=True, synthetic=False
     )
 
     out = ""
+
     def myprint(s):
         nonlocal out
         out = out + s
@@ -42,7 +44,7 @@ def main(args):
     # Calc log p
     num_iterations = len(stats.losses)
     myprint(f"At {num_iterations} iterations:\n")
-    if hasattr(generative_model, 'log_eps_sq'):
+    if hasattr(generative_model, "log_eps_sq"):
         myprint(f"eps = {generative_model.log_eps_sq.exp().sqrt()}\n")
     for test_num_particles in [10, 100, 200, 500]:
         myprint(f"Logp with {test_num_particles} particles:")
@@ -79,6 +81,7 @@ def main(args):
     with open(filename, "w") as f:
         f.write(out)
 
+
 def get_parser():
     import argparse
 
@@ -86,7 +89,7 @@ def get_parser():
 
     parser.add_argument("--checkpoint-path", type=str, default=None, help=" ")
     parser.add_argument("--batch-size", type=int, default=20, help=" ")
-    parser.add_argument('--cpu', action="store_true")
+    parser.add_argument("--cpu", action="store_true")
     return parser
 
 

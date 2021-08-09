@@ -2,9 +2,9 @@ import itertools
 import pathlib
 
 import cmws
-import cmws.examples.timeseries.lstm_util as lstm_util
-import cmws.examples.timeseries.pcfg_util as pcfg_util
-import cmws.examples.timeseries.util as timeseries_util
+import cmws.examples.timeseries_real.lstm_util as lstm_util
+import cmws.examples.timeseries_real.pcfg_util as pcfg_util
+import cmws.examples.timeseries_real.util as timeseries_util
 import torch
 from tqdm import tqdm
 
@@ -37,11 +37,11 @@ def pretrain_expression_prior(generative_model, guide, batch_size, num_iteration
             generative_model.expression_lstm.parameters(),
             generative_model.expression_extractor.parameters(),
             guide.expression_lstm.parameters(),
-            guide.expression_extractor.parameters(),            
+            guide.expression_extractor.parameters(),
         )
     )
     train_data_iterator = cmws.util.cycle(
-        cmws.examples.timeseries.data.get_timeseries_data_loader(
+        cmws.examples.timeseries_real.data.get_timeseries_data_loader(
             generative_model.device, batch_size, test=False, full_data=True
         )
     )
@@ -49,9 +49,15 @@ def pretrain_expression_prior(generative_model, guide, batch_size, num_iteration
     path = pathlib.Path(__file__).parent.absolute().joinpath("kernel_pcfg_coarse_ordered.json")
     pcfg = pcfg_util.read_pcfg(path, generative_model.device, include_symbols=include_symbols)
     for i in tqdm(range(num_iterations)):
-        x, eos = generate_data(batch_size, generative_model.max_num_chars, pcfg, generative_model.device, verbose=i==0)
+        x, eos = generate_data(
+            batch_size,
+            generative_model.max_num_chars,
+            pcfg,
+            generative_model.device,
+            verbose=i == 0,
+        )
         optimizer.zero_grad()
-        
+
         loss = -generative_model.expression_dist.log_prob(x, eos).mean()
 
         obs, obs_id = next(train_data_iterator)

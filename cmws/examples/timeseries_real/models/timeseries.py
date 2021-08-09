@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import cmws
-import cmws.examples.timeseries.util as timeseries_util
-import cmws.examples.timeseries.data as timeseries_data
-import cmws.examples.timeseries.lstm_util as lstm_util
+import cmws.examples.timeseries_real.util as timeseries_util
+import cmws.examples.timeseries_real.data as timeseries_data
+import cmws.examples.timeseries_real.lstm_util as lstm_util
 
 
 class GenerativeModel(nn.Module):
@@ -39,11 +39,13 @@ class GenerativeModel(nn.Module):
 
         self.learn_coarse = learn_coarse
         if self.learn_coarse:
-            self.coarse_params = nn.ParameterDict({
-                "P": nn.Parameter(torch.zeros(11)),
-                "X": nn.Parameter(torch.zeros(11)),
-                "L": nn.Parameter(torch.zeros(11))
-            })
+            self.coarse_params = nn.ParameterDict(
+                {
+                    "P": nn.Parameter(torch.zeros(11)),
+                    "X": nn.Parameter(torch.zeros(11)),
+                    "L": nn.Parameter(torch.zeros(11)),
+                }
+            )
         else:
             self.coarse_params = None
 
@@ -321,8 +323,9 @@ class GenerativeModel(nn.Module):
         )
 
         if self.learn_eps:
-            covariance_matrix = covariance_matrix + \
-                self.log_eps_sq.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
+            covariance_matrix = covariance_matrix + self.log_eps_sq.exp() * torch.eye(
+                covariance_matrix.shape[-1], device=covariance_matrix.device
+            )
 
         # -- Expand obs
         obs_expanded = obs_flattened[None].expand(num_samples, num_elements, -1)
@@ -494,8 +497,9 @@ class GenerativeModel(nn.Module):
         )
 
         if self.learn_eps:
-            covariance_matrix = covariance_matrix + \
-                self.log_eps_sq.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
+            covariance_matrix = covariance_matrix + self.log_eps_sq.exp() * torch.eye(
+                covariance_matrix.shape[-1], device=covariance_matrix.device
+            )
 
         # Create mean
         loc = torch.zeros(*[*shape, timeseries_data.num_timesteps], device=self.device)
@@ -520,7 +524,6 @@ class GenerativeModel(nn.Module):
                 )
                 cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
             raise RuntimeError(f"MVN sample error: {e}")
-            
 
         return obs
 
@@ -605,8 +608,9 @@ class GenerativeModel(nn.Module):
         )
 
         if self.learn_eps:
-            covariance_matrix = covariance_matrix + \
-                self.log_eps_sq.exp() * torch.eye(covariance_matrix.shape[-1], device=covariance_matrix.device)
+            covariance_matrix = covariance_matrix + self.log_eps_sq.exp() * torch.eye(
+                covariance_matrix.shape[-1], device=covariance_matrix.device
+            )
 
         # Create mean
         loc = torch.zeros(*[*shape, joint_num_timesteps], device=self.device)
@@ -616,6 +620,7 @@ class GenerativeModel(nn.Module):
             loc, covariance_matrix=covariance_matrix
         )
         return cmws.util.condition_mvn(joint_dist, obs)
+
 
 class Guide(nn.Module):
     """
@@ -630,11 +635,16 @@ class Guide(nn.Module):
         # self.obs_embedder = nn.LSTM(1, self.lstm_hidden_dim)
         self.obs_embedding_dim = self.lstm_hidden_dim
         self.obs_embedder = nn.Sequential(
-            nn.Conv1d(1,self.obs_embedding_dim,2,2), 
-            *[x for _ in range(int(math.log(timeseries_data.num_timesteps, 2))-1)
+            nn.Conv1d(1, self.obs_embedding_dim, 2, 2),
+            *[
+                x
+                for _ in range(int(math.log(timeseries_data.num_timesteps, 2)) - 1)
                 for x in [
                     nn.ReLU(),
-                    nn.Conv1d(self.obs_embedding_dim,self.obs_embedding_dim,2,2) ]])
+                    nn.Conv1d(self.obs_embedding_dim, self.obs_embedding_dim, 2, 2),
+                ]
+            ],
+        )
 
         # Expression embedder
         self.expression_embedder = nn.LSTM(timeseries_util.vocabulary_size, self.lstm_hidden_dim)
