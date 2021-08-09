@@ -28,8 +28,11 @@ def main(args):
 
 
 def get_config_name(args):
-    return f"{args.algorithm}_{args.num_grid_rows}_{args.shrink_factor}_{args.seed}"
-
+    # return f"{args.algorithm}_{args.num_grid_rows}_{args.shrink_factor}_{args.seed}"
+    config_name = f"{args.algorithm}_{args.num_grid_rows}_{args.shrink_factor}_{args.seed}_{args.num_particles}"
+    if "mws" in args.algorithm:
+        config_name = f"{config_name}_{args.memory_size}_{args.num_proposals_mws}"
+    return config_name
 
 def get_args_parser():
     import argparse
