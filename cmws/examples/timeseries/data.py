@@ -200,22 +200,20 @@ def get_timeseries_data_loader(
 def plot_data():
     device = torch.device("cuda")
 
-    # Plot train / test data
+    # Plot synthetic data
     timeseries_dataset = {}
+    for continuous_param_range in [0.01, 0.02, 0.05, 0.1, 0.2]:
+        timeseries_dataset[continuous_param_range] = TimeseriesDataset(
+            device, full_data=True, synthetic=True, gp_param_range=continuous_param_range
+        )
 
-    # Train
-    timeseries_dataset["train"] = TimeseriesDataset(device, full_data=True, new=True)
-
-    # Test
-    timeseries_dataset["test"] = TimeseriesDataset(device, test=True, full_data=False, new=True)
-
-    for mode in ["test", "train"]:
+    for continuous_param_range in [0.01, 0.02, 0.05, 0.1, 0.2]:
         start = 0
         end = 100
 
-        while start < len(timeseries_dataset[mode]):
-            obs, obs_id = timeseries_dataset[mode][start:end]
-            path = f"./data/plots_new/{mode}/{start:05.0f}_{end:05.0f}.png"
+        while start < len(timeseries_dataset[continuous_param_range]):
+            obs, obs_id = timeseries_dataset[continuous_param_range][start:end]
+            path = f"./data/plots_synthetic/{continuous_param_range}/{start:05.0f}_{end:05.0f}.png"
 
             fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
 
@@ -226,6 +224,33 @@ def plot_data():
 
             start = end
             end += 100
+
+    # # Plot train / test data
+    # timeseries_dataset = {}
+
+    # # Train
+    # timeseries_dataset["train"] = TimeseriesDataset(device, full_data=True, new=True)
+
+    # # Test
+    # timeseries_dataset["test"] = TimeseriesDataset(device, test=True, full_data=False, new=True)
+
+    # for mode in ["test", "train"]:
+    #     start = 0
+    #     end = 100
+
+    #     while start < len(timeseries_dataset[mode]):
+    #         obs, obs_id = timeseries_dataset[mode][start:end]
+    #         path = f"./data/plots_new/{mode}/{start:05.0f}_{end:05.0f}.png"
+
+    #         fig, axss = plt.subplots(10, 10, sharex=True, sharey=True, figsize=(10 * 3, 10 * 2))
+
+    #         for i in range(len(obs)):
+    #             cmws.examples.timeseries.plot.plot_obs(axss.flat[i], obs[i])
+
+    #         util.save_fig(fig, path)
+
+    #         start = end
+    #         end += 100
 
     # Plot all data
     # all_data = standardize_data(filter_data(load_all_data()))

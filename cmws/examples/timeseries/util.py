@@ -174,13 +174,15 @@ def get_num_base_kernels(raw_expression, eos):
     return torch.tensor(result, device=device).long().view(shape)
 
 
-def get_full_expression(raw_expression, eos, raw_gp_params):
+def get_full_expression(raw_expression, eos, raw_gp_params, param_range=0.02):
     num_chars = lstm_util.get_num_timesteps(eos)
     num_base_kernels = get_num_base_kernels(raw_expression, eos)
     long_expression = get_long_expression(get_expression(raw_expression[:num_chars]))
     try:
         kernel = Kernel(
-            get_expression(raw_expression[:num_chars]), raw_gp_params[:num_base_kernels],
+            get_expression(raw_expression[:num_chars]),
+            raw_gp_params[:num_base_kernels],
+            param_range=param_range,
         )
         return get_long_expression_with_params(
             get_expression(raw_expression[:num_chars]), kernel.params

@@ -159,6 +159,7 @@ def plot_predictions_timeseries(
                 x[sorted_particle_id, test_obs_id],
                 eos[sorted_particle_id, test_obs_id],
                 raw_gp_params[sorted_particle_id, test_obs_id],
+                param_range=generative_model.gp_param_range,
             )
             ax.text(
                 0.05,
@@ -430,11 +431,18 @@ def main(args):
         checkpoint_paths = [args.checkpoint_path]
 
     # Plot log p and KL for all checkpoints
-    plot_comparison(
-        f"save/{args.experiment_name}/stats.png",
-        f"save/{args.experiment_name}/stats.pdf",
-        checkpoint_paths,
-    )
+    # for continuous_param_range in [0.01, 0.02, 0.05, 0.1, 0.2]:
+    #     plot_comparison(
+    #         f"save/{args.experiment_name}/stats_{continuous_param_range}.png",
+    #         f"save/{args.experiment_name}/stats_{continuous_param_range}.pdf",
+    #         [x for x in checkpoint_paths if str(continuous_param_range) in x],
+    #     )
+
+    # plot_comparison(
+    #     f"save/{args.experiment_name}/stats.png",
+    #     f"save/{args.experiment_name}/stats.pdf",
+    #     checkpoint_paths,
+    # )
     # return True
     util.logging.info(
         f"Max GPU memory allocated = {util.get_max_gpu_memory_allocated_MB(device):.0f} MB"

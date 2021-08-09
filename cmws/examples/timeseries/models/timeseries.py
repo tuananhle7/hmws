@@ -339,6 +339,7 @@ class GenerativeModel(nn.Module):
                     raw_expression_flattened[bad_sample_id, bad_element_id],
                     eos_flattened[bad_sample_id, bad_element_id],
                     raw_gp_params_flattened[bad_sample_id, bad_element_id],
+                    param_range=self.gp_param_range,
                 )
                 cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
             obs_log_prob = -torch.ones((num_samples, num_elements), device=self.device) * 1e6
@@ -502,6 +503,7 @@ class GenerativeModel(nn.Module):
                     raw_expression_flattened[bad_element_id],
                     eos_flattened[bad_element_id],
                     raw_gp_params_flattened[bad_element_id],
+                    param_range=self.gp_param_range,
                 )
                 cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
                 return torch.zeros(
@@ -611,6 +613,7 @@ class GenerativeModel(nn.Module):
                     raw_expression_flattened[bad_element_id],
                     eos_flattened[bad_element_id],
                     raw_gp_params_flattened[bad_element_id],
+                    param_range=self.gp_param_range,
                 )
                 cmws.util.logging.info(f"Bad kernel: {bad_kernel}")
                 return torch.distributions.MultivariateNormal(
