@@ -74,3 +74,29 @@ def test_generative_model_log_prob_dims():
             log_prob = generative_model.log_prob(latent, obs)
 
             assert list(log_prob.shape) == sample_shape + shape
+
+
+def test_generative_model_log_prob_discrete_continuous_dims():
+    num_states, continuous_dim, obs_dim, num_timesteps = 5, 2, 10, 7
+    generative_model = GenerativeModel(num_states, continuous_dim, obs_dim, num_timesteps)
+
+    for shape in [[], [2, 3]]:
+        for discrete_shape in [[], [4]]:
+            for continuous_shape in [[], [5]]:
+                # Create latent
+                discrete_states = torch.randint(
+                    num_states, size=discrete_shape + shape + [num_timesteps]
+                )
+                continuous_states = torch.randn(
+                    *[*continuous_shape, *discrete_shape, *shape, num_timesteps, continuous_dim]
+                )
+
+                # Create obs
+                obs = torch.randn(*[*shape, num_timesteps, obs_dim])
+
+                # Compute log prob
+                log_prob = generative_model.log_prob_discrete_continuous(
+                    discrete_states, continuous_states, obs
+                )
+
+                assert list(log_prob.shape) == continuous_shape + discrete_shape + shape

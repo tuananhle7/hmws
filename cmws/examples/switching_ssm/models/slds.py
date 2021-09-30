@@ -291,7 +291,24 @@ class GenerativeModel(nn.Module):
 
         Returns: [*continuous_shape, *discrete_shape, *shape]
         """
-        pass
+        # Extract
+        discrete_states = discrete_latent
+        continuous_states = continuous_latent
+        shape = obs.shape[:-2]
+        discrete_shape = discrete_states.shape[: -(len(shape) + 1)]
+        continuous_shape = continuous_states.shape[: -(len(discrete_shape) + len(shape) + 2)]
+        # num_elements = cmws.util.get_num_elements(shape)
+        # num_discrete_elements = cmws.util.get_num_elements(discrete_shape)
+        num_continuous_elements = cmws.util.get_num_elements(continuous_shape)
+
+        # Expand discrete
+        # [*continuous_shape, *discrete_shape, *shape, num_timesteps]
+        discrete_states_expanded = (
+            discrete_states.reshape(-1, self.num_timesteps)[None]
+            .expand(num_continuous_elements, -1, self.num_timesteps)
+            .view([*continuous_shape, *discrete_shape, *shape, self.num_timesteps])
+        )
+        return self.log_prob((discrete_states_expanded, continuous_states), obs)
 
     @torch.no_grad()
     def sample(self, sample_shape=[]):
