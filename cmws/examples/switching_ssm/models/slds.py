@@ -410,7 +410,10 @@ class Guide(nn.Module):
 
         Returns [*sample_shape, *shape]
         """
-        pass
+        discrete_states, continuous_states = latent
+        return self.log_prob_discrete(obs, discrete_states) + self.log_prob_continuous(
+            obs, discrete_states, continuous_states
+        )
 
     def sample(self, obs, sample_shape=[]):
         """z ~ q(z | x)
