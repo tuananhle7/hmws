@@ -3,9 +3,9 @@ from cmws.examples.switching_ssm import run
 
 
 def get_run_argss():
-    experiment_name = "2021_09_30_slds_test"
+    experiment_name = "2021_09_30_slds_test_one_obs"
 
-    for seed in range(5):
+    for seed in range(10):
         # CMWS4
         args = run.get_args_parser().parse_args([])
         args.experiment_name = experiment_name
@@ -16,7 +16,8 @@ def get_run_argss():
         args.insomnia = 0.5
         args.algorithm = "cmws_5"
         args.continue_training = True
-        args.num_iterations = 10000
+        args.num_iterations = 20000
+        args.batch_size = 1
         yield args
 
         # Baselines
@@ -28,7 +29,8 @@ def get_run_argss():
             args.insomnia = 0.5
             args.algorithm = algorithm
             args.continue_training = True
-            args.num_iterations = 10000
+            args.num_iterations = 20000
+            args.batch_size = 1
             yield args
 
 
