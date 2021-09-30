@@ -279,7 +279,7 @@ class GenerativeModel(nn.Module):
 
     def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
         """Log joint probability of the generative model
-        log p(z, x)
+        log p(s_{1:T}, z_{1:T}, x_{1:T})
 
         Args:
             discrete_latent (discrete_states)
@@ -312,7 +312,7 @@ class GenerativeModel(nn.Module):
 
     @torch.no_grad()
     def sample(self, sample_shape=[]):
-        """Sample from p(z, x)
+        """Sample from p(s_{1:T}, z_{1:T}, x_{1:T})
 
         Args
             sample_shape
@@ -334,7 +334,7 @@ class GenerativeModel(nn.Module):
 
     @torch.no_grad()
     def sample_obs(self, latent, sample_shape=[]):
-        """Sample from p(x | z)
+        """Sample from p(x_{1:T} | s_{1:T}, z_{1:T})
 
         Args
             latent:
@@ -345,7 +345,16 @@ class GenerativeModel(nn.Module):
         Returns
             obs [*sample_shape, *shape, num_timesteps, obs_dim]
         """
-        pass
+        discrete_states, continuous_states = latent
+        return torch.stack(
+            [
+                self.obs_dist(
+                    discrete_states[..., timestep], continuous_states[..., timestep, :]
+                ).sample(sample_shape)
+                for timestep in range(self.num_timesteps)
+            ],
+            -2,
+        )
 
 
 class Guide(nn.Module):
