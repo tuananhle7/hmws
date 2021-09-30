@@ -358,15 +358,47 @@ class GenerativeModel(nn.Module):
 
 
 class Guide(nn.Module):
-    """
+    """Guide/Recognition model for the Switching Linear Dynamical Model
+    https://github.com/lindermanlab/ssm/blob/db6d73670cb9ff0ea6ddf24926297aa4c706a3d3/notebooks/3%20Switching%20Linear%20Dynamical%20System.ipynb
+
+    Args
+        num_states (int): K
+        continuous_dim (int): D
+        obs_dim (int): N
     """
 
-    def __init__(self, num_timesteps, lstm_hidden_dim):
+    def __init__(self, num_states, continuous_dim, obs_dim, num_timesteps):
         super().__init__()
+        self.num_states = num_states
+        self.continuous_dim = continuous_dim
+        self.obs_dim = obs_dim
+        self.num_timesteps = num_timesteps
+        self.discrete_logits = nn.Parameter(torch.randn(self.num_timesteps, self.num_states))
+        self.continuous_locs = nn.Parameter(torch.randn(self.num_timesteps, self.continuous_dim))
+        self.continuous_log_scales = nn.Parameter(
+            torch.randn(self.num_timesteps, self.continuous_dim)
+        )
 
     @property
     def device(self):
-        pass
+        return self.discrete_logits.device
+
+    @property
+    def discrete_states_dist(self):
+        """q(s_{1:T})
+        """
+        return torch.distributions.Independent(
+            torch.distributions.Categorical(logits=self.discrete_logits),
+            reinterpreted_batch_ndims=1,
+        )
+
+    @property
+    def continuous_states_dist(self):
+        """q(z_{1:T})"""
+        return torch.distributions.Independent(
+            torch.distributions.Normal(self.continuous_locs, self.continuous_log_scales.exp()),
+            reinterpreted_batch_ndims=1,
+        )
 
     def log_prob(self, obs, latent):
         """
@@ -393,7 +425,7 @@ class Guide(nn.Module):
         pass
 
     def sample_discrete(self, obs, sample_shape=[]):
-        """z_d ~ q(z_d | x)
+        """s_{1:T} ~ q(s_{1:T} | x_{1:T})
 
         Args
             obs [*shape, num_timesteps, obs_dim]
@@ -402,7 +434,9 @@ class Guide(nn.Module):
         Returns
             discrete_states [*sample_shape, *shape, num_timesteps]
         """
-        pass
+        # Extract
+        shape = obs.shape[:-2]
+        return self.discrete_states_dist.sample([*sample_shape, *shape])
 
     def _sample_continuous(self, reparam, obs, discrete_latent, sample_shape=[]):
         """z_c ~ q(z_c | z_d, x)

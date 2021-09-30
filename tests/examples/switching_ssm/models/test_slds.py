@@ -126,3 +126,18 @@ def test_generative_model_sample_obs_dims():
             obs = generative_model.sample_obs((discrete_states, continuous_states), sample_shape)
 
             assert list(obs.shape) == sample_shape + shape + [num_timesteps, obs_dim]
+
+
+def test_guide_sample_discrete_dims():
+    num_states, continuous_dim, obs_dim, num_timesteps = 5, 2, 10, 7
+    guide = Guide(num_states, continuous_dim, obs_dim, num_timesteps)
+
+    for shape in [[], [2, 3]]:
+        for sample_shape in [[], [4, 5]]:
+            # Create obs
+            obs = torch.randn(*[*shape, num_timesteps, obs_dim])
+
+            # Sample
+            discrete_states = guide.sample_discrete(obs, sample_shape)
+
+            assert list(discrete_states.shape) == sample_shape + shape + [num_timesteps]
