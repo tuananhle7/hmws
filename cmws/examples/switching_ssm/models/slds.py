@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import cmws
 
 
 class GenerativeModel(nn.Module):
@@ -39,7 +40,7 @@ class GenerativeModel(nn.Module):
         )
 
         # --Dynamics offset b_k ∊ [D]
-        self.dynamics_offset = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
+        self.dynamics_offsets = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
 
         # --Dynamics log scales
         self.dynamics_log_scales = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
@@ -51,7 +52,7 @@ class GenerativeModel(nn.Module):
         )
 
         # --Emission offset d_k ∊ [N]
-        self.emission_offset = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
+        self.emission_offsets = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
 
         # --Emission log scales
         self.emission_log_scales = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
@@ -113,7 +114,7 @@ class GenerativeModel(nn.Module):
             torch.einsum(
                 "...ij,...j->...i", self.dynamics_matrices[discrete_state], prev_continuous_state
             )
-            + self.dynamics_offset[discrete_state]
+            + self.dynamics_offsets[discrete_state]
         )
         scale = self.dynamics_log_scales[discrete_state]
         return torch.distributions.Independent(
@@ -208,6 +209,58 @@ class GenerativeModel(nn.Module):
 
         discrete_states = torch.stack(discrete_states, -1)
         return discrete_states
+
+    def obs_dist(self, discrete_state, continuous_state):
+        """Emission distribution p(x_t | z_t, s_t)
+        
+        Args
+            discrete_state [*shape]
+            continuous_state [*shape, continuous_dim]
+        
+        Returns distribution with batch_shape [*shape], event_shape [obs_dim]
+        """
+        loc = (
+            torch.einsum(
+                "...ij,...j->...i", self.emission_matrices[discrete_state], continuous_state
+            )
+            + self.emission_offsets[discrete_state]
+        )
+        scale = self.emission_log_scales[discrete_state].exp()
+        return torch.distributions.Independent(
+            torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
+        )
+
+    def obs_log_prob(self, latent, obs):
+        """Log joint probability of the generative model
+        log p(x_{1:T} | z_{1:T}, s_{1:T})
+
+        Args:
+            latent:
+                discrete_states [*sample_shape, *shape, num_timesteps]
+                continuous_states [*sample_shape, *shape, num_timesteps, continuous_dim]
+
+            obs [*shape, num_timesteps, obs_dim]
+
+        Returns: [*sample_shape, *shape]
+        """
+        # Extract
+        discrete_states, continuous_states = latent
+        shape = obs.shape[:-2]
+        sample_shape = discrete_states.shape[: -(1 + len(shape))]
+        num_samples = cmws.util.get_num_elements(sample_shape)
+
+        log_prob = 0
+        for timestep in range(self.num_timesteps):
+            # [*sample_shape, *shape, obs_dim]
+            obs_expanded = (
+                obs[..., timestep, :][None]
+                .expand(*[num_samples, *shape, self.obs_dim])
+                .view(*[*sample_shape, *shape, self.obs_dim])
+            )
+            log_prob += self.obs_dist(
+                discrete_states[..., timestep], continuous_states[..., timestep, :]
+            ).log_prob(obs_expanded)
+        return log_prob
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
