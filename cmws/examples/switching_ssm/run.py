@@ -20,7 +20,7 @@ def main(args):
         model, optimizer, stats, _ = switching_ssm_util.load_checkpoint(checkpoint_path, device)
 
     # Train
-    # train.train(model, optimizer, stats, args)
+    train.train(model, optimizer, stats, args)
 
 
 def get_config_name(args):

@@ -23,6 +23,8 @@ def train(model, optimizer, stats, args):
         config_name = cmws.examples.timeseries_real.run.get_config_name(args)
     elif "cmws.examples.scene_understanding.models" in str(type(generative_model)):
         config_name = cmws.examples.scene_understanding.run.get_config_name(args)
+    elif "cmws.examples.switching_ssm.models" in str(type(generative_model)):
+        config_name = cmws.examples.switching_ssm.run.get_config_name(args)
     checkpoint_path = util.get_checkpoint_path(args.experiment_name, config_name)
 
     # Initialize optimizer for pyro models
@@ -208,6 +210,16 @@ def train(model, optimizer, stats, args):
             mode=args.mode,
             shrink_factor=args.shrink_factor,
         )
+    elif "cmws.examples.switching_ssm.models.slds." in str(type(generative_model)):
+        # Use a data loader
+        train_data_iterator = util.cycle(
+            cmws.examples.switching_ssm.data.get_slds_data_loader(
+                device, args.batch_size, test=False,
+            )
+        )
+        test_data_loader = cmws.examples.switching_ssm.data.get_slds_data_loader(
+            device, args.batch_size, test=True
+        )
     else:
         # Generate test data
         # NOTE: super weird but when this is put before sleep pretraining, sleep pretraining doesn't
@@ -230,6 +242,7 @@ def train(model, optimizer, stats, args):
             or "cmws.examples.timeseries_real.models.timeseries" in str(type(generative_model))
             or "cmws.examples.scene_understanding.models.scene_understanding"
             in str(type(generative_model))
+            or "cmws.examples.switching_ssm.models.slds" in str(type(generative_model))
         ):
             obs, obs_id = next(train_data_iterator)
         else:
@@ -361,6 +374,7 @@ def train(model, optimizer, stats, args):
                     in str(type(generative_model))
                     or "cmws.examples.scene_understanding.models.scene_understanding"
                     in str(type(generative_model))
+                    or "cmws.examples.switching_ssm.models.slds" in str(type(generative_model))
                 ):
                     log_p, kl = [], []
                     for test_obs, test_obs_id in test_data_loader:
@@ -415,6 +429,10 @@ def train(model, optimizer, stats, args):
                 cmws.examples.scene_understanding.util.save_checkpoint(
                     checkpoint_path, model, optimizer, stats, run_args=args
                 )
+            elif "cmws.examples.switching_ssm.models" in str(type(generative_model)):
+                cmws.examples.switching_ssm.util.save_checkpoint(
+                    checkpoint_path, model, optimizer, stats, run_args=args
+                )
 
         if iteration % args.checkpoint_interval == 0:
             checkpoint_path_iter = util.get_checkpoint_path(
@@ -442,5 +460,9 @@ def train(model, optimizer, stats, args):
                 )
             elif "cmws.examples.scene_understanding.models" in str(type(generative_model)):
                 cmws.examples.scene_understanding.util.save_checkpoint(
+                    checkpoint_path_iter, model, optimizer, stats, run_args=args,
+                )
+            elif "cmws.examples.switching_ssm.models" in str(type(generative_model)):
+                cmws.examples.switching_ssm.util.save_checkpoint(
                     checkpoint_path_iter, model, optimizer, stats, run_args=args,
                 )

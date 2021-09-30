@@ -116,7 +116,7 @@ class GenerativeModel(nn.Module):
             )
             + self.dynamics_offsets[discrete_state]
         )
-        scale = self.dynamics_log_scales[discrete_state]
+        scale = self.dynamics_log_scales[discrete_state].exp()
         return torch.distributions.Independent(
             torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
         )
