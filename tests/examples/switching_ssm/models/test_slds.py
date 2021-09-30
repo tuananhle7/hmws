@@ -164,3 +164,21 @@ def test_guide_sample_continuous_dims():
                     num_timesteps,
                     continuous_dim,
                 ]
+
+
+def test_guide_sample_dims():
+    num_states, continuous_dim, obs_dim, num_timesteps = 5, 2, 10, 7
+    guide = Guide(num_states, continuous_dim, obs_dim, num_timesteps)
+    for shape in [[], [2, 3]]:
+        for sample_shape in [[], [4, 5]]:
+            # Create obs
+            obs = torch.randn(*[*shape, num_timesteps, obs_dim])
+
+            # Sample
+            discrete_states, continuous_states = guide.sample(obs, sample_shape)
+
+            assert list(discrete_states.shape) == sample_shape + shape + [num_timesteps]
+            assert list(continuous_states.shape) == sample_shape + shape + [
+                num_timesteps,
+                continuous_dim,
+            ]

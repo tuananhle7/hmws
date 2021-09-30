@@ -422,7 +422,9 @@ class Guide(nn.Module):
             discrete_states [*sample_shape, *shape, num_timesteps]
             continuous_states [*sample_shape, *shape, num_timesteps, continuous_dim]
         """
-        pass
+        discrete_states = self.sample_discrete(obs, sample_shape)
+        continuous_states = self.sample_continuous(obs, discrete_states)
+        return discrete_states, continuous_states
 
     def sample_discrete(self, obs, sample_shape=[]):
         """s_{1:T} ~ q(s_{1:T} | x_{1:T})
