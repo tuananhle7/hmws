@@ -170,7 +170,22 @@ class GenerativeModel(nn.Module):
                 discrete_states [*sample_shape, num_timesteps]
                 continuous_states [*sample_shape, num_timesteps, continuous_dim]
         """
-        pass
+        discrete_states, continuous_states = [], []
+
+        # Init log prob
+        discrete_states.append(self.init_discrete_state_dist.sample(sample_shape))
+        continuous_states.append(self.init_continuous_state_dist(discrete_states[-1]).sample())
+
+        # Next log probs
+        for timestep in range(1, self.num_timesteps):
+            discrete_states.append(self.discrete_state_dist(discrete_states[-1]).sample())
+            continuous_states.append(
+                self.continuous_state_dist(continuous_states[-1], discrete_states[-1]).sample()
+            )
+
+        discrete_states = torch.stack(discrete_states, -1)
+        continuous_states = torch.stack(continuous_states, -2)
+        return discrete_states, continuous_states
 
     def discrete_latent_sample(self, sample_shape=[]):
         """Sample from p(z_d)
