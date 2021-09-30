@@ -162,7 +162,10 @@ def get_reinforce_loss(generative_model, guide, obs, num_particles):
     discrete_latent = guide.sample_discrete(obs, (num_particles,))
     continuous_latent = guide.rsample_continuous(obs, discrete_latent)
     # TODO: make this general
-    latent = discrete_latent[0], discrete_latent[1], continuous_latent
+    if "cmws.examples.switching_ssm.models.slds" in str(type(generative_model)):
+        latent = discrete_latent, continuous_latent
+    else:
+        latent = discrete_latent[0], discrete_latent[1], continuous_latent
 
     # Evaluate log probs
     # [num_particles, batch_size]
@@ -250,8 +253,12 @@ def get_vimco_2_loss(generative_model, guide, obs, num_particles):
     # [num_particles, batch_size, ...]
     discrete_latent = guide.sample_discrete(obs, (num_particles,))
     continuous_latent = guide.rsample_continuous(obs, discrete_latent)
+
     # TODO: make this general
-    latent = discrete_latent[0], discrete_latent[1], continuous_latent
+    if "cmws.examples.switching_ssm.models.slds" in str(type(generative_model)):
+        latent = discrete_latent, continuous_latent
+    else:
+        latent = discrete_latent[0], discrete_latent[1], continuous_latent
 
     # Evaluate log probs
     # [num_particles, batch_size]
