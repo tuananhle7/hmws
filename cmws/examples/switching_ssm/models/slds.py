@@ -3,14 +3,111 @@ import torch.nn as nn
 
 
 class GenerativeModel(nn.Module):
-    """
+    """Switching Linear Dynamical Model
+    https://github.com/lindermanlab/ssm/blob/db6d73670cb9ff0ea6ddf24926297aa4c706a3d3/notebooks/3%20Switching%20Linear%20Dynamical%20System.ipynb
+
+    Args
+        num_states (int): K
+        continuous_dim (int): D
+        obs_dim (int): N
     """
 
-    def __init__(self, num_timesteps):
+    def __init__(self, num_states, continuous_dim, obs_dim, num_timesteps):
         super().__init__()
+        self.num_states = num_states
+        self.continuous_dim = continuous_dim
+        self.obs_dim = obs_dim
+        self.num_timesteps = num_timesteps
+
+        # Initial state params
+        # --Logits for discrete state
+        self.discrete_init_logits = nn.Parameter(torch.randn(self.num_states))
+
+        # --Locs and scales for continuous state
+        self.continuous_init_locs = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
+        self.continuous_init_log_scales = nn.Parameter(
+            torch.randn(self.num_states, self.continuous_dim)
+        )
+
+        # Transition model params
+        # --Logits for Q matrix [K, K]
+        self.state_transition_logits = nn.Parameter(torch.randn(self.num_states, self.num_states))
+
+        # --Dynamics matrices A_k ∊ [D, D]
+        self.dynamics_matrices = nn.Parameter(
+            torch.randn(self.num_states, self.continuous_dim, self.continuous_dim)
+        )
+
+        # --Dynamics offset b_k ∊ [D]
+        self.dynamics_offset = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
+
+        # --Dynamics log scales
+        self.dynamics_log_scales = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
+
+        # Emission model params
+        # --Emission matrices C_k ∊ [N, D]
+        self.emission_matrices = nn.Parameter(
+            torch.randn(self.num_states, self.obs_dim, self.continuous_dim)
+        )
+
+        # --Emission offset d_k ∊ [N]
+        self.emission_offset = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
+
+        # --Emission log scales
+        self.emission_log_scales = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
 
     @property
     def device(self):
+        return self.state_transition_logits.device
+
+    @property
+    def init_discrete_state_dist(self):
+        """p(s_1)
+        
+        Initial distribution for the discrete state
+        batch_shape [], event_shape []
+        """
+        return torch.distributions.Categorical(logits=self.discrete_init_logits)
+
+    def init_continuous_state_dist(self, init_discrete_state):
+        """p(z_1 | s_1)
+
+        Initial distribution for the continuous state
+
+        Args
+            init_discrete_state [*shape]
+        
+        Returns distribution with batch_shape [*shape], event_shape [continuous_dim]
+        """
+        loc = self.continuous_init_locs[init_discrete_state]
+        scale = self.continuous_init_log_scales[init_discrete_state].exp()
+        return torch.distributions.Independent(
+            torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
+        )
+
+    def discrete_state_dist(self, prev_discrete_state):
+        """p(s_t | s_{t - 1})
+
+        Transition distribution for the discrete state
+
+        Args
+            prev_discrete_state [*shape]
+        
+        Returns distribution with batch_shape [*shape], event_shape []
+        """
+        pass
+
+    def continuous_state_dist(self, prev_continuous_state, discrete_state):
+        """p(z_t | z_{t - 1}, s_t)
+
+        Dynamics distribution for the continuous state
+
+        Args
+            prev_continuous_state [*shape, continuous_dim]
+            discrete_state [*shape]
+
+        Returns distribution with batch_shape [*shape], event_shape [continuous_dim]
+        """
         pass
 
     def latent_log_prob(self, latent):
@@ -23,7 +120,34 @@ class GenerativeModel(nn.Module):
 
         Returns: [*shape]
         """
-        pass
+        log_prob = 0
+        discrete_states, continuous_states = latent
+
+        # Init log prob
+        init_discrete_state = discrete_states[..., 0]  # [*shape]
+        init_continuous_state = continuous_states[..., 0, :]  # [*shape, continuous_dim]
+        log_prob += self.init_discrete_state_dist.log_prob(
+            init_discrete_state
+        ) + self.init_continuous_state_dist(init_discrete_state).log_prob(init_continuous_state)
+
+        # Next log probs
+        for timestep in range(1, self.num_timesteps):
+            # [*shape]
+            prev_discrete_state = discrete_states[..., timestep - 1]
+            # [*shape, continuous_dim]
+            prev_continuous_state = continuous_states[..., timestep - 1, :]
+            # [*shape]
+            discrete_state = discrete_states[..., timestep]
+            # [*shape, continuous_dim]
+            continuous_state = continuous_states[..., timestep, :]
+
+            log_prob += self.discrete_state_dist(prev_discrete_state).log_prob(
+                discrete_state
+            ) + self.continuous_state_dist(prev_continuous_state, discrete_state).log_prob(
+                continuous_state
+            )
+
+        return log_prob
 
     def latent_sample(self, sample_shape=[]):
         """Sample from p(z)
