@@ -441,7 +441,7 @@ class Guide(nn.Module):
         return self.discrete_states_dist.sample([*sample_shape, *shape])
 
     def _sample_continuous(self, reparam, obs, discrete_latent, sample_shape=[]):
-        """z_c ~ q(z_c | z_d, x)
+        """z_{1:T} ~ q(z_{1:T} | x_{1:T}, s_{1:T})
 
         Args
             reparam (bool)
@@ -462,7 +462,7 @@ class Guide(nn.Module):
             return self.continuous_states_dist.sample([*sample_shape, *discrete_shape, *shape])
 
     def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
-        """z_c ~ q(z_c | z_d, x)
+        """z_{1:T} ~ q(z_{1:T} | x_{1:T}, s_{1:T})
 
         Args
             reparam (bool)
@@ -477,7 +477,7 @@ class Guide(nn.Module):
         return self._sample_continuous(False, obs, discrete_latent, sample_shape=sample_shape)
 
     def rsample_continuous(self, obs, discrete_latent, sample_shape=[]):
-        """z_c ~ q(z_c | z_d, x) (reparameterized)
+        """z_{1:T} ~ q(z_{1:T} | x_{1:T}, s_{1:T}) (reparameterized)
 
         Args
             reparam (bool)
@@ -500,7 +500,7 @@ class Guide(nn.Module):
 
         Returns [*discrete_shape, *shape]
         """
-        pass
+        return self.discrete_states_dist.log_prob(discrete_latent)
 
     def log_prob_continuous(self, obs, discrete_latent, continuous_latent):
         """log q(z_c | z_d, x)
