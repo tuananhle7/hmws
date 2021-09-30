@@ -160,7 +160,7 @@ class GenerativeModel(nn.Module):
         return log_prob
 
     def latent_sample(self, sample_shape=[]):
-        """Sample from p(z)
+        """Sample from p(s_{1:T}, z_{1:T})
 
         Args
             sample_shape
@@ -170,25 +170,26 @@ class GenerativeModel(nn.Module):
                 discrete_states [*sample_shape, num_timesteps]
                 continuous_states [*sample_shape, num_timesteps, continuous_dim]
         """
-        discrete_states, continuous_states = [], []
+        # Sample p(s_{1:T})
+        discrete_states = self.discrete_latent_sample(sample_shape)
+        continuous_states = []
 
-        # Init log prob
-        discrete_states.append(self.init_discrete_state_dist.sample(sample_shape))
-        continuous_states.append(self.init_continuous_state_dist(discrete_states[-1]).sample())
+        # Sample p(z_1 | s_1)
+        continuous_states.append(self.init_continuous_state_dist(discrete_states[..., 0]).sample())
 
-        # Next log probs
+        # Sample p(z_{2:T} | s_{2:T})
         for timestep in range(1, self.num_timesteps):
-            discrete_states.append(self.discrete_state_dist(discrete_states[-1]).sample())
             continuous_states.append(
-                self.continuous_state_dist(continuous_states[-1], discrete_states[-1]).sample()
+                self.continuous_state_dist(
+                    continuous_states[-1], discrete_states[..., timestep]
+                ).sample()
             )
 
-        discrete_states = torch.stack(discrete_states, -1)
         continuous_states = torch.stack(continuous_states, -2)
         return discrete_states, continuous_states
 
     def discrete_latent_sample(self, sample_shape=[]):
-        """Sample from p(z_d)
+        """Sample from p(s_{1:t})
 
         Args
             sample_shape
@@ -196,7 +197,17 @@ class GenerativeModel(nn.Module):
         Returns
             discrete_latent (discrete_states) [*sample_shape, num_timesteps]
         """
-        pass
+        discrete_states = []
+
+        # Init log prob
+        discrete_states.append(self.init_discrete_state_dist.sample(sample_shape))
+
+        # Next log probs
+        for timestep in range(1, self.num_timesteps):
+            discrete_states.append(self.discrete_state_dist(discrete_states[-1]).sample())
+
+        discrete_states = torch.stack(discrete_states, -1)
+        return discrete_states
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
