@@ -27,21 +27,21 @@ def test_slds_dataset():
     assert list(slds_dataset.obs_id.shape) == [slds_dataset.num_data]
 
 
-def test_slds_data_loader():
-    device = cmws.util.get_device()
+# def test_slds_data_loader():
+#     device = cmws.util.get_device()
 
-    num_timesteps = 100
-    obs_dim = 10
-    batch_size = 7
+#     num_timesteps = 100
+#     obs_dim = 10
+#     batch_size = 7
 
-    # Train
-    data_loader = get_slds_data_loader(device, batch_size)
-    obs, obs_id = next(iter(data_loader))
-    assert list(obs.shape) == [batch_size, num_timesteps, obs_dim]
-    assert list(obs_id.shape) == [batch_size]
+#     # Train
+#     data_loader = get_slds_data_loader(device, batch_size)
+#     obs, obs_id = next(iter(data_loader))
+#     assert list(obs.shape) == [batch_size, num_timesteps, obs_dim]
+#     assert list(obs_id.shape) == [batch_size]
 
-    # Train
-    data_loader = get_slds_data_loader(device, batch_size, test=True)
-    obs, obs_id = next(iter(data_loader))
-    assert list(obs.shape) == [batch_size, num_timesteps, obs_dim]
-    assert list(obs_id.shape) == [batch_size]
+#     # Train
+#     data_loader = get_slds_data_loader(device, batch_size, test=True)
+#     obs, obs_id = next(iter(data_loader))
+#     assert list(obs.shape) == [batch_size, num_timesteps, obs_dim]
+#     assert list(obs_id.shape) == [batch_size]
