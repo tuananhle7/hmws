@@ -397,7 +397,7 @@ class Guide(nn.Module):
         """q(z_{1:T})"""
         return torch.distributions.Independent(
             torch.distributions.Normal(self.continuous_locs, self.continuous_log_scales.exp()),
-            reinterpreted_batch_ndims=1,
+            reinterpreted_batch_ndims=2,
         )
 
     def log_prob(self, obs, latent):
@@ -513,4 +513,4 @@ class Guide(nn.Module):
 
         Returns [*continuous_shape, *discrete_shape, *shape]
         """
-        pass
+        return self.continuous_states_dist.log_prob(continuous_latent)

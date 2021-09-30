@@ -202,3 +202,26 @@ def test_guide_log_prob_discrete_dims():
             log_prob = guide.log_prob_discrete(obs, discrete_latent)
 
             assert list(log_prob.shape) == discrete_shape + shape
+
+
+def test_guide_log_prob_continuous_dims():
+    num_states, continuous_dim, obs_dim, num_timesteps = 5, 2, 10, 7
+    guide = Guide(num_states, continuous_dim, obs_dim, num_timesteps)
+    for shape in [[], [2, 3]]:
+        for discrete_shape in [[], [4]]:
+            for continuous_shape in [[], [5]]:
+                # Create latent
+                discrete_states = torch.randint(
+                    num_states, size=discrete_shape + shape + [num_timesteps]
+                )
+                continuous_states = torch.randn(
+                    *[*continuous_shape, *discrete_shape, *shape, num_timesteps, continuous_dim]
+                )
+
+                # Create obs
+                obs = torch.randn(*[*shape, num_timesteps, obs_dim])
+
+                # Compute log prob
+                log_prob = guide.log_prob_continuous(obs, discrete_states, continuous_states)
+
+                assert list(log_prob.shape) == continuous_shape + discrete_shape + shape
