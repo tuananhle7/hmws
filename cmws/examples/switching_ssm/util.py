@@ -77,7 +77,7 @@ def load_checkpoint(path, device, num_tries=3):
             logging.info(f"Waiting for {wait_time} seconds")
             time.sleep(wait_time)
     run_args = checkpoint["run_args"]
-    model, optimizer, stats = init(run_args, device, fast=True)
+    model, optimizer, stats = init(run_args, device)
 
     generative_model, guide, memory = model["generative_model"], model["guide"], model["memory"]
     guide.load_state_dict(checkpoint["guide_state_dict"])
