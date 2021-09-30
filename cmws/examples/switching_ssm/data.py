@@ -42,11 +42,10 @@ class SLDSDataset(torch.utils.data.Dataset):
     def __init__(self, device, test=False):
         self.device = device
         self.test = test
-        # self.num_data = 200
         if self.test:
-            self.num_data = 200
+            self.num_data = 1
         else:
-            self.num_data = 200
+            self.num_data = 1
         path = (
             pathlib.Path(__file__)
             .parent.absolute()

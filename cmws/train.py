@@ -218,7 +218,7 @@ def train(model, optimizer, stats, args):
             )
         )
         test_data_loader = cmws.examples.switching_ssm.data.get_slds_data_loader(
-            device, args.batch_size, test=True
+            device, args.batch_size, test=False  # NOTE: test on train data
         )
     else:
         # Generate test data
