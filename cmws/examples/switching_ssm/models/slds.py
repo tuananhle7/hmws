@@ -95,7 +95,8 @@ class GenerativeModel(nn.Module):
         
         Returns distribution with batch_shape [*shape], event_shape []
         """
-        pass
+        logits = self.state_transition_logits[prev_discrete_state]
+        return torch.distributions.Categorical(logits=logits)
 
     def continuous_state_dist(self, prev_continuous_state, discrete_state):
         """p(z_t | z_{t - 1}, s_t)
@@ -108,7 +109,16 @@ class GenerativeModel(nn.Module):
 
         Returns distribution with batch_shape [*shape], event_shape [continuous_dim]
         """
-        pass
+        loc = (
+            torch.einsum(
+                "...ij,...j->...i", self.dynamics_matrices[discrete_state], prev_continuous_state
+            )
+            + self.dynamics_offset[discrete_state]
+        )
+        scale = self.dynamics_log_scales[discrete_state]
+        return torch.distributions.Independent(
+            torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
+        )
 
     def latent_log_prob(self, latent):
         """Prior log p(z)
