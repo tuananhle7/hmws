@@ -451,7 +451,13 @@ class Guide(nn.Module):
             continuous_states
                 [*sample_shape, *discrete_shape, *shape, num_timesteps, continuous_dim]
         """
-        pass
+        # Extract
+        shape = obs.shape[:-2]
+        discrete_shape = discrete_latent.shape[: -(1 + len(shape))]
+        if reparam:
+            return self.continuous_states_dist.rsample([*sample_shape, *discrete_shape, *shape])
+        else:
+            return self.continuous_states_dist.sample([*sample_shape, *discrete_shape, *shape])
 
     def sample_continuous(self, obs, discrete_latent, sample_shape=[]):
         """z_c ~ q(z_c | z_d, x)
