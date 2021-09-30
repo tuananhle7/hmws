@@ -264,7 +264,7 @@ class GenerativeModel(nn.Module):
 
     def log_prob(self, latent, obs):
         """Log joint probability of the generative model
-        log p(z, x)
+        log p(s_{1:T}, z_{1:T}, x_{1:T})
 
         Args:
             latent:
@@ -275,7 +275,7 @@ class GenerativeModel(nn.Module):
 
         Returns: [*sample_shape, *shape]
         """
-        pass
+        return self.latent_log_prob(latent) + self.obs_log_prob(latent, obs)
 
     def log_prob_discrete_continuous(self, discrete_latent, continuous_latent, obs):
         """Log joint probability of the generative model
