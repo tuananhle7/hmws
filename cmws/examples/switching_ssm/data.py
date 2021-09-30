@@ -80,3 +80,13 @@ class SLDSDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return self.num_data
+
+
+def get_slds_data_loader(device, batch_size, test=False):
+    if test:
+        shuffle = False
+    else:
+        shuffle = True
+    return torch.utils.data.DataLoader(
+        SLDSDataset(device, test=test), batch_size=batch_size, shuffle=shuffle,
+    )
