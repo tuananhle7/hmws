@@ -214,11 +214,23 @@ def train(model, optimizer, stats, args):
         # Use a data loader
         train_data_iterator = util.cycle(
             cmws.examples.switching_ssm.data.get_slds_data_loader(
-                device, args.batch_size, test=False,
+                device,
+                args.batch_size,
+                test=False,
+                num_timesteps=args.num_timesteps,
+                num_states=args.num_states,
+                continuous_dim=args.continuous_dim,
+                obs_dim=args.obs_dim,
             )
         )
         test_data_loader = cmws.examples.switching_ssm.data.get_slds_data_loader(
-            device, args.batch_size, test=False  # NOTE: test on train data
+            device,
+            args.batch_size,
+            test=False,
+            num_timesteps=args.num_timesteps,
+            num_states=args.num_states,
+            continuous_dim=args.continuous_dim,
+            obs_dim=args.obs_dim,  # NOTE: test on train data
         )
     else:
         # Generate test data

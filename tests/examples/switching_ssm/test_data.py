@@ -5,26 +5,42 @@ from cmws.examples.switching_ssm.data import SLDSDataset, get_slds_data_loader
 def test_slds_dataset():
     device = cmws.util.get_device()
 
-    num_timesteps = 100
+    num_states = 5
+    continuous_dim = 2
     obs_dim = 10
 
-    # Train
-    slds_dataset = SLDSDataset(device)
-    assert list(slds_dataset.obs.shape) == [
-        slds_dataset.num_data,
-        num_timesteps,
-        obs_dim,
-    ]
-    assert list(slds_dataset.obs_id.shape) == [slds_dataset.num_data]
+    for num_timesteps in [50, 100, 200, 500, 1000]:
+        # Train
+        slds_dataset = SLDSDataset(
+            device,
+            test=False,
+            num_timesteps=num_timesteps,
+            num_states=num_states,
+            continuous_dim=continuous_dim,
+            obs_dim=obs_dim,
+        )
+        assert list(slds_dataset.obs.shape) == [
+            slds_dataset.num_data,
+            num_timesteps,
+            obs_dim,
+        ]
+        assert list(slds_dataset.obs_id.shape) == [slds_dataset.num_data]
 
-    # Test
-    slds_dataset = SLDSDataset(device, test=True)
-    assert list(slds_dataset.obs.shape) == [
-        slds_dataset.num_data,
-        num_timesteps,
-        obs_dim,
-    ]
-    assert list(slds_dataset.obs_id.shape) == [slds_dataset.num_data]
+        # Test
+        slds_dataset = SLDSDataset(
+            device,
+            test=True,
+            num_timesteps=num_timesteps,
+            num_states=num_states,
+            continuous_dim=continuous_dim,
+            obs_dim=obs_dim,
+        )
+        assert list(slds_dataset.obs.shape) == [
+            slds_dataset.num_data,
+            num_timesteps,
+            obs_dim,
+        ]
+        assert list(slds_dataset.obs_id.shape) == [slds_dataset.num_data]
 
 
 # def test_slds_data_loader():

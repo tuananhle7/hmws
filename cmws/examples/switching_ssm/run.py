@@ -57,12 +57,12 @@ def get_args_parser():
     parser.add_argument("--test-num-particles", default=100, type=int, help=" ")
 
     # Data
+    parser.add_argument("--num-timesteps", default=100, type=int, help=" ")
 
     # Model
     parser.add_argument("--num-states", default=5, type=int, help=" ")
     parser.add_argument("--continuous-dim", default=2, type=int, help=" ")
     parser.add_argument("--obs-dim", default=10, type=int, help=" ")
-    parser.add_argument("--num-timesteps", default=100, type=int, help=" ")
     parser.add_argument(
         "--model-type", default="slds", choices=["slds",], help=" ",
     )

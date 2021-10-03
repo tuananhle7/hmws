@@ -6,13 +6,7 @@ from ssm.util import random_rotation
 import numpy as np
 
 
-def sample_slds():
-    # Set the parameters of the SLDS
-    num_timesteps = 100  # number of time bins
-    num_states = 5  # number of discrete states
-    continuous_dim = 2  # number of latent dimensions
-    obs_dim = 10  # number of observed dimensions
-
+def sample_slds(num_timesteps, num_states, continuous_dim, obs_dim):
     # Make an SLDS with the true parameters
     true_slds = ssm.SLDS(obs_dim, num_states, continuous_dim, emissions="gaussian_orthog")
 
@@ -25,9 +19,16 @@ def sample_slds():
     return emissions
 
 
-def generate_synthetic_data(num_data, device):
+def generate_synthetic_data(
+    num_data, device, num_timesteps=100, num_states=5, continuous_dim=2, obs_dim=10
+):
     return torch.stack(
-        [torch.tensor(sample_slds(), device=device).float() for _ in range(num_data)]
+        [
+            torch.tensor(
+                sample_slds(num_timesteps, num_states, continuous_dim, obs_dim), device=device
+            ).float()
+            for _ in range(num_data)
+        ]
     )
 
 
@@ -39,7 +40,9 @@ class SLDSDataset(torch.utils.data.Dataset):
         test (bool; default: False)
     """
 
-    def __init__(self, device, test=False):
+    def __init__(
+        self, device, test=False, num_timesteps=100, num_states=5, continuous_dim=2, obs_dim=10
+    ):
         self.device = device
         self.test = test
         if self.test:
@@ -49,7 +52,11 @@ class SLDSDataset(torch.utils.data.Dataset):
         path = (
             pathlib.Path(__file__)
             .parent.absolute()
-            .joinpath("data", "test.pt" if self.test else "train.pt")
+            .joinpath(
+                "data",
+                f"{num_timesteps}_{num_states}_{continuous_dim}_{obs_dim}",
+                "test.pt" if self.test else "train.pt",
+            )
         )
         if not path.exists():
             util.logging.info(f"Generating dataset (test = {self.test})...")
@@ -61,7 +68,14 @@ class SLDSDataset(torch.utils.data.Dataset):
             # util.set_seed(1 if self.test else 0)
             util.set_seed(0)
 
-            self.obs = generate_synthetic_data(self.num_data, device)
+            self.obs = generate_synthetic_data(
+                self.num_data,
+                device,
+                num_timesteps=num_timesteps,
+                num_states=num_states,
+                continuous_dim=continuous_dim,
+                obs_dim=obs_dim,
+            )
             self.obs_id = torch.arange(self.num_data, device=device)
 
             # Save dataset
@@ -81,11 +95,22 @@ class SLDSDataset(torch.utils.data.Dataset):
         return self.num_data
 
 
-def get_slds_data_loader(device, batch_size, test=False):
+def get_slds_data_loader(
+    device, batch_size, test=False, num_timesteps=100, num_states=5, continuous_dim=2, obs_dim=10
+):
     if test:
         shuffle = False
     else:
         shuffle = True
     return torch.utils.data.DataLoader(
-        SLDSDataset(device, test=test), batch_size=batch_size, shuffle=shuffle,
+        SLDSDataset(
+            device,
+            test=test,
+            num_timesteps=num_timesteps,
+            num_states=num_states,
+            continuous_dim=continuous_dim,
+            obs_dim=obs_dim,
+        ),
+        batch_size=batch_size,
+        shuffle=shuffle,
     )
