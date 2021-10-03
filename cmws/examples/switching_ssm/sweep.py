@@ -3,7 +3,7 @@ from cmws.examples.switching_ssm import run
 
 
 def get_run_argss():
-    experiment_name = "2021_10_02_slds_no_sleep"
+    experiment_name = "2021_10_02_slds_single_subspace"
 
     for seed in range(5):
         # CMWS4

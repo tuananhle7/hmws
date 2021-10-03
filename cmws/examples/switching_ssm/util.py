@@ -18,6 +18,7 @@ def init(run_args, device):
             continuous_dim=run_args.continuous_dim,
             obs_dim=run_args.obs_dim,
             num_timesteps=run_args.num_timesteps,
+            single_subspace=not run_args.not_single_subspace,
         ).to(device)
 
         # Guide

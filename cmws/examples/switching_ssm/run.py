@@ -63,6 +63,7 @@ def get_args_parser():
     parser.add_argument("--num-states", default=5, type=int, help=" ")
     parser.add_argument("--continuous-dim", default=2, type=int, help=" ")
     parser.add_argument("--obs-dim", default=10, type=int, help=" ")
+    parser.add_argument("--not-single-subspace", action="store_true", help="")
     parser.add_argument(
         "--model-type", default="slds", choices=["slds",], help=" ",
     )

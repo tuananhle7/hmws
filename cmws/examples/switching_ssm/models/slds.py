@@ -11,14 +11,17 @@ class GenerativeModel(nn.Module):
         num_states (int): K
         continuous_dim (int): D
         obs_dim (int): N
+        single_subspace (bool; default True)
+            https://github.com/lindermanlab/ssm/blob/master/ssm/lds.py#L40
     """
 
-    def __init__(self, num_states, continuous_dim, obs_dim, num_timesteps):
+    def __init__(self, num_states, continuous_dim, obs_dim, num_timesteps, single_subspace=True):
         super().__init__()
         self.num_states = num_states
         self.continuous_dim = continuous_dim
         self.obs_dim = obs_dim
         self.num_timesteps = num_timesteps
+        self.single_subspace = single_subspace
 
         # Initial state params
         # --Logits for discrete state
@@ -46,16 +49,26 @@ class GenerativeModel(nn.Module):
         self.dynamics_log_scales = nn.Parameter(torch.randn(self.num_states, self.continuous_dim))
 
         # Emission model params
-        # --Emission matrices C_k ∊ [N, D]
-        self.emission_matrices = nn.Parameter(
-            torch.randn(self.num_states, self.obs_dim, self.continuous_dim)
-        )
+        if self.single_subspace:
+            # --Emission matrix C ∊ [N, D]
+            self.emission_matrix = nn.Parameter(torch.randn(self.obs_dim, self.continuous_dim))
 
-        # --Emission offset d_k ∊ [N]
-        self.emission_offsets = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
+            # --Emission offset d ∊ [N]
+            self.emission_offset = nn.Parameter(torch.randn(self.obs_dim))
 
-        # --Emission log scales
-        self.emission_log_scales = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
+            # --Emission log scale
+            self.emission_log_scale = nn.Parameter(torch.randn(self.obs_dim))
+        else:
+            # --Emission matrices C_k ∊ [N, D]
+            self.emission_matrices = nn.Parameter(
+                torch.randn(self.num_states, self.obs_dim, self.continuous_dim)
+            )
+
+            # --Emission offset d_k ∊ [N]
+            self.emission_offsets = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
+
+            # --Emission log scales
+            self.emission_log_scales = nn.Parameter(torch.randn(self.num_states, self.obs_dim))
 
     @property
     def device(self):
@@ -219,13 +232,20 @@ class GenerativeModel(nn.Module):
         
         Returns distribution with batch_shape [*shape], event_shape [obs_dim]
         """
-        loc = (
-            torch.einsum(
-                "...ij,...j->...i", self.emission_matrices[discrete_state], continuous_state
+        if self.single_subspace:
+            loc = (
+                torch.einsum("ij,...j->...i", self.emission_matrix, continuous_state)
+                + self.emission_offset
             )
-            + self.emission_offsets[discrete_state]
-        )
-        scale = self.emission_log_scales[discrete_state].exp()
+            scale = self.emission_log_scale.exp()
+        else:
+            loc = (
+                torch.einsum(
+                    "...ij,...j->...i", self.emission_matrices[discrete_state], continuous_state
+                )
+                + self.emission_offsets[discrete_state]
+            )
+            scale = self.emission_log_scales[discrete_state].exp()
         return torch.distributions.Independent(
             torch.distributions.Normal(loc, scale), reinterpreted_batch_ndims=1
         )
