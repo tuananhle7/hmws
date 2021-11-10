@@ -285,6 +285,10 @@ def train(model, optimizer, stats, args):
                 loss = losses.get_rws_loss(
                     generative_model, guide, obs, args.num_particles, insomnia=args.insomnia
                 ).mean()
+            if args.algorithm == "rws_2":
+                loss = losses.get_rws_2_loss(
+                    generative_model, guide, obs, args.num_particles, insomnia=args.insomnia
+                ).mean()
             elif "elbo" in args.algorithm:
                 loss = losses.get_elbo_loss(generative_model, guide, obs).mean()
             elif args.algorithm == "vimco":
@@ -334,6 +338,17 @@ def train(model, optimizer, stats, args):
                 ).mean()
             elif args.algorithm == "cmws_5":
                 loss = losses.get_cmws_5_loss(
+                    generative_model,
+                    guide,
+                    memory,
+                    obs,
+                    obs_id,
+                    args.num_particles,
+                    args.num_proposals_mws,
+                    insomnia=args.insomnia,
+                ).mean()
+            elif args.algorithm == "cmws_6":
+                loss = losses.get_cmws_6_loss(
                     generative_model,
                     guide,
                     memory,

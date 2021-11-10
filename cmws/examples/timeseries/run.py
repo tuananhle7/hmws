@@ -37,6 +37,7 @@ def get_args_parser():
         default="rws",
         choices=[
             "rws",
+            "rws_2",
             "elbo",
             "vimco",
             "vimco_2",
@@ -45,6 +46,7 @@ def get_args_parser():
             "cmws_3",
             "cmws_4",
             "cmws_5",
+            "cmws_6",
             "reinforce",
         ],
         help=" ",
