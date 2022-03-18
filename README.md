@@ -17,8 +17,8 @@ Bibtex:
 ## Installation
 
 ```
-git clone git@github.com:tuananhle7/cmws.git
-cd cmws
+git clone git@github.com:tuananhle7/hmws.git
+cd hmws
 pip install .
 ```
 or
