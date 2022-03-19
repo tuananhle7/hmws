@@ -3,7 +3,9 @@ import cmws.examples.scene_understanding.run
 
 
 def get_run_argss():
-    experiment_name = "noColor_block"#"all_algs_noColor_block"
+    mode = "cube"
+
+    experiment_name = f"noColor_{mode}"
 
     for seed in range(5):
         for num_grid_rows, num_grid_cols in [[2, 2]]:
@@ -28,7 +30,7 @@ def get_run_argss():
                 args.model_type = "scene_understanding"
                 args.continue_training = True
                 args.remove_color=True
-                args.mode="block"
+                args.mode=mode
                 args.shrink_factor = shrink_factor
                 yield args
 
@@ -45,43 +47,43 @@ def get_run_argss():
                 args.model_type = "scene_understanding"
                 args.continue_training = True
                 args.remove_color = True
-                args.mode = "block"
+                args.mode = mode
                 args.shrink_factor = shrink_factor
                 yield args
 
-                # args = cmws.examples.scene_understanding.run.get_args_parser().parse_args([])
-                # args.experiment_name = experiment_name
-                # args.num_grid_rows = num_grid_rows
-                # args.num_grid_cols = num_grid_cols
-                # args.seed = seed
-                # args.num_primitives = num_primitives
-                # args.num_particles = 30
-                # args.insomnia = 0.50
-                # args.algorithm = "vimco_2"
-                # args.model_type = "scene_understanding"
-                # args.continue_training = True
-                # args.remove_color = 1
-                # args.mode = "block"
-                # args.shrink_factor = 0.01
-                # args.lr = 1e-4
-                # yield args
-                #
-                # args = cmws.examples.scene_understanding.run.get_args_parser().parse_args([])
-                # args.experiment_name = experiment_name
-                # args.num_grid_rows = num_grid_rows
-                # args.num_grid_cols = num_grid_cols
-                # args.seed = seed
-                # args.num_primitives = num_primitives
-                # args.num_particles = 30
-                # args.insomnia = 0.50
-                # args.algorithm = "reinforce"
-                # args.model_type = "scene_understanding"
-                # args.continue_training = True
-                # args.remove_color = 1
-                # args.mode = "block"
-                # args.lr = 1e-4
-                # args.shrink_factor = 0.01
-                # yield args
+                args = cmws.examples.scene_understanding.run.get_args_parser().parse_args([])
+                args.experiment_name = experiment_name
+                args.num_grid_rows = num_grid_rows
+                args.num_grid_cols = num_grid_cols
+                args.seed = seed
+                args.num_primitives = num_primitives
+                args.num_particles = 30
+                args.insomnia = 0.50
+                args.algorithm = "vimco_2"
+                args.model_type = "scene_understanding"
+                args.continue_training = True
+                args.remove_color = True
+                args.mode = mode
+                args.shrink_factor = shrink_factor
+                args.lr = 1e-4
+                yield args
+
+                args = cmws.examples.scene_understanding.run.get_args_parser().parse_args([])
+                args.experiment_name = experiment_name
+                args.num_grid_rows = num_grid_rows
+                args.num_grid_cols = num_grid_cols
+                args.seed = seed
+                args.num_primitives = num_primitives
+                args.num_particles = 30
+                args.insomnia = 0.50
+                args.algorithm = "reinforce"
+                args.model_type = "scene_understanding"
+                args.continue_training = True
+                args.remove_color = True
+                args.mode = mode
+                args.lr = 1e-4
+                args.shrink_factor = shrink_factor
+                yield args
 
 
 def get_job_name(run_args):

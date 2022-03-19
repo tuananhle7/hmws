@@ -70,38 +70,6 @@ def generate_from_true_generative_model_single(
         if remove_color:
             # all primitives = same color
             primitive_color = [0.0, 0.0, 0.8]
-            # primitives = [
-            #     render.Block(
-            #         "A",
-            #         torch.tensor(primitive_color, device=device),
-            #         torch.tensor([0.3, 0.3, 0.3], device=device),
-            #     ),
-            #     render.Block(
-            #         "B",
-            #         torch.tensor(primitive_color, device=device),
-            #         torch.tensor([0.4, 0.4, 0.4], device=device),
-            #     ),
-            #     render.Block(
-            #         "C",
-            #         torch.tensor(primitive_color, device=device),
-            #         torch.tensor([0.5, 0.5, 0.5], device=device),
-            #     ),
-            #     render.Block(
-            #         "D",
-            #         torch.tensor(primitive_color, device=device),
-            #         torch.tensor([0.5, 0.3, 0.3], device=device),
-            #     ),
-            #     render.Block(
-            #         "E",
-            #         torch.tensor(primitive_color, device=device),
-            #         torch.tensor([0.3, 0.5, 0.3], device=device),
-            #     ),
-            #     render.Block(
-            #         "F",
-            #         torch.tensor(primitive_color, device=device),
-            #         torch.tensor([0.3, 0.3, 0.5], device=device),
-            #     ),
-            # ]
             primitives = [
                 render.Block(
                     "A",
